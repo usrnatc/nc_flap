@@ -271,6 +271,8 @@ union u512 {
 
     #pragma intrinsic(_tzcnt_u32)
     #pragma intrinsic(_tzcnt_u64)
+    #pragma intrinsic(_lzcnt_u32)
+    #pragma intrinsic(_lzcnt_u64)
     #pragma intrinsic(_blsr_u32)
     #pragma intrinsic(_blsr_u64)
 
@@ -292,8 +294,10 @@ union u512 {
         return _byteswap_uint64(Val);
     }
 
-    #define Ctz32(X) _tzcnt_u32(X)
-    #define Ctz64(X) _tzcnt_u64(X)
+    #define Ctz32(X)      _tzcnt_u32(X)
+    #define Ctz64(X)      _tzcnt_u64(X)
+    #define Clz32(X)      ((X) ? _lzcnt_u32(X) : 32)
+    #define Clz64(X)      ((X) ? _lzcnt_u64(X) : 64)
     #define ResetLow32(X) _blsr_u32(X)
     #define ResetLow64(X) _blsr_u64(X)
 #elif defined(NC_CC_GNU) || defined(NC_CC_CLANG)
@@ -315,8 +319,10 @@ union u512 {
         return __builtin_bswap64(Val);
     }
 
-    #define Ctz32(X) __builtin_ctz(X)
-    #define Ctz64(X) __builtin_ctz(X)
+    #define Ctz32(X)      __builtin_ctz(X)
+    #define Ctz64(X)      __builtin_ctz(X)
+    #define Clz32(X)      ((X) ? __builtin_clz(X) : 32)
+    #define Clz64(X)      ((X) ? __builtin_clzll(X) : 64)
     #define ResetLow32(X) _blsr_u32(X)
     #define ResetLow64(X) _blsr_u64(X)
 #else

@@ -67,11 +67,11 @@ set SharedCompilerFlags=^
     /GS- /guard:cf- /guard:ehcont- ^
     /analyze- ^
     /diagnostics:caret /MP32 ^
-    /I"..\libnc" /I"..\libnc\external" /I"..\libnc\internal" /I"..\libnc\cache"^
+    /I"..\libnc" /I"..\libnc\external" /I"..\libnc\internal" /I"..\libnc\cache" /I"..\fli"^
     /DUNICODE /D_NO_CRT_STDIO_INLINE /D_CRT_SECURE_NO_WARNINGS ^
     /wd4018 /wd4100 /wd4189 /wd4200 /wd4201 /wd4211 /wd4244 ^
     /wd4245 /wd4334 /wd4456 /wd4505 /wd4714 /wd4146 /wd4716 ^
-    /wd4389
+    /wd4389 /wd4310
 
 set SharedLinkerFlags=^
     /MANIFEST:EMBED %SubSystem% /NOEXP /NODEFAULTLIB ^
@@ -104,7 +104,7 @@ REM  /D_DEBUG /DNC_DEBUG=1 /Zi
 
 :build_release
     echo.[33m____building_release_________[0m
-    set ConfigCompilerFlags=/O2 /Oi /Os /GL /Gy /GF /GA /Ob3 /Qpar /Qvec-report:2 /DNDEBUG
+    set ConfigCompilerFlags=/O2 /Oi /Os /GL /Gy /GF /GA /Ob3 /Qpar /Qvec-report:2 /DNDEBUG /DNC_PROFILE=1
     set ConfigLinkerFlags=/LTCG /NOCOFFGRPINFO /EMITTOOLVERSIONINFO:NO /OPT:REF /OPT:ICF /INCREMENTAL:NO
     set PostBuildCmd=%OutputExe%
     goto :build

@@ -27,6 +27,8 @@ struct ThreadLocalStorage {
     struct ThreadContext*    LOCAL_THREAD_CTX;
     struct UIState*          UI_STATE;
     struct ConfigContext*    CFG_CTX;
+    struct SymTab*           SYMBOL_TABLE;
+    struct ParserState*      PARSER_STATE;
     Arena*                   ARENA_THREAD_SCRATCH_POOL[ARENA_SCRATCH_COUNT];
 };
 

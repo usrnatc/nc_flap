@@ -94,7 +94,7 @@
     typedef __m128i v128;
     typedef __m128  v128f;
     typedef __m128d v128d;
-
+    
     #if defined(NC_CC_GNU) && !defined(NC_CC_CLANG)
         INTERNAL __attribute__((gnu_inline)) v128
         _mm_and_epi32(v128 ValA, v128 ValB)
@@ -124,7 +124,7 @@
     typedef __m512d v512d;
 #endif
 
-#if !NC_SIMD_LEVEL >= 8
+#if NC_SIMD_LEVEL >= 8
     union zv2f32 { 
         struct { 
             v512f X;
@@ -551,8 +551,8 @@
         zv2f32 Result = {};
         v512f DivX = _mm512_div_ps(VecA.X, VecB.X);
         v512f DivY = _mm512_div_ps(VecA.Y, VecB.Y);
-        v512f FloorX = _mm512_roundscale_ps(DivX, _MM_FROUND_FLOOR);                // TODO: compare against _mm512_floor_ps and 
-        v512f FloorY = _mm512_roundscale_ps(DivY, _MM_FROUND_FLOOR);                //     : _mm512_roundscale_round_ps
+        v512f FloorX = _mm512_roundscale_ps(DivX, _MM_FROUND_FLOOR);            // TODO: compare against _mm512_floor_ps and 
+        v512f FloorY = _mm512_roundscale_ps(DivY, _MM_FROUND_FLOOR);            //     : _mm512_roundscale_round_ps
 
         Result.X = _mm512_fnmadd_ps(FloorX, VecB.X, VecA.X);
         Result.Y = _mm512_fnmadd_ps(FloorY, VecB.Y, VecA.Y);
@@ -1134,8 +1134,8 @@
         zv2f64 Result = {};
         v512d DivX = _mm512_div_pd(VecA.X, VecB.X);
         v512d DivY = _mm512_div_pd(VecA.Y, VecB.Y);
-        v512d FloorX = _mm512_roundscale_pd(DivX, _MM_FROUND_FLOOR);                // TODO: compare against _mm512_floor_pd and 
-        v512d FloorY = _mm512_roundscale_pd(DivY, _MM_FROUND_FLOOR);                //     : _mm512_roundscale_round_pd
+        v512d FloorX = _mm512_roundscale_pd(DivX, _MM_FROUND_FLOOR);            // TODO: compare against _mm512_floor_pd and 
+        v512d FloorY = _mm512_roundscale_pd(DivY, _MM_FROUND_FLOOR);            //     : _mm512_roundscale_round_pd
 
         Result.X = _mm512_fnmadd_pd(FloorX, VecB.X, VecA.X);
         Result.Y = _mm512_fnmadd_pd(FloorY, VecB.Y, VecA.Y);
@@ -1431,8 +1431,8 @@
         v512f DivX = _mm512_div_ps(VecA.X, VecB.X);
         v512f DivY = _mm512_div_ps(VecA.Y, VecB.Y);
         v512f DivZ = _mm512_div_ps(VecA.Z, VecB.Z);
-        v512f FloorX = _mm512_roundscale_ps(DivX, _MM_FROUND_FLOOR);                // TODO: compare against _mm512_floor_ps and 
-        v512f FloorY = _mm512_roundscale_ps(DivY, _MM_FROUND_FLOOR);                //     : _mm512_roundscale_round_ps
+        v512f FloorX = _mm512_roundscale_ps(DivX, _MM_FROUND_FLOOR);            // TODO: compare against _mm512_floor_ps and 
+        v512f FloorY = _mm512_roundscale_ps(DivY, _MM_FROUND_FLOOR);            //     : _mm512_roundscale_round_ps
         v512f FloorZ = _mm512_roundscale_ps(DivZ, _MM_FROUND_FLOOR);
 
         Result.X = _mm512_fnmadd_ps(FloorX, VecB.X, VecA.X);
@@ -2147,9 +2147,21 @@
     {
         zv3f64 Result = {};
 
-        Result.X = _mm512_fmadd_pd(T, VecB.X, _mm512_fnmadd_pd(T, VecA.X, VecA.X));
-        Result.Y = _mm512_fmadd_pd(T, VecB.Y, _mm512_fnmadd_pd(T, VecA.Y, VecA.Y));
-        Result.Z = _mm512_fmadd_pd(T, VecB.Z, _mm512_fnmadd_pd(T, VecA.Z, VecA.Z));
+        Result.X = _mm512_fmadd_pd(
+            T, 
+            VecB.X, 
+            _mm512_fnmadd_pd(T, VecA.X, VecA.X)
+        );
+        Result.Y = _mm512_fmadd_pd(
+            T, 
+            VecB.Y, 
+            _mm512_fnmadd_pd(T, VecA.Y, VecA.Y)
+        );
+        Result.Z = _mm512_fmadd_pd(
+            T, 
+            VecB.Z, 
+            _mm512_fnmadd_pd(T, VecA.Z, VecA.Z)
+        );
 
         return Result;
     }
@@ -2465,10 +2477,26 @@
     {
         zv4f32 Result = {};
 
-        Result.X = _mm512_fmadd_ps(T, VecB.X, _mm512_fnmadd_ps(T, VecA.X, VecA.X));
-        Result.Y = _mm512_fmadd_ps(T, VecB.Y, _mm512_fnmadd_ps(T, VecA.Y, VecA.Y));
-        Result.Z = _mm512_fmadd_ps(T, VecB.Z, _mm512_fnmadd_ps(T, VecA.Z, VecA.Z));
-        Result.W = _mm512_fmadd_ps(T, VecB.W, _mm512_fnmadd_ps(T, VecA.W, VecA.W));
+        Result.X = _mm512_fmadd_ps(
+            T, 
+            VecB.X, 
+            _mm512_fnmadd_ps(T, VecA.X, VecA.X)
+        );
+        Result.Y = _mm512_fmadd_ps(
+            T, 
+            VecB.Y, 
+            _mm512_fnmadd_ps(T, VecA.Y, VecA.Y)
+        );
+        Result.Z = _mm512_fmadd_ps(
+            T, 
+            VecB.Z, 
+            _mm512_fnmadd_ps(T, VecA.Z, VecA.Z)
+        );
+        Result.W = _mm512_fmadd_ps(
+            T, 
+            VecB.W, 
+            _mm512_fnmadd_ps(T, VecA.W, VecA.W)
+        );
 
         return Result;
     }
@@ -2783,22 +2811,34 @@
         v512f ResultX = _mm512_fmadd_ps(
             ZT,
             _mm512_cvtepi32_ps(VecB.X),
-            _mm512_fnmadd_ps(ZT, _mm512_cvtepi32_ps(VecA.X), _mm512_cvtepi32_ps(VecA.X))
+            _mm512_fnmadd_ps(
+                ZT, 
+                _mm512_cvtepi32_ps(VecA.X), _mm512_cvtepi32_ps(VecA.X)
+            )
         );
         v512f ResultY = _mm512_fmadd_ps(
             ZT,
             _mm512_cvtepi32_ps(VecB.Y),
-            _mm512_fnmadd_ps(ZT, _mm512_cvtepi32_ps(VecA.Y), _mm512_cvtepi32_ps(VecA.Y))
+            _mm512_fnmadd_ps(
+                ZT, 
+                _mm512_cvtepi32_ps(VecA.Y), _mm512_cvtepi32_ps(VecA.Y)
+            )
         );
         v512f ResultZ = _mm512_fmadd_ps(
             ZT,
             _mm512_cvtepi32_ps(VecB.Z),
-            _mm512_fnmadd_ps(ZT, _mm512_cvtepi32_ps(VecA.Z), _mm512_cvtepi32_ps(VecA.Z))
+            _mm512_fnmadd_ps(
+                ZT, 
+                _mm512_cvtepi32_ps(VecA.Z), _mm512_cvtepi32_ps(VecA.Z)
+            )
         );
         v512f ResultW = _mm512_fmadd_ps(
             ZT,
             _mm512_cvtepi32_ps(VecB.W),
-            _mm512_fnmadd_ps(ZT, _mm512_cvtepi32_ps(VecA.W), _mm512_cvtepi32_ps(VecA.W))
+            _mm512_fnmadd_ps(
+                ZT, 
+                _mm512_cvtepi32_ps(VecA.W), _mm512_cvtepi32_ps(VecA.W)
+            )
         );
 
         Result.X = _mm512_cvtps_epi32(ResultX);
@@ -3096,10 +3136,26 @@
     {
         zv4f64 Result = {};
 
-        Result.X = _mm512_fmadd_pd(T, VecB.X, _mm512_fnmadd_pd(T, VecA.X, VecA.X));
-        Result.Y = _mm512_fmadd_pd(T, VecB.Y, _mm512_fnmadd_pd(T, VecA.Y, VecA.Y));
-        Result.Z = _mm512_fmadd_pd(T, VecB.Z, _mm512_fnmadd_pd(T, VecA.Z, VecA.Z));
-        Result.W = _mm512_fmadd_pd(T, VecB.W, _mm512_fnmadd_pd(T, VecA.W, VecA.W));
+        Result.X = _mm512_fmadd_pd(
+            T, 
+            VecB.X, 
+            _mm512_fnmadd_pd(T, VecA.X, VecA.X)
+        );
+        Result.Y = _mm512_fmadd_pd(
+            T, 
+            VecB.Y, 
+            _mm512_fnmadd_pd(T, VecA.Y, VecA.Y)
+        );
+        Result.Z = _mm512_fmadd_pd(
+            T, 
+            VecB.Z, 
+            _mm512_fnmadd_pd(T, VecA.Z, VecA.Z)
+        );
+        Result.W = _mm512_fmadd_pd(
+            T, 
+            VecB.W, 
+            _mm512_fnmadd_pd(T, VecA.W, VecA.W)
+        );
 
         return Result;
     }
@@ -3159,8 +3215,16 @@
     INTERNAL v512
     InRange(zr1i32 Range, v512 Val)
     {
-        __mmask16 MinMask = _mm512_cmp_epi32_mask(Range.Min, Val, _MM_CMPINT_GE);
-        __mmask16 MaxMask = _mm512_cmp_epi32_mask(Val, Range.Max, _MM_CMPINT_LT);
+        __mmask16 MinMask = _mm512_cmp_epi32_mask(
+            Range.Min, 
+            Val, 
+            _MM_CMPINT_GE
+        );
+        __mmask16 MaxMask = _mm512_cmp_epi32_mask(
+            Val, 
+            Range.Max, 
+            _MM_CMPINT_LT
+        );
         __mmask16 ResultMask = _mm512_kand(MinMask, MaxMask);
 
         return _mm512_mask_mov_epi32(
@@ -4186,8 +4250,8 @@
         zv2f32 Result = {};
         v256f DivX = _mm256_div_ps(VecA.X, VecB.X);
         v256f DivY = _mm256_div_ps(VecA.Y, VecB.Y);
-        v256f FloorX = _mm256_roundscale_ps(DivX, _MM_FROUND_FLOOR);                // TODO: compare against _mm256_floor_ps and 
-        v256f FloorY = _mm256_roundscale_ps(DivY, _MM_FROUND_FLOOR);                //     : _mm256_roundscale_round_ps
+        v256f FloorX = _mm256_roundscale_ps(DivX, _MM_FROUND_FLOOR);            // TODO: compare against _mm256_floor_ps and 
+        v256f FloorY = _mm256_roundscale_ps(DivY, _MM_FROUND_FLOOR);            //     : _mm256_roundscale_round_ps
 
         Result.X = _mm256_fnmadd_ps(FloorX, VecB.X, VecA.X);
         Result.Y = _mm256_fnmadd_ps(FloorY, VecB.Y, VecA.Y);
@@ -4769,8 +4833,8 @@
         zv2f64 Result = {};
         v256d DivX = _mm256_div_pd(VecA.X, VecB.X);
         v256d DivY = _mm256_div_pd(VecA.Y, VecB.Y);
-        v256d FloorX = _mm256_roundscale_pd(DivX, _MM_FROUND_FLOOR);                // TODO: compare against _mm256_floor_pd and 
-        v256d FloorY = _mm256_roundscale_pd(DivY, _MM_FROUND_FLOOR);                //     : _mm256_roundscale_round_pd
+        v256d FloorX = _mm256_roundscale_pd(DivX, _MM_FROUND_FLOOR);            // TODO: compare against _mm256_floor_pd and 
+        v256d FloorY = _mm256_roundscale_pd(DivY, _MM_FROUND_FLOOR);            //     : _mm256_roundscale_round_pd
 
         Result.X = _mm256_fnmadd_pd(FloorX, VecB.X, VecA.X);
         Result.Y = _mm256_fnmadd_pd(FloorY, VecB.Y, VecA.Y);
@@ -4807,7 +4871,9 @@
     INTERNAL zv2f64
     Norm(zv2f64 Vec)
     {
-        v256d Scale = _mm256_rsqrt14_pd(LengthSq(Vec));
+        v256d Scale = _mm256_rsqrt14_pd(
+            LengthSq(Vec)
+        );
 
         return Vec * Scale;
     }
@@ -5066,8 +5132,8 @@
         v256f DivX = _mm256_div_ps(VecA.X, VecB.X);
         v256f DivY = _mm256_div_ps(VecA.Y, VecB.Y);
         v256f DivZ = _mm256_div_ps(VecA.Z, VecB.Z);
-        v256f FloorX = _mm256_roundscale_ps(DivX, _MM_FROUND_FLOOR);                // TODO: compare against _mm256_floor_ps and 
-        v256f FloorY = _mm256_roundscale_ps(DivY, _MM_FROUND_FLOOR);                //     : _mm256_roundscale_round_ps
+        v256f FloorX = _mm256_roundscale_ps(DivX, _MM_FROUND_FLOOR);            // TODO: compare against _mm256_floor_ps and 
+        v256f FloorY = _mm256_roundscale_ps(DivY, _MM_FROUND_FLOOR);            //     : _mm256_roundscale_round_ps
         v256f FloorZ = _mm256_roundscale_ps(DivZ, _MM_FROUND_FLOOR);
 
         Result.X = _mm256_fnmadd_ps(FloorX, VecB.X, VecA.X);
@@ -5788,9 +5854,21 @@
     {
         zv3f64 Result = {};
 
-        Result.X = _mm256_fmadd_pd(T, VecB.X, _mm256_fnmadd_pd(T, VecA.X, VecA.X));
-        Result.Y = _mm256_fmadd_pd(T, VecB.Y, _mm256_fnmadd_pd(T, VecA.Y, VecA.Y));
-        Result.Z = _mm256_fmadd_pd(T, VecB.Z, _mm256_fnmadd_pd(T, VecA.Z, VecA.Z));
+        Result.X = _mm256_fmadd_pd(
+            T, 
+            VecB.X, 
+            _mm256_fnmadd_pd(T, VecA.X, VecA.X)
+        );
+        Result.Y = _mm256_fmadd_pd(
+            T, 
+            VecB.Y, 
+            _mm256_fnmadd_pd(T, VecA.Y, VecA.Y)
+        );
+        Result.Z = _mm256_fmadd_pd(
+            T, 
+            VecB.Z, 
+            _mm256_fnmadd_pd(T, VecA.Z, VecA.Z)
+        );
 
         return Result;
     }

@@ -550,6 +550,15 @@
     #warning Cache line size not known for CPU
     #define NC_CPU_CACHE_LINE_SIZE 64
 #endif
+#if NC_SIMD_LEVEL >= 6
+    #if defined(NC_CC_MSVC)
+        #define NC_CPU_PCLMUL
+    #elif defined(NC_CC_GNU) || defined(NC_CC_CLANG)
+        #if defined(__PCLMUL__)
+            #define NC_CPU_PCLMUL
+        #endif
+    #endif
+#endif
 
 // @lang_______________________________________________________________________
 #if defined(__cplusplus)
