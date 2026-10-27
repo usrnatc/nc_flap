@@ -134,6 +134,8 @@ struct ASTNodeScope {
 
 struct ASTDisplayArg {
     ExprIndex Expr;
+    TokIndex  HeadTok;
+    TokIndex  TailTok;
     u8        Axis;
     u8        IsLabel;
     u16       __Padding;

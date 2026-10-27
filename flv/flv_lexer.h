@@ -48,5 +48,6 @@ void LexTextLiteral(v256* CurrentVec, v256* Tags, const u8 Delim, b32* ShouldCon
 void LexInlineComments(v256* CurrentVec, v256 NextVec, b32* LnCommContinue);
 u32* LineOffsetsFromSource(Arena* MemPool, Str8 Source, OUT u32* Count);
 u32 LineFromOffset(u32 const* LineOffsets, u32 LineCount, u32 Offset);
+void LexerInternKeywords(NamePool* Names);
 
 #endif // __FLV_LEXER_H__

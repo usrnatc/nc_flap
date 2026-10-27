@@ -11,7 +11,7 @@
 FLVBuiltin FLV_STDLIB_TABLE[FLV_STDLIB_ID_COUNT] = {
     {
         Str8Lit("mean"),
-        FLV_SIGNATURE_KIND_SERIES_TO_T,
+        FLV_SIGNATURE_KIND_SERIES_TO_F64,
         TRUE
     },
     {
@@ -31,7 +31,7 @@ FLVBuiltin FLV_STDLIB_TABLE[FLV_STDLIB_ID_COUNT] = {
     },
     {
         Str8Lit("stddev"),
-        FLV_SIGNATURE_KIND_SERIES_TO_T,
+        FLV_SIGNATURE_KIND_SERIES_TO_F64,
         TRUE
     },
     {
@@ -211,6 +211,11 @@ SignatureFromKind(FLVSignatureKind Kind)
 
         case FLV_SIGNATURE_KIND_SERIES_TO_I64: {
             Signature[0].V = BUILTIN_i64;
+            Signature[1] = SeriesTM;
+        } break;
+
+        case FLV_SIGNATURE_KIND_SERIES_TO_F64: {
+            Signature[0].V = BUILTIN_f64;
             Signature[1] = SeriesTM;
         } break;
 

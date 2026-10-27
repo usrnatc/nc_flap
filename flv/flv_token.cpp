@@ -82,36 +82,12 @@ TokStr(Arena* MemPool, Token* Tok, Str8 Source)
             Result = ArenaPushStrFmt(MemPool, (char*) "number<%.*s>", PRINT_STR(RawNumber));
         } break;
 
-        case TOKEN_KIND_CONST: {
-            Result = "const"_s8;
-        } break;
-
-        case TOKEN_KIND_TYPE: {
-            Result = "type"_s8;
-        } break;
-
-        case TOKEN_KIND_FOR: {
-            Result = "for"_s8;
-        } break;
-
         case TOKEN_KIND_ELSE: {
             Result = "else"_s8;
         } break;
 
         case TOKEN_KIND_IF: {
             Result = "if"_s8;
-        } break;
-
-        case TOKEN_KIND_CONTINUE: {
-            Result = "continue"_s8;
-        } break;
-
-        case TOKEN_KIND_WHILE: {
-            Result = "while"_s8;
-        } break;
-
-        case TOKEN_KIND_RETURN: {
-            Result = "return"_s8;
         } break;
 
         case TOKEN_KIND_EXCLAIM: {
@@ -292,42 +268,6 @@ TokStr(Arena* MemPool, Token* Tok, Str8 Source)
 
         case TOKEN_KIND_COMMA: {
             Result = ","_s8;
-        } break;
-
-        case TOKEN_KIND_STRUCT: {
-            Result = "struct"_s8;
-        } break;
-
-        case TOKEN_KIND_UNION: {
-            Result = "union"_s8;
-        } break;
-
-        case TOKEN_KIND_ENUM: {
-            Result = "enum"_s8;
-        } break;
-
-        case TOKEN_KIND_BREAK: {
-            Result = "break"_s8;
-        } break;
-
-        case TOKEN_KIND_CASE: {
-            Result = "case"_s8;
-        } break;
-
-        case TOKEN_KIND_SWITCH: {
-            Result = "switch"_s8;
-        } break;
-
-        case TOKEN_KIND_DEFAULT: {
-            Result = "default"_s8;
-        } break;
-
-        case TOKEN_KIND_SIZEOF: {
-            Result = "sizeof"_s8;
-        } break;
-
-        case TOKEN_KIND_CAST: {
-            Result = "cast"_s8;
         } break;
 
         case TOKEN_KIND_LESS_LESS_EQ: {
@@ -352,36 +292,12 @@ TokStr(u8 Kind)
             Result = "UNKNOWN TOK"_s8;
         } break;
 
-        case TOKEN_KIND_CONST: {
-            Result = "const"_s8;
-        } break;
-
-        case TOKEN_KIND_TYPE: {
-            Result = "type"_s8;
-        } break;
-
-        case TOKEN_KIND_FOR: {
-            Result = "for"_s8;
-        } break;
-
         case TOKEN_KIND_ELSE: {
             Result = "else"_s8;
         } break;
 
         case TOKEN_KIND_IF: {
             Result = "if"_s8;
-        } break;
-
-        case TOKEN_KIND_CONTINUE: {
-            Result = "continue"_s8;
-        } break;
-
-        case TOKEN_KIND_WHILE: {
-            Result = "while"_s8;
-        } break;
-
-        case TOKEN_KIND_RETURN: {
-            Result = "return"_s8;
         } break;
 
         case TOKEN_KIND_EXCLAIM: {
@@ -562,42 +478,6 @@ TokStr(u8 Kind)
 
         case TOKEN_KIND_COMMA: {
             Result = ","_s8;
-        } break;
-
-        case TOKEN_KIND_STRUCT: {
-            Result = "struct"_s8;
-        } break;
-
-        case TOKEN_KIND_UNION: {
-            Result = "union"_s8;
-        } break;
-
-        case TOKEN_KIND_ENUM: {
-            Result = "enum"_s8;
-        } break;
-
-        case TOKEN_KIND_BREAK: {
-            Result = "break"_s8;
-        } break;
-
-        case TOKEN_KIND_CASE: {
-            Result = "case"_s8;
-        } break;
-
-        case TOKEN_KIND_SWITCH: {
-            Result = "switch"_s8;
-        } break;
-
-        case TOKEN_KIND_DEFAULT: {
-            Result = "default"_s8;
-        } break;
-
-        case TOKEN_KIND_SIZEOF: {
-            Result = "sizeof"_s8;
-        } break;
-
-        case TOKEN_KIND_CAST: {
-            Result = "cast"_s8;
         } break;
 
         case TOKEN_KIND_LESS_LESS_EQ: {

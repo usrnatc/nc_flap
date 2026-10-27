@@ -32,6 +32,14 @@ struct NamePool;
 #define DeclAlloc(X)    (X*) ASTNodeDeclAlloc(sizeof(X))
 #define InitAlloc(X)    (X*) ASTNodeInitAlloc(sizeof(X))
 
+#define PARSE_ERROR(Tok, ...) FLVLogErrorAt(LocFromTok(Tok), __VA_ARGS__)
+
+#define PARSE_PANIC(Tok, ...)                             \
+    do {                                                  \
+        FLVLogPanicAt(LocFromTok(Tok), __VA_ARGS__);      \
+        UNREACHABLE();                                    \
+    } while (FALSE)
+
 typedef u8 DeferredArenaKind;
 enum : u8 {
     DEFERRED_ARENA_KIND_EXPR,

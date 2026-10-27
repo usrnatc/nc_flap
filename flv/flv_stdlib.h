@@ -33,6 +33,7 @@ typedef u8 FLVSignatureKind;
 enum : u8 {
     FLV_SIGNATURE_KIND_SERIES_TO_T,                                             // (Series<T, M>) -> T
     FLV_SIGNATURE_KIND_SERIES_TO_I64,                                           // (Series<T, M>) -> i64
+    FLV_SIGNATURE_KIND_SERIES_TO_F64,                                           // (Series<T, M>) -> f64
     FLV_SIGNATURE_KIND_SERIES_TO_SERIES,                                        // (Series<T, M>) -> Series<T, M>
     FLV_SIGNATURE_KIND_SERIES_TO_SERIES_F64,                                    // (Series<T, M>) -> Series<f64, M>
     FLV_SIGNATURE_KIND_T_TO_T,                                                  // (T) -> T

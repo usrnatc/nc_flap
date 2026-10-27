@@ -61,6 +61,51 @@ ElemWiden(TypeIndex Old, TypeIndex New)
     return Result;
 }
 
+INTERNAL u64
+ElemCode(TypeIndex Elem)
+{
+    u64 Result = 2;
+
+    if (Elem.V == BUILTIN_i64)
+        Result = 0;
+    else if (Elem.V == BUILTIN_f64)
+        Result = 1;
+
+    return Result;
+}
+
+INTERNAL u64
+Hash(FLVSchema const* Schema)
+{
+    NamePool* Names = GetTLS()->SYMBOL_TABLE->Names;
+    u64 Result = 0;
+
+    for (u32 Index = 0; Index < Schema->MessageCount; ++Index) {
+        FLVSchemaMessage const* Message = &Schema->Messages[Index];
+        Str8 MessageName = GetName(Names, Message->Name);
+        u64 MessageHash = Hash(MessageName.Str, MessageName.Size);
+        u64 FieldSum = 0;
+
+        for (
+            u32 FieldIndex = 0; 
+            FieldIndex < Message->FieldCount; 
+            ++FieldIndex
+        ) {
+            FLVSchemaField const* Field = &Schema->Fields[Message->HeadField + FieldIndex];
+            Str8 FieldName = GetName(Names, Field->Name);
+
+            FieldSum += (
+                Hash(FieldName.Str, FieldName.Size) + 
+                ElemCode(Field->Element)
+            ) * NAME_HASH_MUL;
+        }
+
+        Result += (MessageHash ^ FieldSum ^ ((u64) Message->MaxInstance << 56)) * NAME_HASH_MUL;
+    }
+
+    return Result;
+}
+
 INTERNAL Str8
 FLIStr(FLIParsed* FLI, u32 StringIndex)
 {
@@ -327,14 +372,7 @@ FLVSchemaBuild(
         }
     }
 
-    Schema->Hash = Hash(
-        (u8*) Schema->Messages,
-        MessageCount * sizeof(FLVSchemaMessage)
-    );
-    Schema->Hash ^= Hash(
-        (u8*) Schema->Fields,
-        FieldCount * sizeof(FLVSchemaField)
-    ) * NAME_HASH_MUL;
+    Schema->Hash = Hash(Schema);
 
     for (u32 Vehicle = 0; Vehicle < FLV_VEHICLE_KIND_COUNT; ++Vehicle) {
         if (VehicleMask & (1U << Vehicle))

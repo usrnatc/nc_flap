@@ -15,30 +15,47 @@
 #include "flv_type_check.h"
 #include "flv_lexer.h"
 
-#define PARSE_ERROR(Tok, Fmt, ...)         \
-    do {                                   \
-        SourceLoc __Loc = LocFromTok(Tok); \
-        LogError(                          \
-            "%S:%u:%u: " Fmt,              \
-            PRINT_STR(__Loc.Path),         \
-            __Loc.Line,                    \
-            __Loc.Column,                  \
-            ##__VA_ARGS__                  \
-        );                                 \
-    } while (FALSE)
- 
-#define PARSE_PANIC(Tok, Fmt, ...)         \
-    do {                                   \
-        SourceLoc __Loc = LocFromTok(Tok); \
-        LogPanic(                          \
-            "%S:%u:%u: " Fmt,              \
-            PRINT_STR(__Loc.Path),         \
-            __Loc.Line,                    \
-            __Loc.Column,                  \
-            ##__VA_ARGS__                  \
-        );                                 \
-        UNREACHABLE();                     \
-    } while (FALSE)
+void
+FLVLogErrorAt(SourceLoc Loc, char const* Fmt, ...)
+{
+    TempArena Scratch = GetScratch(NULL, 0);
+    va_list Args;
+
+    va_start(Args, Fmt);
+
+    Str8 Message = ArenaPushStrFmtV(Scratch.MemPool, Fmt, Args);
+
+    va_end(Args);
+    LogError(
+        "%S:%u:%u: %S",
+        PRINT_STR(Loc.Path),
+        Loc.Line,
+        Loc.Column,
+        PRINT_STR(Message)
+    );
+    ReleaseScratch(Scratch);
+}
+
+INTERNAL void
+FLVLogPanicAt(SourceLoc Loc, char const* Fmt, ...)
+{
+    TempArena Scratch = GetScratch(NULL, 0);
+    va_list Args;
+
+    va_start(Args, Fmt);
+
+    Str8 Message = ArenaPushStrFmtV(Scratch.MemPool, Fmt, Args);
+
+    va_end(Args);
+    LogPanic(
+        "%S:%u:%u: %S",
+        PRINT_STR(Loc.Path),
+        Loc.Line,
+        Loc.Column,
+        PRINT_STR(Message)
+    );
+    ReleaseScratch(Scratch);
+}
 
 global const OpName OP_NAME_TABLE[] = {
     {
@@ -471,7 +488,6 @@ Pow10U64(u32 Exp)
     return Result;
 }
  
-// NOTE(nathan): microseconds per unit, 0 = not a unit
 INTERNAL u64
 UnitScaleFromStr(Str8 Unit)
 {
@@ -547,14 +563,23 @@ ParsePrimary(void)
  
             ConsumeToken();
  
-            while (Cursor < Raw.Size && Raw.Str[Cursor] >= '0' && Raw.Str[Cursor] <= '9')
+            while (
+                Cursor < Raw.Size && 
+                Raw.Str[Cursor] >= '0' && 
+                Raw.Str[Cursor] <= '9'
+            ) {
                 Int = Int * 10 + (Raw.Str[Cursor++] - '0');
+            }
  
             if (Cursor < Raw.Size && Raw.Str[Cursor] == '.') {
                 HasFrac = TRUE;
                 ++Cursor;
  
-                while (Cursor < Raw.Size && Raw.Str[Cursor] >= '0' && Raw.Str[Cursor] <= '9') {
+                while (
+                    Cursor < Raw.Size && 
+                    Raw.Str[Cursor] >= '0' && 
+                    Raw.Str[Cursor] <= '9'
+                ) {
                     Frac = Frac * 10 + (Raw.Str[Cursor++] - '0');
                     ++FracDigits;
                 }
@@ -638,7 +663,6 @@ ParsePrimary(void)
     return Result;
 }
  
-// NOTE(nathan): the high bound is the implicit child, so it is parsed last
 INTERNAL ExprIndex
 ParseRangeHigh(TokIndex RangeTok, ExprIndex Low)
 {
@@ -689,7 +713,10 @@ ParsePostfix(void)
                 ExpectToken(TOKEN_KIND_ClOSE_PAREN);
  
                 u32 NodeSize = OFFSETOF(ASTNodeFuncCall, Arg) + ArgCount * sizeof(ExprIndex);
-                ASTNodeFuncCall* Node = (ASTNodeFuncCall*) ASTNodeExprAlloc(NodeSize, AST_FUNC_CALL);
+                ASTNodeFuncCall* Node = (ASTNodeFuncCall*) ASTNodeExprAlloc(
+                    NodeSize, 
+                    AST_FUNC_CALL
+                );
  
                 Node->Header.Count = ArgCount;
                 Node->Header.Tok = OpTok;
@@ -708,7 +735,10 @@ ParsePostfix(void)
  
                 ExpectToken(TOKEN_KIND_IDENT);
  
-                ASTNodeFieldAccess* Node = ExprAlloc(ASTNodeFieldAccess, AST_FIELD_ACCESS);
+                ASTNodeFieldAccess* Node = ExprAlloc(
+                    ASTNodeFieldAccess, 
+                    AST_FIELD_ACCESS
+                );
  
                 Node->Header.Tok = OpTok;
                 Node->Name = FieldName;
@@ -961,12 +991,24 @@ ParseDisplay(void)
         ASTDisplayArg* Arg = &Args[Count++];
         TokIndex ArgTok = CurrentTok();
  
+        Arg->HeadTok = ArgTok;
         Arg->Expr = ParseExpr();
+        Arg->TailTok.V = CurrentTok().V - 1;
         Arg->Axis = 1;
         Arg->IsLabel = (u8) ExprIsStrLit(Arg->Expr);
  
-        if (Arg->IsLabel && !(Keyword.Kind == TOKEN_KIND_FLAG && Count == 2))
-            PARSE_ERROR(ArgTok, "a string literal is only legal as the second argument of flag()");
+        if (
+            Arg->IsLabel && 
+            !(
+                Keyword.Kind == TOKEN_KIND_FLAG && 
+                Count == 2
+            )
+        ) {
+            PARSE_ERROR(
+                ArgTok, 
+                "a string literal is only legal as the second argument of flag()"
+            );
+        }
  
         if (MatchToken(TOKEN_KIND_COLON)) {
             TokIndex AxisTok = CurrentTok();
@@ -976,12 +1018,19 @@ ParseDisplay(void)
  
             u64 Axis = U64FromStr(AxisStr);
  
-            if (Keyword.Kind != TOKEN_KIND_GRAPH)
-                PARSE_ERROR(AxisTok, "an axis is only legal on a graph() argument");
-            else if (Axis != 1 && Axis != 2)
+            if (Keyword.Kind != TOKEN_KIND_GRAPH) {
+                PARSE_ERROR(
+                    AxisTok, 
+                    "an axis is only legal on a graph() argument"
+                );
+            } else if (
+                Axis != 1 && 
+                Axis != 2
+            ) {
                 PARSE_ERROR(AxisTok, "axis must be 1 or 2");
-            else
+            } else {
                 Arg->Axis = (u8) Axis;
+            }
         }
     } while (MatchToken(TOKEN_KIND_COMMA));
  
@@ -1067,7 +1116,10 @@ ParseScopeBody(NameIndex Name, TokIndex Tok, b32 IsRoot)
         (Node->Header.Variant & SCOPE_FLAG_IS_ANALYSIS) &&
         (Node->Header.Variant & SCOPE_FLAG_IS_CONTAINER)
     ) {
-        PARSE_ERROR(CurrentTok(), "a scope cannot hold both display statements and child scopes");
+        PARSE_ERROR(
+            CurrentTok(), 
+            "a scope cannot hold both display statements and child scopes"
+        );
     }
  
     if (!IsRoot) {
@@ -1403,6 +1455,7 @@ ParseImport(void)
  
     if (!Source.Size) {
         PARSE_ERROR(NameTok, "cannot read import \"%S\"", PRINT_STR(Path));
+
         return;
     }
  
@@ -1495,12 +1548,14 @@ ParseTokens(
     Tree->FilesCount = 1;
  
     ASSERT_ALWAYS(RootFile->Tokens.TokensCount <= TOK_INDEX_MASK);
+
     SelectFile(0);
     GetTLS()->PARSER_STATE->CurrentIndex = {};
     GetTLS()->PARSER_STATE->ModuleScope = ScopeEnter();
     GetTLS()->PARSER_STATE->CurrentScope = GetTLS()->PARSER_STATE->ModuleScope;
     ParseProg(FALSE);
     RootFile->IsOpen = FALSE;
+    ScopeExit(GetTLS()->PARSER_STATE->ModuleScope);
     Tree->ExprsCount = GetTLS()->PARSER_STATE->ExprCount;
  
     return GetTLS()->PARSER_STATE->Tree;
