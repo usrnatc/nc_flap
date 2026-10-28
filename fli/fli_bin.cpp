@@ -517,8 +517,8 @@ B2FConvert(Arena* MemPool, B2FConvertParams* Params)
             u8* End = FileData + FileSize;
             u64 RecordCount = 0;
             u64 SkippedRecordCount = 0;
-            u64 MinTimeUS = U64_MAX;
-            u64 MaxTimeUS = 0;
+            u64 MinTimeUSecs = U64_MAX;
+            u64 MaxTimeUSecs = 0;
 
             for (u32 Index = 0; Index < BIN_TYPE_COUNT; ++Index)
                 MultValues[Index] = 1.0;
@@ -559,12 +559,12 @@ B2FConvert(Arena* MemPool, B2FConvertParams* Params)
                     break;
 
                 u8* Body = Cursor + BIN_HEAD_SIZE;
-                u64 TimeUS = 0;
+                u64 TimeUSecs = 0;
 
                 if (Format->HasTime) {
-                    TimeUS = B2FU64FromField(Body, Format, Format->TimeField);
-                    MinTimeUS = MIN(MinTimeUS, TimeUS);
-                    MaxTimeUS = MAX(MaxTimeUS, TimeUS);
+                    TimeUSecs = B2FU64FromField(Body, Format, Format->TimeField);
+                    MinTimeUSecs = MIN(MinTimeUSecs, TimeUSecs);
+                    MaxTimeUSecs = MAX(MaxTimeUSecs, TimeUSecs);
                 }
 
                 switch (Format->Special) {
@@ -665,7 +665,7 @@ B2FConvert(Arena* MemPool, B2FConvertParams* Params)
                             Format, 
                             B2FFieldIndexFromName(Format, "Default"_s8)
                         );
-                        Param->TimeUS = TimeUS;
+                        Param->TimeUSecs = TimeUSecs;
                     } break;
 
                     case B2F_SPECIAL_KIND_MSG: {
@@ -683,7 +683,7 @@ B2FConvert(Arena* MemPool, B2FConvertParams* Params)
                                 B2FFieldIndexFromName(Format, "Message"_s8)
                             )
                         );
-                        Message->TimeUS = TimeUS;
+                        Message->TimeUSecs = TimeUSecs;
 
                         if (
                             !Result->FileInfo.Firmware.Size &&
@@ -731,7 +731,7 @@ B2FConvert(Arena* MemPool, B2FConvertParams* Params)
                             ModeCapacity
                         );
 
-                        Mode->TimeUS = TimeUS;
+                        Mode->TimeUSecs = TimeUSecs;
                         Mode->Mode = (u8) B2FU64FromField(
                             Body, 
                             Format, 
@@ -756,7 +756,7 @@ B2FConvert(Arena* MemPool, B2FConvertParams* Params)
                             EventCapacity
                         );
 
-                        Event->TimeUS = TimeUS;
+                        Event->TimeUSecs = TimeUSecs;
                         Event->ID = (u8) B2FU64FromField(
                             Body, 
                             Format, 
@@ -771,7 +771,7 @@ B2FConvert(Arena* MemPool, B2FConvertParams* Params)
                             ErrorCapacity
                         );
 
-                        Error->TimeUS = TimeUS;
+                        Error->TimeUSecs = TimeUSecs;
                         Error->Subsystem = (u8) B2FU64FromField(
                             Body, 
                             Format, 
@@ -789,13 +789,13 @@ B2FConvert(Arena* MemPool, B2FConvertParams* Params)
                 ++RecordCount;
             }
 
-            if (MinTimeUS == U64_MAX)
-                MinTimeUS = 0;
+            if (MinTimeUSecs == U64_MAX)
+                MinTimeUSecs = 0;
 
-            Shared->StartTimeUS = MinTimeUS;
+            Shared->StartTimeUS = MinTimeUSecs;
             Result->FileInfo.SourcePath = ArenaPushStrCpy(MemPool, Params->InputBINName);
-            Result->FileInfo.StartTimeUS = MinTimeUS;
-            Result->FileInfo.EndTimeUS = MaxTimeUS;
+            Result->FileInfo.StartTimeUSecs = MinTimeUSecs;
+            Result->FileInfo.EndTimeUSecs = MaxTimeUSecs;
             Result->FileInfo.RecordCount = RecordCount;
             Result->FileInfo.SkippedRecordCount = SkippedRecordCount;
 
@@ -805,7 +805,7 @@ B2FConvert(Arena* MemPool, B2FConvertParams* Params)
                 Node = Node->Next
             ) {
                 for (u64 Index = 0; Index < Node->Count; ++Index)
-                    Node->V[Index].TimeUS -= MinTimeUS;
+                    Node->V[Index].TimeUSecs-= MinTimeUSecs;
             }
 
             for (
@@ -814,7 +814,7 @@ B2FConvert(Arena* MemPool, B2FConvertParams* Params)
                 Node = Node->Next
             ) {
                 for (u64 Index = 0; Index < Node->Count; ++Index)
-                    Node->V[Index].TimeUS -= MinTimeUS;
+                    Node->V[Index].TimeUSecs -= MinTimeUSecs;
             }
 
             for (
@@ -823,7 +823,7 @@ B2FConvert(Arena* MemPool, B2FConvertParams* Params)
                 Node = Node->Next
             ) {
                 for (u64 Index = 0; Index < Node->Count; ++Index)
-                    Node->V[Index].TimeUS -= MinTimeUS;
+                    Node->V[Index].TimeUSecs -= MinTimeUSecs;
             }
 
             for (
@@ -832,7 +832,7 @@ B2FConvert(Arena* MemPool, B2FConvertParams* Params)
                 Node = Node->Next
             ) {
                 for (u64 Index = 0; Index < Node->Count; ++Index)
-                    Node->V[Index].TimeUS -= MinTimeUS;
+                    Node->V[Index].TimeUSecs -= MinTimeUSecs;
             }
 
             for (
@@ -841,7 +841,7 @@ B2FConvert(Arena* MemPool, B2FConvertParams* Params)
                 Node = Node->Next
             ) {
                 for (u64 Index = 0; Index < Node->Count; ++Index)
-                    Node->V[Index].TimeUS -= MinTimeUS;
+                    Node->V[Index].TimeUSecs -= MinTimeUSecs;
             }
 
             Shared->Tasks = ArenaPushArrayZero(

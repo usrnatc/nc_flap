@@ -5000,8 +5000,8 @@ FLIBake(Arena* MemPool, FLIBakeParams* Params)
                 Src->Firmware
             );
             Dst->SourceMD5 = Src->SourceMD5;
-            Dst->StartTimeUS = Src->StartTimeUS;
-            Dst->EndTimeUS = Src->EndTimeUS;
+            Dst->StartTimeUSecs = Src->StartTimeUSecs;
+            Dst->EndTimeUSecs = Src->EndTimeUSecs;
             Dst->RecordCount = Src->RecordCount;
             Dst->SkippedRecordCount = Src->SkippedRecordCount;
             FLI_BAKE_SHARED->BakedFileInfo.FileInfo = Dst;
@@ -5214,7 +5214,7 @@ FLIBake(Arena* MemPool, FLIBakeParams* Params)
                 );
                 Dst->Value = Src->Value;
                 Dst->Default = Src->Default;
-                Dst->TimeUS = Src->TimeUS;
+                Dst->TimeUSecs = Src->TimeUSecs;
             }
         }
 
@@ -5247,7 +5247,7 @@ FLIBake(Arena* MemPool, FLIBakeParams* Params)
                 u64 DstIndex = Node->BaseIndex + I + 1;
                 FLIMessage* Dst = &FLI_BAKE_SHARED->BakedMessages.Messages[DstIndex];
 
-                Dst->TimeUS = Src->TimeUS;
+                Dst->TimeUSecs = Src->TimeUSecs;
                 Dst->TextStringIndex = FLIBakeIndexFromStr(
                     BakeStrings, 
                     Src->Text
@@ -5284,7 +5284,7 @@ FLIBake(Arena* MemPool, FLIBakeParams* Params)
                 u64 DstIndex = Node->BaseIndex + I + 1;
                 FLIMode* Dst = &FLI_BAKE_SHARED->BakedModes.Modes[DstIndex];
 
-                Dst->TimeUS = Src->TimeUS;
+                Dst->TimeUSecs = Src->TimeUSecs;
                 Dst->Mode = Src->Mode;
                 Dst->ModeNum = Src->ModeNum;
                 Dst->Reason = Src->Reason;
@@ -5320,7 +5320,7 @@ FLIBake(Arena* MemPool, FLIBakeParams* Params)
                 u64 DstIndex = Node->BaseIndex + I + 1;
                 FLIEvt* Dst = &FLI_BAKE_SHARED->BakedEvents.Events[DstIndex];
 
-                Dst->TimeUS = Src->TimeUS;
+                Dst->TimeUSecs = Src->TimeUSecs;
                 Dst->ID = Src->ID;
             }
         }
@@ -5354,7 +5354,7 @@ FLIBake(Arena* MemPool, FLIBakeParams* Params)
                 u64 DstIndex = Node->BaseIndex + I + 1;
                 FLIError* Dst = &FLI_BAKE_SHARED->BakedErrors.Errors[DstIndex];
 
-                Dst->TimeUS = Src->TimeUS;
+                Dst->TimeUSecs = Src->TimeUSecs;
                 Dst->Subsystem = Src->Subsystem;
                 Dst->Code = Src->Code;
             }

@@ -102,6 +102,8 @@ enum : u8 {
 #define IF_VARIANT_BRANCH 1
 #define IF_VARIANT_FILTER 2
 
+#define LITERAL_VARIANT_FLOAT 0xFE
+
 // @types______________________________________________________________________
 struct ASTNodeHeader {
     TokIndex Tok;

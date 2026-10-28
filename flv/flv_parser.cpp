@@ -607,6 +607,7 @@ ParsePrimary(void)
                 if (FracDigits)
                     Node->Val.Unsigned += Frac * Scale / Pow10U64(FracDigits);
             } else if (HasFrac) {
+                Node->Header.Variant = LITERAL_VARIANT_FLOAT;
                 Node->Type.V = BUILTIN_f64;
                 Node->Val.Double = (f64) Int + (f64) Frac / (f64) Pow10U64(FracDigits);
             } else {

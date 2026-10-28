@@ -37,8 +37,10 @@ struct NamePool;
 #define PARSE_PANIC(Tok, ...)                             \
     do {                                                  \
         FLVLogPanicAt(LocFromTok(Tok), __VA_ARGS__);      \
-        UNREACHABLE();                                    \
+        ASSERT(FALSE);                                    \
     } while (FALSE)
+
+
 
 typedef u8 DeferredArenaKind;
 enum : u8 {

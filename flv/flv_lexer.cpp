@@ -178,6 +178,44 @@ _mm256_cmpistrm_rng(v128 Ranges, u64 RangesCount, v256 Vec)
     return _mm256_set_m128i(HighOutsideRangeMask, LowOutsideRangeMask);
 }
 
+INTERNAL u16
+SymbolLength(u8 Kind)
+{
+    switch (Kind) {
+        default: {
+            return 1;
+        } break;
+
+        case TOKEN_KIND_RANGE:
+        case TOKEN_KIND_EXCLAIM_EQ:
+        case TOKEN_KIND_GREATER_EQ:
+        case TOKEN_KIND_LESS_EQ:
+        case TOKEN_KIND_LOG_OR:
+        case TOKEN_KIND_LOG_AND:
+        case TOKEN_KIND_EQ_EQ:
+        case TOKEN_KIND_R_SHIFT:
+        case TOKEN_KIND_L_SHIFT:
+        case TOKEN_KIND_INCR:
+        case TOKEN_KIND_DECR:
+        case TOKEN_KIND_ARROW:
+        case TOKEN_KIND_PLUS_EQ:
+        case TOKEN_KIND_MINUS_EQ:
+        case TOKEN_KIND_TIMES_EQ:
+        case TOKEN_KIND_DIV_EQ:
+        case TOKEN_KIND_CARET_EQ:
+        case TOKEN_KIND_BIT_OR_EQ:
+        case TOKEN_KIND_BIT_AND_EQ:
+        case TOKEN_KIND_PERCENT_EQ: {
+            return 2;
+        } break;
+
+        case TOKEN_KIND_LESS_LESS_EQ:
+        case TOKEN_KIND_GREATER_GREATER_EQ: {
+            return 3;
+        } break;
+    }
+}
+
 TokenArray 
 LexString(Arena* MemPool, Str8 String, NamePool* Names)
 {
@@ -290,16 +328,19 @@ LexString(Arena* MemPool, Str8 String, NamePool* Names)
             NAME_INDEX_INVALID_VALUE
         };
 
-        if (Kind == TOKEN_KIND_IDENT || Kind == TOKEN_KIND_NUMBER) {
+        if (
+            Kind == TOKEN_KIND_IDENT || 
+            Kind == TOKEN_KIND_NUMBER ||
+            Kind == TOKEN_KIND_STR_LIT ||
+            Kind == TOKEN_KIND_CHAR_LIT
+        ) {
             u32 End = State.Ends[EndCursor++];
 
             ASSERT(End >= Offset);
 
             Tok->Count = (u16) (End + 1 - Offset);
-        } else if (Index + 1 < State.Count) {
-            Tok->Count = (u16) (State.Offsets[Index + 1] - Offset);
         } else {
-            Tok->Count = (u16) (String.Size - Offset);
+            Tok->Count = SymbolLength(Kind);
         }
 
         if (Kind == TOKEN_KIND_IDENT) {
@@ -744,11 +785,11 @@ NumericPeriodsMask(v256 CurrentVec, v256 NextVec, u8 LastChar)
             )
         )
     );
-    u64 HasNumBefore = _mm256_movemask_epi8(NumericMask(CurrentVec));
+    // u64 HasNumBefore = _mm256_movemask_epi8(NumericMask(CurrentVec));
 
-    HasNumBefore = (HasNumBefore << 1) | (LastChar >= '0' && LastChar <= '9');
+    // HasNumBefore = (HasNumBefore << 1) | (LastChar >= '0' && LastChar <= '9');
 
-    return GetMask(IsPeriod & (HasNumBefore | HasNumAfter));
+    return GetMask(IsPeriod & HasNumAfter);
 }
 
 void 

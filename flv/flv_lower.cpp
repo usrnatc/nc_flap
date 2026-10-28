@@ -527,8 +527,12 @@ LowerLiteral(LowerState* State, ASTNodeLiteral* Literal)
     }
 
     if (IsF64Elem(Type)) {
+        f64 Value = (Literal->Header.Variant == LITERAL_VARIANT_FLOAT)
+            ? Literal->Val.Double
+            : (f64) Literal->Val.Signed;
+
         return ValueAlloc(
-            ConstF64(State, Literal->Val.Double), 
+            ConstF64(State, Value), 
             FLV_ELEMENT_KIND_SINGLE_F64, 
             Type
         );
@@ -714,10 +718,9 @@ LowerIdent(LowerState* State, ASTNodeExprIdent* Ident)
             FLV_ELEMENT_KIND_SELECTION,
             Type
         );
-    }
-
-    if (Ident->Bind.V != BINDING_INVALID_VALUE)
+    } else if (Ident->Bind.V != BINDING_INVALID_VALUE) {
         Result = LowerVarUse(State, Ident);
+    }
 
     return Result;
 }

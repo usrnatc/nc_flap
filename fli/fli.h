@@ -132,8 +132,8 @@ enum FLIParseStatus {
     X(u32,    FirmwareStringIndex)   \
     X(u32,    __Padding)             \
     X(FLIMD5, SourceMD5)             \
-    X(u64,    StartTimeUS)           \
-    X(u64,    EndTimeUS)             \
+    X(u64,    StartTimeUSecs)           \
+    X(u64,    EndTimeUSecs)             \
     X(u64,    RecordCount)           \
     X(u64,    SkippedRecordCount)    \
  
@@ -181,17 +181,17 @@ enum FLIParseStatus {
     X(f32, Value)            \
     X(f32, Default)          \
     X(u32, __Padding)        \
-    X(u64, TimeUS)           \
+    X(u64, TimeUSecs)           \
  
 
 #define FLI_MESSAGE_XLIST    \
-    X(u64, TimeUS)           \
+    X(u64, TimeUSecs)           \
     X(u32, TextStringIndex)  \
     X(u32, __Padding)        \
  
 
 #define FLI_MODE_XLIST       \
-    X(u64, TimeUS)           \
+    X(u64, TimeUSecs)           \
     X(u8,  Mode)             \
     X(u8,  ModeNum)          \
     X(u8,  Reason)           \
@@ -199,13 +199,13 @@ enum FLIParseStatus {
  
 
 #define FLI_EVENT_XLIST      \
-    X(u64, TimeUS)           \
+    X(u64, TimeUSecs)           \
     X(u8,  ID)               \
     X(u8,  __Padding[7])     \
  
 
 #define FLI_ERROR_XLIST      \
-    X(u64, TimeUS)           \
+    X(u64, TimeUSecs)           \
     X(u8,  Subsystem)        \
     X(u8,  Code)             \
     X(u8,  __Padding[6])     \
@@ -532,8 +532,8 @@ struct FLIFileInfo {
     u32    FirmwareStringIndex;
     u32    __Padding;
     FLIMD5 SourceMD5;
-    u64    StartTimeUS;
-    u64    EndTimeUS;
+    u64    StartTimeUSecs;
+    u64    EndTimeUSecs;
     u64    RecordCount;
     u64    SkippedRecordCount;
 };
@@ -581,17 +581,17 @@ struct FLIParam {
     f32 Value;
     f32 Default;
     u32 __Padding;
-    u64 TimeUS;
+    u64 TimeUSecs;
 };
  
 struct FLIMessage {
-    u64 TimeUS;
+    u64 TimeUSecs;
     u32 TextStringIndex;
     u32 __Padding;
 };
  
 struct FLIMode {
-    u64 TimeUS;
+    u64 TimeUSecs;
     u8  Mode;
     u8  ModeNum;
     u8  Reason;
@@ -599,13 +599,13 @@ struct FLIMode {
 };
  
 struct FLIEvt {
-    u64 TimeUS;
+    u64 TimeUSecs;
     u8  ID;
     u8  __Padding[7];
 };
  
 struct FLIError {
-    u64 TimeUS;
+    u64 TimeUSecs;
     u8  Subsystem;
     u8  Code;
     u8  __Padding[6];
@@ -749,7 +749,7 @@ struct FLIBakeParam {
     Str8                   Name;
     f32                    Value;
     f32                    Default;
-    u64                    TimeUS;
+    u64                    TimeUSecs;
 };
  
 struct FLIBakeMessageChunkNode;
@@ -757,14 +757,14 @@ struct FLIBakeMessageChunkNode;
 struct FLIBakeMessage {
     FLIBakeMessageChunkNode* Chunk;
     Str8                     Text;
-    u64                      TimeUS;
+    u64                      TimeUSecs;
 };
  
 struct FLIBakeModeChunkNode;
  
 struct FLIBakeMode {
     FLIBakeModeChunkNode* Chunk;
-    u64                   TimeUS;
+    u64                   TimeUSecs;
     u8                    Mode;
     u8                    ModeNum;
     u8                    Reason;
@@ -774,7 +774,7 @@ struct FLIBakeEventChunkNode;
  
 struct FLIBakeEvent {
     FLIBakeEventChunkNode* Chunk;
-    u64                    TimeUS;
+    u64                    TimeUSecs;
     u8                     ID;
 };
  
@@ -782,7 +782,7 @@ struct FLIBakeErrorChunkNode;
  
 struct FLIBakeError {
     FLIBakeErrorChunkNode* Chunk;
-    u64                    TimeUS;
+    u64                    TimeUSecs;
     u8                     Subsystem;
     u8                     Code;
 };
@@ -792,8 +792,8 @@ struct FLIBakeFileInfo {
     Str8   Vehicle;
     Str8   Firmware;
     FLIMD5 SourceMD5;
-    u64    StartTimeUS;
-    u64    EndTimeUS;
+    u64    StartTimeUSecs;
+    u64    EndTimeUSecs;
     u64    RecordCount;
     u64    SkippedRecordCount;
 };
