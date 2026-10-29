@@ -13,7 +13,6 @@
 
 FLVKernelFuncType* FLV_KERNEL_TABLE[FLV_KERNEL_COUNT] = {};
 
-// @operands___________________________________________________________________
 INTERNAL f64
 FLVScalarF64(FLVLane* Lane, FLVOperand Operand)
 {
@@ -100,7 +99,6 @@ FLVSelectionAlloc(FLVLane* Lane, u64 Capacity)
     return Result;
 }
 
-// @kernels____________________________________________________________________
 INTERNAL
 FLV_KERNEL_FUNC_SIG(FLVKernelStub)
 {
@@ -110,15 +108,6 @@ FLV_KERNEL_FUNC_SIG(FLVKernelStub)
     );
     FLVTempSetMissing(Lane, Op.Dst);
 }
-
-#define FLV_LOAD_LOOP(SrcType, DstType)                            \
-    do {                                                           \
-        SrcType const* Src = (SrcType const*) Column->Data + Base; \
-        DstType*       Dst = (DstType*) Out;                       \
-                                                                   \
-        for (u64 Index = 0; Index < Count; ++Index)                \
-            Dst[Index] = (DstType) Src[Index];                     \
-    } while (FALSE)
 
 INTERNAL void
 FLVLoadChunk(FLVLane* Lane, FLVOp Op, b32 ToF64)
@@ -246,8 +235,6 @@ FLV_KERNEL_FUNC_SIG(FLVKernelLoadF64)
     FLVLoadChunk(Lane, Op, TRUE);
 }
 
-// NOTE(nc): compares write one bit per sample. Words are cleared first so the
-//         : bits past ChunkCount are zero; mask consumers rely on that.
 #define FLV_CMP_KERNEL_T(Name, Type, OpSym)                                      \
     INTERNAL                                                                     \
     FLV_KERNEL_FUNC_SIG(FLVKernel##Name)                                         \
@@ -339,7 +326,6 @@ FLV_KERNEL_FUNC_SIG(FLVKernelMaskOr)
         Dst[Index] = LHS[Index] | RHS[Index];
 }
 
-// NOTE(nc): NOT must not set bits past ChunkCount
 INTERNAL
 FLV_KERNEL_FUNC_SIG(FLVKernelMaskNot)
 {
@@ -369,10 +355,6 @@ FLV_KERNEL_FUNC_SIG(FLVKernelMaskNot)
     }
 }
 
-// NOTE(nc): a SEL_FROM_MASK op accumulates runs of set bits across every chunk
-//         : of its region. The run start and end are the times of the first and
-//         : last true sample, so the range is exact on this base and converts to
-//         : any other base by time.
 INTERNAL
 FLV_KERNEL_FUNC_SIG(FLVKernelSelFromMask)
 {
@@ -429,8 +411,6 @@ FLV_KERNEL_FUNC_SIG(FLVKernelSelFromTimeRange)
     }
 }
 
-// NOTE(nc): a mode holds from its MODE record until the next MODE record, or
-//         : the end of the flight. Adjacent records of one mode merge.
 INTERNAL
 FLV_KERNEL_FUNC_SIG(FLVKernelSelMode)
 {
@@ -471,8 +451,6 @@ FLV_KERNEL_FUNC_SIG(FLVKernelSelMode)
     }
 }
 
-// NOTE(nc): an event is a point in time; its selection is a zero-length range
-//         : per occurrence. Useful for flags and markers, empty as a filter.
 INTERNAL
 FLV_KERNEL_FUNC_SIG(FLVKernelSelEvent)
 {
@@ -580,7 +558,10 @@ FLV_KERNEL_FUNC_SIG(FLVKernelSelOr)
         FLVTimeRange Next = {};
         b32 TakeA = (
             IndexB >= B->Count ||
-            (IndexA < A->Count && A->V[IndexA].StartUSecs <= B->V[IndexB].StartUSecs)
+            (
+               IndexA < A->Count && 
+               A->V[IndexA].StartUSecs <= B->V[IndexB].StartUSecs
+            )
         );
 
         if (TakeA)
@@ -588,7 +569,10 @@ FLV_KERNEL_FUNC_SIG(FLVKernelSelOr)
         else
             Next = B->V[IndexB++];
 
-        if (Dst->Count && Next.StartUSecs <= Dst->V[Dst->Count - 1].EndUSecs) {
+        if (
+            Dst->Count && 
+            Next.StartUSecs <= Dst->V[Dst->Count - 1].EndUSecs
+        ) {
             Dst->V[Dst->Count - 1].EndUSecs = MAX(
                 Dst->V[Dst->Count - 1].EndUSecs,
                 Next.EndUSecs
@@ -652,7 +636,11 @@ FLVRegionEmitsBegin(FLVLane* Lane, FLVRegion const* Region)
            u64, 
            Lane->RegionSampleCount
        );
-        Curve->Values = ArenaPushArray(Lane->ResultMemPool, f64, Lane->RegionSampleCount);
+        Curve->Values = ArenaPushArray(
+           Lane->ResultMemPool, 
+           f64, 
+           Lane->RegionSampleCount
+        );
         Curve->Count = 0;
         Curve->LabelStringIndex = Emit->LabelStringIndex;
         Curve->Axis = Emit->Axis;
@@ -721,7 +709,11 @@ FLV_KERNEL_FUNC_SIG(FLVKernelEmitFlag)
     FLVSelection const* Sel = FLVSelectionPtr(Lane, Op.LHS);
 
     Item->Kind = FLV_RENDER_KIND_FLAG;
-    Flag->Ranges = ArenaPushArray(Lane->ResultMemPool, FLVTimeRange, Sel->Count);
+    Flag->Ranges = ArenaPushArray(
+       Lane->ResultMemPool, 
+       FLVTimeRange, 
+       Sel->Count
+   );
     Flag->Count = Sel->Count;
     Flag->TotalDurationUSecs = 0;
     Flag->LabelStringIndex = Emit->LabelStringIndex;
@@ -777,7 +769,6 @@ FLVKernelInit(void)
     FLV_KERNEL_TABLE[FLV_KERNEL_EMIT_MISSING] = FLVKernelEmitMissing;
 }
 
-// @lane_______________________________________________________________________
 INTERNAL u64
 FLVTempSize(u8 Kind)
 {
@@ -820,7 +811,12 @@ FLVLaneInit(
     u32 FlightIndex
 ) {
     u64 InfosCount = 0;
-    FLIFileInfo* Infos = FLITableFromName(FLI, FileInfo, FILE_INFO, &InfosCount);
+    FLIFileInfo* Infos = FLITableFromName(
+        FLI, 
+        FileInfo, 
+        FILE_INFO, 
+        &InfosCount
+    );
 
     MemZero(Lane, sizeof(*Lane));
     Lane->Program = Program;
@@ -941,8 +937,6 @@ FLVUpperBoundU64(u64 const* V, u64 Count, u64 Key)
     return Low;
 }
 
-// NOTE(nc): time ranges -> index ranges on this region's base. No selection
-//         : means the whole column.
 INTERNAL void
 FLVRegionRanges(FLVLane* Lane, FLVRegion const* Region)
 {
@@ -980,8 +974,6 @@ FLVRegionRanges(FLVLane* Lane, FLVRegion const* Region)
     }
 }
 
-// NOTE(nc): every SEL_FROM_MASK in the region gets room for the worst case, one
-//         : range per two samples. The arena only commits what is touched.
 INTERNAL void
 FLVRegionSelectionBuildsBegin(FLVLane* Lane, FLVRegion const* Region)
 {
@@ -996,7 +988,11 @@ FLVRegionSelectionBuildsBegin(FLVLane* Lane, FLVRegion const* Region)
         ];
 
         Build->Capacity = Lane->RegionSampleCount / 2 + 1;
-        Build->V = ArenaPushArray(Lane->MemPool, FLVTimeRange, Build->Capacity);
+        Build->V = ArenaPushArray(
+            Lane->MemPool, 
+            FLVTimeRange, 
+            Build->Capacity
+        );
         Build->Count = 0;
         Build->IsOpen = FALSE;
     }
@@ -1083,8 +1079,6 @@ FLVRegionRun(FLVLane* Lane, FLVRegion const* Region)
 
                 FLV_KERNEL_TABLE[Op.Kernel](Lane, Op);
 
-                // NOTE(nc): the region mask is a temp produced inside this region;
-                //         : once its op has run, the consumers after it see it
                 if (
                     Op.Dst != FLV_OPERAND_NONE &&
                     Op.Dst == Region->Mask &&
@@ -1156,7 +1150,6 @@ FLVLaneRun(FLVLane* Lane)
     }
 }
 
-// @print______________________________________________________________________
 Str8List
 FLVRenderItemsPrint(Arena* MemPool, FLVLane const* Lane)
 {

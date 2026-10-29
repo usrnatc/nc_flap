@@ -13,7 +13,15 @@ struct Arena;
 #define FLV_CHUNK_SAMPLES    4096
 #define FLV_CHUNK_MASK_WORDS (FLV_CHUNK_SAMPLES / 64)
 
-// NOTE(nc): ArduPilot LogEvent ids used by the armed selection
+#define FLV_LOAD_LOOP(SrcType, DstType)                            \
+    do {                                                           \
+        SrcType const* Src = (SrcType const*) Column->Data + Base; \
+        DstType*       Dst = (DstType*) Out;                       \
+                                                                   \
+        for (u64 Index = 0; Index < Count; ++Index)                \
+            Dst[Index] = (DstType) Src[Index];                     \
+    } while (FALSE)
+
 #define FLV_EVENT_ID_ARMED    10
 #define FLV_EVENT_ID_DISARMED 11
 
