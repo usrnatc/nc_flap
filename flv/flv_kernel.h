@@ -4,6 +4,9 @@
 #include "nc_types.h"
 #include "nc_string.h"
 
+struct FLVLane;
+struct FLVRegion;
+
 // @defines____________________________________________________________________
 typedef u8 FLVElementKind;
 enum : u8 {
@@ -17,11 +20,24 @@ enum : u8 {
     FLV_ELEMENT_KIND_COUNT
 };
 
+typedef u16 FLVOperand;
+enum : u16 {
+    FLV_OPERAND_KIND_TEMP,
+    FLV_OPERAND_KIND_SLOT,
+    FLV_OPERAND_KIND_CONST,
+    FLV_OPERAND_KIND_NONE
+};
+
+#define FLV_OPERAND_KIND_SHIFT 14
+#define FLV_OPERAND_INDEX_MASK 0x3FFFU
+#define FLV_OPERAND_NONE 0xFFFFU
+
 #define FLV_KERNEL_FLAG_RUN       (1 << 0)
 #define FLV_KERNEL_FLAG_SCALAR    (1 << 1)
 #define FLV_KERNEL_FLAG_REDUCTION (1 << 2)
 #define FLV_KERNEL_FLAG_WINDOW    (1 << 3)
 #define FLV_KERNEL_FLAG_EMIT      (1 << 4)
+#define FLV_KERNEL_FLAG_ROLLING   (1 << 5)
 
 #define FLV_KERNEL_LIST(X)                                                                 \
     X(NONE,                0, NONE, 0)                                                     \
@@ -165,6 +181,9 @@ enum : u16 {
 
 #undef X
 
+#define FLV_KERNEL_FUNC_SIG(X) void X(FLVLane* Lane, FLVOp Op)
+typedef FLV_KERNEL_FUNC_SIG(FLVKernelFuncType);
+
 // @types______________________________________________________________________
 struct FLVKernelInfo {
     u8 InputCount;
@@ -173,11 +192,85 @@ struct FLVKernelInfo {
     u8 __Padding;
 };
 
+struct FLVOp {
+    u16 Kernel;
+    FLVOperand Dst;
+    FLVOperand LHS;
+    FLVOperand RHS;
+};
+STATIC_ASSERT(sizeof(FLVOp) == 8, FLVOpSizeCheck);
+
+union FLVNumber {
+    f64 F64;
+    i64 I64;
+};
+
+struct FLVReduction {
+    FLVNumber Summation;
+    FLVNumber Minimum;
+    FLVNumber Maximum;
+    FLVNumber Head;
+    FLVNumber Tail;
+    f64       SummationSquared;
+    f64       Shift;
+    u64       Count;
+};
+
+struct FLVWindow {
+    u64*       Times;
+    FLVNumber* Values;
+    u64        Capacity;
+    u64        Head;
+    u64        Count;
+    FLVNumber  Summation;
+    FLVNumber  Prev;
+    u64        PrevTimeUSecs;
+    b32        HasPrev;
+    u32        __Padding;
+};
+
+struct FLVSelectionBuild {
+    FLVTimeRange* V;
+    u64           Count;
+    u64           Capacity;
+    u64           OpenStartUSecs;
+    u64           OpenEndUSecs;
+    b32           IsOpen;
+    u32           __Padding;
+};
+
 // @runtime____________________________________________________________________
 extern FLVKernelInfo const FLV_KERNEL_INFO_TABLE[FLV_KERNEL_COUNT];
 extern Str8 const FLV_KERNEL_NAME_TABLE[FLV_KERNEL_COUNT];
+extern FLVKernelFuncType* FLV_KERNEL_TABLE[FLV_KERNEL_COUNT];
 
 // @functions__________________________________________________________________
+void FLVKernelsRegionBegin(FLVLane* Lane, FLVRegion const* Region);
+void FLVKernelsRegionEnd(FLVLane* Lane, FLVRegion const* Region);
+void FLVKernelsRangeReset(FLVLane* Lane, FLVRegion const* Region);
 
+INTERNAL FLVOperand
+FLVOperandAlloc(u16 Kind, u32 Index)
+{
+    ASSERT(Index <= FLV_OPERAND_INDEX_MASK);
+
+    FLVOperand Result = (FLVOperand) (
+        (Kind << FLV_OPERAND_KIND_SHIFT) | Index
+    );
+
+    return Result;
+}
+
+INTERNAL u16
+FLVGetOperandKind(FLVOperand Operand)
+{
+    return Operand >> FLV_OPERAND_KIND_SHIFT;
+}
+
+INTERNAL u32
+FLVGetOperandIndex(FLVOperand Operand)
+{
+    return Operand & FLV_OPERAND_INDEX_MASK;
+}
 
 #endif // __FLV_KERNEL_H__

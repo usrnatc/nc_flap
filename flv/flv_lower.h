@@ -11,10 +11,6 @@ struct Arena;
 struct AST;
 
 // @defines____________________________________________________________________
-#define FLV_OPERAND_KIND_SHIFT 14
-#define FLV_OPERAND_INDEX_MASK 0x3FFFU
-#define FLV_OPERAND_NONE 0xFFFFU
-
 #define FLV_TEMP_MAX             64
 #define FLV_PROGRAM_OP_MAX     4096
 #define FLV_PROGRAM_REGION_MAX  512
@@ -31,14 +27,6 @@ struct AST;
 
 #define FLV_LAYOUT_MAX  1024
 #define FLV_PROGRAM_MAX 256
-
-typedef u16 FLVOperand;
-enum : u16 {
-    FLV_OPERAND_KIND_TEMP,
-    FLV_OPERAND_KIND_SLOT,
-    FLV_OPERAND_KIND_CONST,
-    FLV_OPERAND_KIND_NONE
-};
 
 typedef u8 FLVConstKind;
 enum : u8 {
@@ -62,14 +50,6 @@ enum : u8 {
     } while (FALSE)
 
 // @types______________________________________________________________________
-struct FLVOp {
-    u16 Kernel;
-    FLVOperand Dst;
-    FLVOperand LHS;
-    FLVOperand RHS;
-};
-STATIC_ASSERT(sizeof(FLVOp) == 8, FLVOpSizeCheck);
-
 struct FLVConst {
     union {
         i64      I64;
@@ -211,29 +191,5 @@ extern Str8 const FLV_KERNEL_NAME_TABLE[FLV_KERNEL_COUNT];
 // @functions__________________________________________________________________
 FLVLowered FLVLower(Arena* MemPool, AST* Tree, FLVSchema const* Schema, FLVSlot const* Slots, u32 SlotsCount);
 Str8List FLVProgramPrint(Arena* MemPool, FLVProgram const* Program, FLVSlot const* Slots);
-
-INTERNAL FLVOperand
-FLVOperandAlloc(u16 Kind, u32 Index)
-{
-    ASSERT(Index <= FLV_OPERAND_INDEX_MASK);
-
-    FLVOperand Result = (FLVOperand) (
-        (Kind << FLV_OPERAND_KIND_SHIFT) | Index
-    );
-
-    return Result;
-}
-
-INTERNAL u16
-FLVGetOperandKind(FLVOperand Operand)
-{
-    return Operand >> FLV_OPERAND_KIND_SHIFT;
-}
-
-INTERNAL u32
-FLVGetOperandIndex(FLVOperand Operand)
-{
-    return Operand & FLV_OPERAND_INDEX_MASK;
-}
 
 #endif // __FLV_LOWER_H__

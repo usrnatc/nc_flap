@@ -15,15 +15,6 @@ struct Arena;
 
 #define FLV_I64_HOLE I64_MAX
 
-#define FLV_LOAD_LOOP(SrcType, DstType)                              \
-    do {                                                             \
-        SrcType const* __Src = (SrcType const*) Column->Data + Base; \
-        DstType* __Dst = (DstType*) Result;                          \
-                                                                     \
-        for (u64 Index = 0; Index < Count; ++Index)                  \
-            __Dst[Index] = (DstType) __Src[Index];                   \
-    } while (FALSE)
-
 #define FLV_ARITH_HEAD(Type)                                                \
     if (FLVTempIsMissing(Lane, Op.LHS) || FLVTempIsMissing(Lane, Op.RHS)) { \
         FLVTempSetMissing(Lane, Op.Dst);                                    \
@@ -79,16 +70,6 @@ struct FLVColumn {
     u8            __Padding[6];
 };
 
-struct FLVSelectionBuild {
-    FLVTimeRange* V;
-    u64           Count;
-    u64           Capacity;
-    u64           OpenStartUSecs;
-    u64           OpenEndUSecs;
-    b32           IsOpen;
-    u32           __Padding;
-};
-
 struct FLVRenderCurve {
     u64* TimeUSecs;
     f64* Values;
@@ -121,35 +102,6 @@ struct FLVRenderItem {
     };
 };
 
-union FLVNumber {
-    f64 F64;
-    i64 I64;
-};
-
-struct FLVReduction {
-    FLVNumber Summation;
-    FLVNumber Minimum;
-    FLVNumber Maximum;
-    FLVNumber Head;
-    FLVNumber Tail;
-    f64       SummationSquared;
-    f64       Shift;
-    u64       Count;
-};
-
-struct FLVWindow {
-    u64*       Times;
-    FLVNumber* Values;
-    u64        Capacity;
-    u64        Head;
-    u64        Count;
-    FLVNumber  Summation;
-    FLVNumber  Prev;
-    u64        PrevTimeUSecs;
-    b32        HasPrev;
-    u32        __Padding;
-};
-
 struct FLVLane {
     FLVProgram const*   Program;
     FLVBoundSlot const* Slots;
@@ -177,11 +129,8 @@ struct FLVLane {
     u64                 ChunkCount;
 };
 
-#define FLV_KERNEL_FUNC_SIG(X) void X(FLVLane* Lane, FLVOp Op)
-typedef FLV_KERNEL_FUNC_SIG(FLVKernelFuncType);
-
 // @runtime____________________________________________________________________
-extern FLVKernelFuncType* FLV_KERNEL_TABLE[FLV_KERNEL_COUNT];
+
 
 // @functions__________________________________________________________________
 void FLVKernelInit(void);
@@ -195,6 +144,12 @@ FLVTempPtr(FLVLane* Lane, FLVOperand Operand)
     ASSERT(FLVGetOperandKind(Operand) == FLV_OPERAND_KIND_TEMP);
 
     return Lane->Temps[FLVGetOperandIndex(Operand)];
+}
+
+INTERNAL FLVSelection*
+FLVSelectionPtr(FLVLane* Lane, FLVOperand Operand)
+{
+    return (FLVSelection*) FLVTempPtr(Lane, Operand);
 }
 
 INTERNAL b32

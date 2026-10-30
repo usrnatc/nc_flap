@@ -17,22 +17,6 @@
 #include "flv_intern.h"
 #include "flv_type_check.h"
 
-#define X(Name, Inputs, Dst, Flags) { Inputs, FLV_ELEMENT_KIND_##Dst, Flags, 0 },
-
-FLVKernelInfo const FLV_KERNEL_INFO_TABLE[FLV_KERNEL_COUNT] = {
-    FLV_KERNEL_LIST(X)
-};
-
-#undef X
-
-#define X(Name, Inputs, Dst, Flags) Str8Lit(#Name),
-
-Str8 const FLV_KERNEL_NAME_TABLE[FLV_KERNEL_COUNT] = {
-    FLV_KERNEL_LIST(X)
-};
-
-#undef X
-
 INTERNAL ASTNodeExprAccel*
 ExprAt(LowerState* State, ExprIndex Index)
 {
