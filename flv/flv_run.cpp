@@ -99,6 +99,56 @@ FLVSelectionAlloc(FLVLane* Lane, u64 Capacity)
     return Result;
 }
 
+// FIXME(nc): this is fucking stupid to have taking up space in the binary
+global u64 const FLV_MASK_ALL[FLV_CHUNK_MASK_WORDS] = {
+    U64_MAX, U64_MAX, U64_MAX, U64_MAX,
+    U64_MAX, U64_MAX, U64_MAX, U64_MAX, 
+    U64_MAX, U64_MAX, U64_MAX, U64_MAX,
+    U64_MAX, U64_MAX, U64_MAX, U64_MAX, 
+    U64_MAX, U64_MAX, U64_MAX, U64_MAX,
+    U64_MAX, U64_MAX, U64_MAX, U64_MAX, 
+    U64_MAX, U64_MAX, U64_MAX, U64_MAX,
+    U64_MAX, U64_MAX, U64_MAX, U64_MAX, 
+    U64_MAX, U64_MAX, U64_MAX, U64_MAX,
+    U64_MAX, U64_MAX, U64_MAX, U64_MAX, 
+    U64_MAX, U64_MAX, U64_MAX, U64_MAX,
+    U64_MAX, U64_MAX, U64_MAX, U64_MAX, 
+    U64_MAX, U64_MAX, U64_MAX, U64_MAX,
+    U64_MAX, U64_MAX, U64_MAX, U64_MAX, 
+    U64_MAX, U64_MAX, U64_MAX, U64_MAX,
+    U64_MAX, U64_MAX, U64_MAX, U64_MAX
+};
+
+INTERNAL u64
+FLVMaskHead(u64 const* Mask, u64 Count)
+{
+    u64 Result = Count;
+ 
+    for (u64 Index = 0; Index < Count; ++Index) {
+        if (FLVMaskBit(Mask, Index)) {
+            Result = Index;
+            break;
+        }
+    }
+ 
+    return Result;
+}
+ 
+INTERNAL u64
+FLVMaskTail(u64 const* Mask, u64 Count)
+{
+    u64 Result = Count;
+ 
+    for (u64 Index = Count; Index--; ) {
+        if (FLVMaskBit(Mask, Index)) {
+            Result = Index + 1;
+            break;
+        }
+    }
+ 
+    return Result;
+}
+
 INTERNAL
 FLV_KERNEL_FUNC_SIG(FLVKernelStub)
 {
@@ -110,18 +160,18 @@ FLV_KERNEL_FUNC_SIG(FLVKernelStub)
 }
 
 INTERNAL void
-FLVLoadChunk(FLVLane* Lane, FLVOp Op, b32 ToF64)
-{
-    u32 Slot = FLVGetOperandIndex(Op.LHS);
-    FLVColumn const* Column = &Lane->Columns[Slot];
-    void* Out = FLVTempPtr(Lane, Op.Dst);
+FLVLoadChunk(
+    FLVLane* Lane,
+    FLVColumn const* Column,
+    FLVOperand Dst,
+    b32 ToF64
+) {
+    void* Result = FLVTempPtr(Lane, Dst);
     u64 Base = Lane->ChunkBase;
     u64 Count = Lane->ChunkCount;
 
-    ASSERT(FLVGetOperandKind(Op.LHS) == FLV_OPERAND_KIND_SLOT);
-
     if (!Column->Data) {
-        FLVTempSetMissing(Lane, Op.Dst);
+        FLVTempSetMissing(Lane, Dst);
 
         return;
     }
@@ -129,7 +179,7 @@ FLVLoadChunk(FLVLane* Lane, FLVOp Op, b32 ToF64)
     if (ToF64) {
         switch (Column->Kind) {
             default: {
-                FLVTempSetMissing(Lane, Op.Dst);
+                FLVTempSetMissing(Lane, Dst);
             } break;
 
             case FLI_SCALAR_KIND_U8: {
@@ -175,7 +225,7 @@ FLVLoadChunk(FLVLane* Lane, FLVOp Op, b32 ToF64)
     } else {
         switch (Column->Kind) {
             default: {
-                FLVTempSetMissing(Lane, Op.Dst);
+                FLVTempSetMissing(Lane, Dst);
             } break;
 
             case FLI_SCALAR_KIND_U8: {
@@ -226,13 +276,469 @@ FLVLoadChunk(FLVLane* Lane, FLVOp Op, b32 ToF64)
 INTERNAL
 FLV_KERNEL_FUNC_SIG(FLVKernelLoadI64)
 {
-    FLVLoadChunk(Lane, Op, FALSE);
+    ASSERT(FLVGetOperandKind(Op.LHS) == FLV_OPERAND_KIND_SLOT);
+
+    FLVLoadChunk(
+        Lane, 
+        &Lane->Columns[FLVGetOperandIndex(Op.LHS)], 
+        Op.Dst, 
+        FALSE
+    );
 }
 
 INTERNAL
 FLV_KERNEL_FUNC_SIG(FLVKernelLoadF64)
 {
-    FLVLoadChunk(Lane, Op, TRUE);
+    ASSERT(FLVGetOperandKind(Op.LHS) == FLV_OPERAND_KIND_SLOT);
+
+    FLVLoadChunk(
+        Lane, 
+        &Lane->Columns[FLVGetOperandIndex(Op.LHS)], 
+        Op.Dst, 
+        TRUE
+    );
+}
+
+INTERNAL
+FLV_KERNEL_FUNC_SIG(FLVKernelLoadInstance)
+{
+    FLVLoadChunk(
+        Lane,
+        &Lane->InstanceColumns[Lane->Region->BaseSlot],
+        Op.Dst,
+        FALSE
+    );
+}
+
+#define FLV_ARITH_KERNEL_T(Name, Type, OpM)                     \
+    INTERNAL                                                    \
+    FLV_KERNEL_FUNC_SIG(FLVKernel##Name)                        \
+    {                                                           \
+        FLV_ARITH_HEAD(Type);                                   \
+        Type const* A = (Type const*) FLVTempPtr(Lane, Op.LHS); \
+        Type const* B = (Type const*) FLVTempPtr(Lane, Op.RHS); \
+                                                                \
+        for (u64 Index = 0; Index < Count; ++Index)             \
+            Dst[Index] = OpM(A[Index], B[Index]);               \
+    }
+ 
+#define FLV_ARITH_KERNEL_S(Name, Type, ScalarFunc, OpM)         \
+    INTERNAL                                                    \
+    FLV_KERNEL_FUNC_SIG(FLVKernel##Name)                        \
+    {                                                           \
+        FLV_ARITH_HEAD(Type);                                   \
+        Type const* A = (Type const*) FLVTempPtr(Lane, Op.LHS); \
+        Type        B = ScalarFunc(Lane, Op.RHS);               \
+                                                                \
+        for (u64 Index = 0; Index < Count; ++Index)             \
+            Dst[Index] = OpM(A[Index], B);                      \
+    }
+ 
+#define FLV_ARITH_KERNEL_RS(Name, Type, ScalarFunc, OpM)        \
+    INTERNAL                                                    \
+    FLV_KERNEL_FUNC_SIG(FLVKernel##Name)                        \
+    {                                                           \
+        FLV_ARITH_HEAD(Type);                                   \
+        Type A = ScalarFunc(Lane, Op.LHS);                      \
+        Type const* B = (Type const*) FLVTempPtr(Lane, Op.RHS); \
+                                                                \
+        for (u64 Index = 0; Index < Count; ++Index)             \
+            Dst[Index] = OpM(A, B[Index]);                      \
+    }
+ 
+#define FLV_ARITH_FAMILY_2(Name, OpI, OpF)                        \
+    FLV_ARITH_KERNEL_T(Name##_I64_T, i64, OpI)                    \
+    FLV_ARITH_KERNEL_S(Name##_I64_S, i64, FLVScalarI64, OpI)      \
+    FLV_ARITH_KERNEL_T(Name##_F64_T, f64, OpF)                    \
+    FLV_ARITH_KERNEL_S(Name##_F64_S, f64, FLVScalarF64, OpF)
+ 
+#define FLV_ARITH_FAMILY_3(Name, OpI, OpF)                        \
+    FLV_ARITH_KERNEL_T(Name##_I64_T, i64, OpI)                    \
+    FLV_ARITH_KERNEL_S(Name##_I64_S, i64, FLVScalarI64, OpI)      \
+    FLV_ARITH_KERNEL_RS(Name##_I64_RS, i64, FLVScalarI64, OpI)    \
+    FLV_ARITH_KERNEL_T(Name##_F64_T, f64, OpF)                    \
+    FLV_ARITH_KERNEL_S(Name##_F64_S, f64, FLVScalarF64, OpF)      \
+    FLV_ARITH_KERNEL_RS(Name##_F64_RS, f64, FLVScalarF64, OpF)
+ 
+FLV_ARITH_FAMILY_2(ADD, FLV_OP_ADD, FLV_OP_ADD)
+FLV_ARITH_FAMILY_3(SUB, FLV_OP_SUB, FLV_OP_SUB)
+FLV_ARITH_FAMILY_2(MUL, FLV_OP_MUL, FLV_OP_MUL)
+FLV_ARITH_FAMILY_3(DIV, FLV_OP_DIV_I64, FLV_OP_DIV_F64)
+FLV_ARITH_FAMILY_3(MOD, FLV_OP_MOD_I64, FLV_OP_MOD_F64)
+ 
+#undef FLV_ARITH_FAMILY_3
+#undef FLV_ARITH_FAMILY_2
+#undef FLV_ARITH_KERNEL_RS
+#undef FLV_ARITH_KERNEL_S
+#undef FLV_ARITH_KERNEL_T
+#undef FLV_ARITH_HEAD
+ 
+#define FLV_UNARY_KERNEL(Name, SrcType, DstType, Expr)                 \
+    INTERNAL                                                           \
+    FLV_KERNEL_FUNC_SIG(FLVKernel##Name)                               \
+    {                                                                  \
+        if (FLVTempIsMissing(Lane, Op.LHS)) {                          \
+            FLVTempSetMissing(Lane, Op.Dst);                           \
+                                                                       \
+            return;                                                    \
+        }                                                              \
+                                                                       \
+        SrcType const* A = (SrcType const*) FLVTempPtr(Lane, Op.LHS);  \
+        DstType* Dst = (DstType*) FLVTempPtr(Lane, Op.Dst);            \
+                                                                       \
+        for (u64 Index = 0; Index < Lane->ChunkCount; ++Index)         \
+            Dst[Index] = (Expr);                                       \
+    }
+ 
+FLV_UNARY_KERNEL(NEG_I64, i64, i64, -A[Index])
+FLV_UNARY_KERNEL(NEG_F64, f64, f64, -A[Index])
+FLV_UNARY_KERNEL(ABS_I64, i64, i64, (A[Index] < 0) ? -A[Index] : A[Index])
+FLV_UNARY_KERNEL(ABS_F64, f64, f64, (A[Index] < 0.0) ? -A[Index] : A[Index])
+ 
+INTERNAL
+FLV_KERNEL_FUNC_SIG(FLVKernelConvertI64F64)
+{
+    if (FLVTempIsMissing(Lane, Op.LHS)) {
+        FLVTempSetMissing(Lane, Op.Dst);
+ 
+        return;
+    }
+ 
+    i64 const* A = (i64 const*) FLVTempPtr(Lane, Op.LHS);
+    f64* Dst = (f64*) FLVTempPtr(Lane, Op.Dst);
+ 
+    for (u64 Index = 0; Index < Lane->ChunkCount; ++Index)
+        Dst[Index] = (A[Index] == FLV_I64_HOLE) ? NC_NAN : (f64) A[Index];
+}
+ 
+#undef FLV_UNARY_KERNEL
+#undef FLV_OP_MOD_F64
+#undef FLV_OP_MOD_I64
+#undef FLV_OP_DIV_F64
+#undef FLV_OP_DIV_I64
+#undef FLV_OP_MUL
+#undef FLV_OP_SUB
+#undef FLV_OP_ADD
+
+#define FLV_REDUCE_KERNEL(Name, Type, Field, Body)                        \
+    INTERNAL                                                              \
+    FLV_KERNEL_FUNC_SIG(FLVKernel##Name)                                  \
+    {                                                                     \
+        FLVReduction* R = &Lane->Reductions[FLVGetOperandIndex(Op.Dst)];  \
+                                                                          \
+        if (FLVTempIsMissing(Lane, Op.LHS)) {                             \
+            FLVTempSetMissing(Lane, Op.Dst);                              \
+                                                                          \
+            return;                                                       \
+        }                                                                 \
+                                                                          \
+        u64 const* Mask = Lane->Mask ? Lane->Mask : FLV_MASK_ALL;         \
+        Type const* A = (Type const*) FLVTempPtr(Lane, Op.LHS);           \
+        u64 Head = FLVMaskHead(Mask, Lane->ChunkCount);                   \
+        u64 Tail = FLVMaskTail(Mask, Lane->ChunkCount);                   \
+                                                                          \
+        if (Head >= Tail)                                                 \
+            return;                                                       \
+                                                                          \
+        if (!R->Count) {                                                  \
+            R->Head.Field = A[Head];                                      \
+            R->Minimum.Field = A[Head];                                   \
+            R->Maximum.Field = A[Head];                                   \
+            R->Shift = (f64) A[Head];                                     \
+        }                                                                 \
+                                                                          \
+        R->Tail.Field = A[Tail - 1];                                      \
+                                                                          \
+        for (u64 Index = Head; Index < Tail; ++Index) {                   \
+            Type X = A[Index];                                            \
+            u64  Bit = FLVMaskBit(Mask, Index);                           \
+                                                                          \
+            Body;                                                         \
+            R->Count += Bit;                                              \
+        }                                                                 \
+    }
+ 
+#define FLV_BODY_NONE
+
+#define FLV_BODY_SUM(Field, Zero) R->Summation.Field += Bit ? X : Zero
+#define FLV_BODY_MEAN             R->Summation.F64 += Bit ? (f64) X : 0.0
+
+#define FLV_BODY_STDDEV                                                   \
+    f64 D = Bit ? (f64) X - R->Shift : 0.0;                               \
+    R->Summation.F64 += D;                                                \
+    R->SummationSquared += D * D
+
+#define FLV_BODY_MIN(Field) R->Minimum.Field = (Bit && X < R->Minimum.Field) ? X : R->Minimum.Field
+#define FLV_BODY_MAX(Field) R->Maximum.Field = (Bit && X > R->Maximum.Field) ? X : R->Maximum.Field
+ 
+FLV_REDUCE_KERNEL(MEAN_I64,     i64, I64, FLV_BODY_MEAN)
+FLV_REDUCE_KERNEL(MEAN_F64,     f64, F64, FLV_BODY_MEAN)
+FLV_REDUCE_KERNEL(STDDEV_I64,   i64, I64, FLV_BODY_STDDEV)
+FLV_REDUCE_KERNEL(STDDEV_F64,   f64, F64, FLV_BODY_STDDEV)
+FLV_REDUCE_KERNEL(MIN_I64,      i64, I64, FLV_BODY_MIN(I64))
+FLV_REDUCE_KERNEL(MIN_F64,      f64, F64, FLV_BODY_MIN(F64))
+FLV_REDUCE_KERNEL(MAX_I64,      i64, I64, FLV_BODY_MAX(I64))
+FLV_REDUCE_KERNEL(MAX_F64,      f64, F64, FLV_BODY_MAX(F64))
+FLV_REDUCE_KERNEL(SUM_I64,      i64, I64, FLV_BODY_SUM(I64, 0))
+FLV_REDUCE_KERNEL(SUM_F64,      f64, F64, FLV_BODY_SUM(F64, 0.0))
+FLV_REDUCE_KERNEL(FIRST_I64,    i64, I64, FLV_BODY_NONE)
+FLV_REDUCE_KERNEL(FIRST_F64,    f64, F64, FLV_BODY_NONE)
+FLV_REDUCE_KERNEL(LAST_I64,     i64, I64, FLV_BODY_NONE)
+FLV_REDUCE_KERNEL(LAST_F64,     f64, F64, FLV_BODY_NONE)
+FLV_REDUCE_KERNEL(REDUCE_COUNT, i64, I64, FLV_BODY_NONE)
+ 
+#undef FLV_BODY_MAX
+#undef FLV_BODY_MIN
+#undef FLV_BODY_STDDEV
+#undef FLV_BODY_MEAN
+#undef FLV_BODY_SUM
+#undef FLV_BODY_NONE
+#undef FLV_REDUCE_KERNEL
+
+#define FLV_RING(W, Index) ((Index) & ((W)->Capacity - 1))
+ 
+#define FLV_WINDOW_HEAD(Type)                                             \
+    FLVWindow* W = &Lane->Windows[FLVGetOperandIndex(Op.Dst)];            \
+                                                                          \
+    if (FLVTempIsMissing(Lane, Op.LHS)) {                                 \
+        FLVTempSetMissing(Lane, Op.Dst);                                  \
+                                                                          \
+        return;                                                           \
+    }                                                                     \
+                                                                          \
+    Type const* A = (Type const*) FLVTempPtr(Lane, Op.LHS);               \
+    u64 const*  T = (u64 const*) Lane->BaseTime->Data + Lane->ChunkBase;  \
+    u64 Count = Lane->ChunkCount
+ 
+#define FLV_DIFF_KERNEL(Name, Type, Field, Hole)                          \
+    INTERNAL                                                              \
+    FLV_KERNEL_FUNC_SIG(FLVKernel##Name)                                  \
+    {                                                                     \
+        FLV_WINDOW_HEAD(Type);                                            \
+        Type* Dst = (Type*) FLVTempPtr(Lane, Op.Dst);                     \
+                                                                          \
+        if (!Count)                                                       \
+            return;                                                       \
+                                                                          \
+        Dst[0] = W->HasPrev ? A[0] - W->Prev.Field : Hole;                \
+                                                                          \
+        for (u64 Index = 1; Index < Count; ++Index)                       \
+            Dst[Index] = A[Index] - A[Index - 1];                         \
+                                                                          \
+        W->Prev.Field = A[Count - 1];                                     \
+        W->HasPrev = TRUE;                                                \
+    }
+ 
+FLV_DIFF_KERNEL(DIFF_I64, i64, I64, FLV_I64_HOLE)
+FLV_DIFF_KERNEL(DIFF_F64, f64, F64, NC_NAN)
+ 
+#undef FLV_DIFF_KERNEL
+ 
+#define FLV_RATE_KERNEL(Name, Type, Field)                                \
+    INTERNAL                                                              \
+    FLV_KERNEL_FUNC_SIG(FLVKernel##Name)                                  \
+    {                                                                     \
+        FLV_WINDOW_HEAD(Type);                                            \
+        f64* Dst = (f64*) FLVTempPtr(Lane, Op.Dst);                       \
+                                                                          \
+        if (!Count)                                                       \
+            return;                                                       \
+                                                                          \
+        Dst[0] = W->HasPrev                                               \
+            ? (f64) (A[0] - W->Prev.Field) * 1000000.0 /                  \
+              (f64) (T[0] - W->PrevTimeUSecs)                             \
+            : NC_NAN;                                                     \
+                                                                          \
+        for (u64 Index = 1; Index < Count; ++Index) {                     \
+            Dst[Index] = (f64) (A[Index] - A[Index - 1]) * 1000000.0 /    \
+                (f64) (T[Index] - T[Index - 1]);                          \
+        }                                                                 \
+                                                                          \
+        W->Prev.Field = A[Count - 1];                                     \
+        W->PrevTimeUSecs = T[Count - 1];                                  \
+        W->HasPrev = TRUE;                                                \
+    }
+ 
+FLV_RATE_KERNEL(RATE_I64, i64, I64)
+FLV_RATE_KERNEL(RATE_F64, f64, F64)
+ 
+#undef FLV_RATE_KERNEL
+ 
+#define FLV_EVICT_FRONT(Body)                                                \
+    while (W->Count && W->Times[FLV_RING(W, W->Head)] + Width <= T[Index]) { \
+        Body;                                                                \
+        ++W->Head;                                                           \
+        --W->Count;                                                          \
+    }
+ 
+#define FLV_ROLLING_MEAN_KERNEL(Name, Type, Field)                          \
+    INTERNAL                                                                \
+    FLV_KERNEL_FUNC_SIG(FLVKernel##Name)                                    \
+    {                                                                       \
+        FLV_WINDOW_HEAD(Type);                                              \
+        Type* Dst = (Type*) FLVTempPtr(Lane, Op.Dst);                       \
+        u64 Width = FLVScalarTimeUSecs(Lane, Op.RHS);                       \
+                                                                            \
+        for (u64 Index = 0; Index < Count; ++Index) {                       \
+            FLV_EVICT_FRONT(                                                \
+                W->Summation.Field -= W->Values[FLV_RING(W, W->Head)].Field \
+            );                                                              \
+                                                                            \
+            u64 Back = FLV_RING(W, W->Head + W->Count);                     \
+                                                                            \
+            W->Times[Back] = T[Index];                                      \
+            W->Values[Back].Field = A[Index];                               \
+            W->Summation.Field += A[Index];                                 \
+            ++W->Count;                                                     \
+            Dst[Index] = W->Summation.Field / (Type) W->Count;              \
+        }                                                                   \
+    }
+ 
+#define FLV_ROLLING_EXTREME_KERNEL(Name, Type, Field, PopSym)             \
+    INTERNAL                                                              \
+    FLV_KERNEL_FUNC_SIG(FLVKernel##Name)                                  \
+    {                                                                     \
+        FLV_WINDOW_HEAD(Type);                                            \
+        Type* Dst = (Type*) FLVTempPtr(Lane, Op.Dst);                     \
+        u64 Width = FLVScalarTimeUSecs(Lane, Op.RHS);                     \
+                                                                          \
+        for (u64 Index = 0; Index < Count; ++Index) {                     \
+            FLV_EVICT_FRONT({});                                          \
+                                                                          \
+            while (                                                       \
+                W->Count &&                                               \
+                W->Values[FLV_RING(W, W->Head + W->Count - 1)].Field      \
+                    PopSym A[Index]                                       \
+            ) {                                                           \
+                --W->Count;                                               \
+            }                                                             \
+                                                                          \
+            u64 Back = FLV_RING(W, W->Head + W->Count);                   \
+                                                                          \
+            W->Times[Back] = T[Index];                                    \
+            W->Values[Back].Field = A[Index];                             \
+            ++W->Count;                                                   \
+            Dst[Index] = W->Values[FLV_RING(W, W->Head)].Field;           \
+        }                                                                 \
+    }
+ 
+FLV_ROLLING_MEAN_KERNEL(ROLLING_MEAN_I64, i64, I64)
+FLV_ROLLING_MEAN_KERNEL(ROLLING_MEAN_F64, f64, F64)
+FLV_ROLLING_EXTREME_KERNEL(ROLLING_MIN_I64, i64, I64, >=)
+FLV_ROLLING_EXTREME_KERNEL(ROLLING_MIN_F64, f64, F64, >=)
+FLV_ROLLING_EXTREME_KERNEL(ROLLING_MAX_I64, i64, I64, <=)
+FLV_ROLLING_EXTREME_KERNEL(ROLLING_MAX_F64, f64, F64, <=)
+ 
+#undef FLV_ROLLING_EXTREME_KERNEL
+#undef FLV_ROLLING_MEAN_KERNEL
+#undef FLV_EVICT_FRONT
+#undef FLV_WINDOW_HEAD
+#undef FLV_RING
+ 
+#define FLV_S_HEAD                                                              \
+    if (FLVTempIsMissing(Lane, Op.LHS) || FLVTempIsMissing(Lane, Op.RHS)) {     \
+        FLVTempSetMissing(Lane, Op.Dst);                                        \
+                                                                                \
+        return;                                                                 \
+    }
+ 
+#define FLV_S_BINARY(Name, Type, DstType, ScalarFunc, Expr)   \
+    INTERNAL                                                  \
+    FLV_KERNEL_FUNC_SIG(FLVKernel##Name)                      \
+    {                                                         \
+        FLV_S_HEAD                                            \
+                                                              \
+        Type A = ScalarFunc(Lane, Op.LHS);                    \
+        Type B = ScalarFunc(Lane, Op.RHS);                    \
+        DstType* Dst = (DstType*) FLVTempPtr(Lane, Op.Dst);   \
+                                                              \
+        *Dst = (Expr);                                        \
+    }
+ 
+#define FLV_S_UNARY(Name, Type, DstType, ScalarFunc, Expr)    \
+    INTERNAL                                                  \
+    FLV_KERNEL_FUNC_SIG(FLVKernel##Name)                      \
+    {                                                         \
+        FLV_S_HEAD                                            \
+                                                              \
+        Type A = ScalarFunc(Lane, Op.LHS);                    \
+        DstType* Dst = (DstType*) FLVTempPtr(Lane, Op.Dst);   \
+                                                              \
+        *Dst = (Expr);                                        \
+    }
+ 
+#define FLV_S_DIVIDE(Name, Expr)                              \
+    INTERNAL                                                  \
+    FLV_KERNEL_FUNC_SIG(FLVKernel##Name)                      \
+    {                                                         \
+        FLV_S_HEAD                                            \
+                                                              \
+        i64 A = FLVScalarI64(Lane, Op.LHS);                   \
+        i64 B = FLVScalarI64(Lane, Op.RHS);                   \
+        i64* Dst = (i64*) FLVTempPtr(Lane, Op.Dst);           \
+                                                              \
+        if (!B) {                                             \
+            FLVTempSetMissing(Lane, Op.Dst);                  \
+                                                              \
+            return;                                           \
+        }                                                     \
+                                                              \
+        *Dst = (Expr);                                        \
+    }
+ 
+FLV_S_BINARY(S_ADD_I64, i64, i64, FLVScalarI64, A + B)
+FLV_S_BINARY(S_ADD_F64, f64, f64, FLVScalarF64, A + B)
+FLV_S_BINARY(S_SUB_I64, i64, i64, FLVScalarI64, A - B)
+FLV_S_BINARY(S_SUB_F64, f64, f64, FLVScalarF64, A - B)
+FLV_S_BINARY(S_MUL_I64, i64, i64, FLVScalarI64, A * B)
+FLV_S_BINARY(S_MUL_F64, f64, f64, FLVScalarF64, A * B)
+FLV_S_DIVIDE(S_DIV_I64, A / B)
+FLV_S_BINARY(S_DIV_F64, f64, f64, FLVScalarF64, A / B)
+FLV_S_DIVIDE(S_MOD_I64, A % B)
+FLV_S_BINARY(S_MOD_F64, f64, f64, FLVScalarF64, FMod(A, B))
+FLV_S_UNARY(S_NEG_I64, i64, i64, FLVScalarI64, -A)
+FLV_S_UNARY(S_NEG_F64, f64, f64, FLVScalarF64, -A)
+FLV_S_UNARY(S_ABS_I64, i64, i64, FLVScalarI64, (A < 0) ? -A : A)
+FLV_S_UNARY(S_ABS_F64, f64, f64, FLVScalarF64, (A < 0.0) ? -A : A)
+FLV_S_BINARY(S_CMP_LT_I64, i64, i64, FLVScalarI64, A < B)
+FLV_S_BINARY(S_CMP_LT_F64, f64, i64, FLVScalarF64, A < B)
+FLV_S_BINARY(S_CMP_LE_I64, i64, i64, FLVScalarI64, A <= B)
+FLV_S_BINARY(S_CMP_LE_F64, f64, i64, FLVScalarF64, A <= B)
+FLV_S_BINARY(S_CMP_GT_I64, i64, i64, FLVScalarI64, A > B)
+FLV_S_BINARY(S_CMP_GT_F64, f64, i64, FLVScalarF64, A > B)
+FLV_S_BINARY(S_CMP_GE_I64, i64, i64, FLVScalarI64, A >= B)
+FLV_S_BINARY(S_CMP_GE_F64, f64, i64, FLVScalarF64, A >= B)
+FLV_S_BINARY(S_CMP_EQ_I64, i64, i64, FLVScalarI64, A == B)
+FLV_S_BINARY(S_CMP_EQ_F64, f64, i64, FLVScalarF64, A == B)
+FLV_S_BINARY(S_CMP_NE_I64, i64, i64, FLVScalarI64, A != B)
+FLV_S_BINARY(S_CMP_NE_F64, f64, i64, FLVScalarF64, A != B)
+FLV_S_BINARY(S_AND, i64, i64, FLVScalarI64, (A != 0) && (B != 0))
+FLV_S_BINARY(S_OR,  i64, i64, FLVScalarI64, (A != 0) || (B != 0))
+FLV_S_UNARY(S_NOT, i64, i64, FLVScalarI64, A == 0)
+FLV_S_UNARY(S_CONVERT_I64_F64, i64, f64, FLVScalarI64, (f64) A)
+ 
+#undef FLV_S_DIVIDE
+#undef FLV_S_UNARY
+#undef FLV_S_BINARY
+#undef FLV_S_HEAD
+ 
+INTERNAL
+FLV_KERNEL_FUNC_SIG(FLVKernelSelDuration)
+{
+    if (FLVTempIsMissing(Lane, Op.LHS)) {
+        FLVTempSetMissing(Lane, Op.Dst);
+ 
+        return;
+    }
+ 
+    FLVSelection const* Sel = FLVSelectionPtr(Lane, Op.LHS);
+    i64* Dst = (i64*) FLVTempPtr(Lane, Op.Dst);
+    u64 Total = 0;
+ 
+    for (u64 Index = 0; Index < Sel->Count; ++Index)
+        Total += Sel->V[Index].EndUSecs - Sel->V[Index].StartUSecs;
+ 
+    *Dst = (i64) Total;
 }
 
 #define FLV_CMP_KERNEL_T(Name, Type, OpSym)                                      \
@@ -737,6 +1243,31 @@ FLVKernelInit(void)
 
     FLV_KERNEL_TABLE[FLV_KERNEL_LOAD_I64] = FLVKernelLoadI64;
     FLV_KERNEL_TABLE[FLV_KERNEL_LOAD_F64] = FLVKernelLoadF64;
+    FLV_KERNEL_TABLE[FLV_KERNEL_LOAD_INSTANCE] = FLVKernelLoadInstance;
+    FLV_KERNEL_TABLE[FLV_KERNEL_CONVERT_I64_F64] = FLVKernelConvertI64F64;
+    FLV_KERNEL_TABLE[FLV_KERNEL_NEG_I64] = FLVKernelNEG_I64;
+    FLV_KERNEL_TABLE[FLV_KERNEL_NEG_F64] = FLVKernelNEG_F64;
+    FLV_KERNEL_TABLE[FLV_KERNEL_ABS_I64] = FLVKernelABS_I64;
+    FLV_KERNEL_TABLE[FLV_KERNEL_ABS_F64] = FLVKernelABS_F64;
+
+#define X2(Name)                                                             \
+    FLV_KERNEL_TABLE[FLV_KERNEL_##Name##_I64_T] = FLVKernel##Name##_I64_T;   \
+    FLV_KERNEL_TABLE[FLV_KERNEL_##Name##_I64_S] = FLVKernel##Name##_I64_S;   \
+    FLV_KERNEL_TABLE[FLV_KERNEL_##Name##_F64_T] = FLVKernel##Name##_F64_T;   \
+    FLV_KERNEL_TABLE[FLV_KERNEL_##Name##_F64_S] = FLVKernel##Name##_F64_S;
+#define X3(Name)                                                             \
+    X2(Name)                                                                 \
+    FLV_KERNEL_TABLE[FLV_KERNEL_##Name##_I64_RS] = FLVKernel##Name##_I64_RS; \
+    FLV_KERNEL_TABLE[FLV_KERNEL_##Name##_F64_RS] = FLVKernel##Name##_F64_RS;
+
+    X2(ADD)
+    X3(SUB)
+    X2(MUL)
+    X3(DIV)
+    X3(MOD)
+
+#undef X3
+#undef X2
 
 #define X(Cmp)                                                           \
     FLV_KERNEL_TABLE[FLV_KERNEL_##Cmp##_I64_T] = FLVKernel##Cmp##_I64_T; \
@@ -767,6 +1298,72 @@ FLVKernelInit(void)
     FLV_KERNEL_TABLE[FLV_KERNEL_EMIT_CURVE] = FLVKernelEmitCurve;
     FLV_KERNEL_TABLE[FLV_KERNEL_EMIT_FLAG] = FLVKernelEmitFlag;
     FLV_KERNEL_TABLE[FLV_KERNEL_EMIT_MISSING] = FLVKernelEmitMissing;
+    FLV_KERNEL_TABLE[FLV_KERNEL_SEL_DURATION] = FLVKernelSelDuration;
+ 
+#define X(Name) FLV_KERNEL_TABLE[FLV_KERNEL_##Name] = FLVKernel##Name;
+ 
+    X(MEAN_I64)
+    X(MEAN_F64)
+    X(STDDEV_I64)
+    X(STDDEV_F64)
+    X(MIN_I64)
+    X(MIN_F64)
+    X(MAX_I64)
+    X(MAX_F64)
+    X(SUM_I64)
+    X(SUM_F64)
+    X(FIRST_I64)
+    X(FIRST_F64)
+    X(LAST_I64)
+    X(LAST_F64)
+    X(REDUCE_COUNT)
+    X(S_ADD_I64)
+    X(S_ADD_F64)
+    X(S_SUB_I64)
+    X(S_SUB_F64)
+    X(S_MUL_I64)
+    X(S_MUL_F64)
+    X(S_DIV_I64)
+    X(S_DIV_F64)
+    X(S_MOD_I64)
+    X(S_MOD_F64)
+    X(S_NEG_I64)
+    X(S_NEG_F64)
+    X(S_ABS_I64)
+    X(S_ABS_F64)
+    X(S_CMP_LT_I64)
+    X(S_CMP_LT_F64)
+    X(S_CMP_LE_I64)
+    X(S_CMP_LE_F64)
+    X(S_CMP_GT_I64)
+    X(S_CMP_GT_F64)
+    X(S_CMP_GE_I64)
+    X(S_CMP_GE_F64)
+    X(S_CMP_EQ_I64)
+    X(S_CMP_EQ_F64)
+    X(S_CMP_NE_I64)
+    X(S_CMP_NE_F64)
+    X(S_AND)
+    X(S_OR)
+    X(S_NOT)
+    X(S_CONVERT_I64_F64)
+ 
+#undef X
+
+#define X(Name) FLV_KERNEL_TABLE[FLV_KERNEL_##Name] = FLVKernel##Name;
+ 
+    X(DIFF_I64)
+    X(DIFF_F64)
+    X(RATE_I64)
+    X(RATE_F64)
+    X(ROLLING_MEAN_I64) 
+    X(ROLLING_MEAN_F64)
+    X(ROLLING_MIN_I64)
+    X(ROLLING_MIN_F64)
+    X(ROLLING_MAX_I64)
+    X(ROLLING_MAX_F64)
+ 
+#undef X
 }
 
 INTERNAL u64
@@ -827,10 +1424,21 @@ FLVLaneInit(
     Lane->MemPool = MemPool;
     Lane->ResultMemPool = ResultMemPool;
     Lane->Columns = ArenaPushArrayZero(MemPool, FLVColumn, SlotsCount);
+    Lane->InstanceColumns = ArenaPushArrayZero(MemPool, FLVColumn, SlotsCount);
     Lane->Temps = ArenaPushArrayZero(MemPool, void*, Program->TempCount);
     Lane->SelectionBuilds = ArenaPushArrayZero(
         MemPool,
         FLVSelectionBuild,
+        Program->TempCount
+    );
+    Lane->Reductions = ArenaPushArrayZero(
+        MemPool,
+        FLVReduction,
+        Program->TempCount
+    );
+    Lane->Windows = ArenaPushArrayZero(
+        MemPool,
+        FLVWindow,
         Program->TempCount
     );
     Lane->Items = ArenaPushArrayZero(
@@ -848,18 +1456,36 @@ FLVLaneInit(
     for (u32 Index = 0; Index < SlotsCount; ++Index) {
         FLVBoundSlot const* Slot = &Slots[Index];
         FLVColumn* Column = &Lane->Columns[Index];
-
-        if (Slot->IsMissing || Slot->Column == FLV_COLUMN_NONE)
+        FLVColumn* Instance = &Lane->InstanceColumns[Index];
+ 
+        if (Slot->IsMissing)
             continue;
-
-        Column->Data = FLIColumnRawDataFromIndex(
-            FLI,
-            Slot->Column,
-            &Column->Count
-        );
+ 
+        if (Slot->InstanceColumn != FLV_COLUMN_NONE) {
+            FLIColumn* Record = FLIElementFromNameIndex(
+                FLI,
+                Columns,
+                COLUMNS,
+                Slot->InstanceColumn
+            );
+ 
+            Instance->Data = FLIColumnRawDataFromIndex(
+                FLI,
+                Slot->InstanceColumn,
+                &Instance->Count
+            );
+            Instance->Kind = Record->Kind;
+            Instance->ElementSize = (u8) FLI_SCALAR_KIND_SIZE_TABLE[Record->Kind];
+        }
+ 
+        if (Slot->Column == FLV_COLUMN_NONE)
+            continue;
+ 
+        Column->Data = FLIColumnRawDataFromIndex(FLI, Slot->Column, &Column->Count);
         Column->Kind = Slot->Kind;
         Column->ElementSize = (u8) FLI_SCALAR_KIND_SIZE_TABLE[Slot->Kind];
     }
+ 
 
     for (u32 Index = 0; Index < Program->TempCount; ++Index) {
         u64 Size = FLVTempSize(Program->TempKind[Index]);
@@ -1026,6 +1652,178 @@ FLVRegionSelectionBuildsEnd(FLVLane* Lane, FLVRegion const* Region)
     }
 }
 
+INTERNAL b32
+FLVIsReduction(FLVOp Op)
+{
+    b32 Result = (
+        (FLV_KERNEL_INFO_TABLE[Op.Kernel].Flags & FLV_KERNEL_FLAG_REDUCTION) &&
+        Op.Kernel != FLV_KERNEL_SEL_FROM_MASK
+    );
+ 
+    return Result;
+}
+ 
+INTERNAL void
+FLVRegionReductionsBegin(FLVLane* Lane, FLVRegion const* Region)
+{
+    for (u32 Index = 0; Index < Region->OpCount; ++Index) {
+        FLVOp Op = Lane->Program->Ops[Region->HeadOp + Index];
+ 
+        if (FLVIsReduction(Op)) {
+            MemZero(
+                &Lane->Reductions[FLVGetOperandIndex(Op.Dst)], 
+                sizeof(FLVReduction)
+            );
+        }
+    }
+}
+ 
+INTERNAL void
+FLVRegionReductionsEnd(FLVLane* Lane, FLVRegion const* Region)
+{
+    for (u32 Index = 0; Index < Region->OpCount; ++Index) {
+        FLVOp Op = Lane->Program->Ops[Region->HeadOp + Index];
+ 
+        if (!FLVIsReduction(Op) || FLVTempIsMissing(Lane, Op.Dst))
+            continue;
+ 
+        FLVReduction const* R = &Lane->Reductions[FLVGetOperandIndex(Op.Dst)];
+        FLVNumber* Dst = (FLVNumber*) FLVTempPtr(Lane, Op.Dst);
+ 
+        if (!R->Count) {
+            FLVTempSetMissing(Lane, Op.Dst);
+            continue;
+        }
+ 
+        switch (Op.Kernel) {
+            default: {
+                ASSERT(FALSE);
+            } break;
+ 
+            case FLV_KERNEL_MEAN_I64:
+            case FLV_KERNEL_MEAN_F64: {
+                Dst->F64 = R->Summation.F64 / (f64) R->Count;
+            } break;
+ 
+            case FLV_KERNEL_STDDEV_I64:
+            case FLV_KERNEL_STDDEV_F64: {
+                f64 M = R->Summation.F64 / (f64) R->Count;
+                f64 Var = R->SummationSquared / (f64) R->Count - M * M;
+ 
+                Dst->F64 = (Var > 0.0) ? SqrtF64(Var) : 0.0;
+            } break;
+ 
+            case FLV_KERNEL_MIN_I64:
+            case FLV_KERNEL_MIN_F64: {
+                *Dst = R->Minimum;
+            } break;
+ 
+            case FLV_KERNEL_MAX_I64:
+            case FLV_KERNEL_MAX_F64: {
+                *Dst = R->Maximum;
+            } break;
+ 
+            case FLV_KERNEL_SUM_I64:
+            case FLV_KERNEL_SUM_F64: {
+                *Dst = R->Summation;
+            } break;
+ 
+            case FLV_KERNEL_FIRST_I64:
+            case FLV_KERNEL_FIRST_F64: {
+                *Dst = R->Head;
+            } break;
+ 
+            case FLV_KERNEL_LAST_I64:
+            case FLV_KERNEL_LAST_F64: {
+                *Dst = R->Tail;
+            } break;
+ 
+            case FLV_KERNEL_REDUCE_COUNT: {
+                Dst->I64 = (i64) R->Count;
+            } break;
+        }
+    }
+}
+
+INTERNAL b32
+FLVIsRolling(FLVOp Op)
+{
+    b32 Result = (
+        Op.Kernel >= FLV_KERNEL_ROLLING_MEAN_I64 &&
+        Op.Kernel <= FLV_KERNEL_ROLLING_MAX_F64
+    );
+ 
+    return Result;
+}
+ 
+INTERNAL u64
+FLVWindowBound(FLVLane* Lane, u64 Width)
+{
+    u64 const* T = (u64 const*) Lane->BaseTime->Data;
+    u64 Result = 1;
+ 
+    for (u64 RangeIndex = 0; RangeIndex < Lane->RangesCount; ++RangeIndex) {
+        FLVIndexRange Range = Lane->Ranges[RangeIndex];
+        u64 Front = Range.Head;
+ 
+        for (u64 Index = Range.Head; Index < Range.Tail; ++Index) {
+            while (T[Front] + Width <= T[Index])
+                ++Front;
+ 
+            Result = MAX(Result, Index - Front + 1);
+        }
+    }
+ 
+    return Result;
+}
+ 
+INTERNAL u64
+FLVRoundUpPow2(u64 Value)
+{
+    u64 Result = 1;
+ 
+    while (Result < Value)
+        Result <<= 1;
+ 
+    return Result;
+}
+ 
+INTERNAL void
+FLVRegionWindowsBegin(FLVLane* Lane, FLVRegion const* Region)
+{
+    for (u32 Index = 0; Index < Region->OpCount; ++Index) {
+        FLVOp Op = Lane->Program->Ops[Region->HeadOp + Index];
+ 
+        if (!FLVIsRolling(Op))
+            continue;
+ 
+        FLVWindow* W = &Lane->Windows[FLVGetOperandIndex(Op.Dst)];
+        u64 Width = FLVScalarTimeUSecs(Lane, Op.RHS);
+ 
+        W->Capacity = FLVRoundUpPow2(FLVWindowBound(Lane, Width));
+        W->Times = ArenaPushArray(Lane->MemPool, u64, W->Capacity);
+        W->Values = ArenaPushArray(Lane->MemPool, FLVNumber, W->Capacity);
+    }
+}
+ 
+INTERNAL void
+FLVRangeWindowsReset(FLVLane* Lane, FLVRegion const* Region)
+{
+    for (u32 Index = 0; Index < Region->OpCount; ++Index) {
+        FLVOp Op = Lane->Program->Ops[Region->HeadOp + Index];
+ 
+        if (!(FLV_KERNEL_INFO_TABLE[Op.Kernel].Flags & FLV_KERNEL_FLAG_WINDOW))
+            continue;
+ 
+        FLVWindow* W = &Lane->Windows[FLVGetOperandIndex(Op.Dst)];
+ 
+        W->Head = 0;
+        W->Count = 0;
+        W->Summation.I64 = 0;
+        W->HasPrev = FALSE;
+    }
+}
+
 INTERNAL void
 FLVRegionMarkMissing(FLVLane* Lane, FLVRegion const* Region)
 {
@@ -1058,12 +1856,14 @@ FLVRegionRun(FLVLane* Lane, FLVRegion const* Region)
 
     FLVRegionRanges(Lane, Region);
     FLVRegionSelectionBuildsBegin(Lane, Region);
-   FLVRegionEmitsBegin(Lane, Region);
+    FLVRegionReductionsBegin(Lane, Region);
+    FLVRegionWindowsBegin(Lane, Region);
+    FLVRegionEmitsBegin(Lane, Region);
 
     for (u64 RangeIndex = 0; RangeIndex < Lane->RangesCount; ++RangeIndex) {
         FLVIndexRange Range = Lane->Ranges[RangeIndex];
 
-        // TODO(nc): 8e: reset window kernel state here, once per range
+        FLVRangeWindowsReset(Lane, Region);
 
         for (
             u64 Base = Range.Head;
@@ -1091,6 +1891,7 @@ FLVRegionRun(FLVLane* Lane, FLVRegion const* Region)
     }
 
     FLVRegionSelectionBuildsEnd(Lane, Region);
+    FLVRegionReductionsEnd(Lane, Region);
     Lane->Region = NULL;
     Lane->BaseTime = NULL;
     Lane->Mask = NULL;
@@ -1118,33 +1919,42 @@ void
 FLVLaneRun(FLVLane* Lane)
 {
     FLVProgram const* Program = Lane->Program;
-
+    u32 Index = 0;
+ 
     Lane->MissingTemps = 0;
-
-    for (u32 Index = 0; Index < Program->RegionCount; ) {
+ 
+    while (Index < Program->RegionCount) {
         FLVRegion const* Region = &Program->Regions[Index];
-
+ 
         switch (Region->Kind) {
             default: {
                 ASSERT(FALSE);
                 ++Index;
             } break;
-
+ 
             case FLV_REGION_KIND_RUN: {
                 FLVRegionRun(Lane, Region);
                 ++Index;
             } break;
-
+ 
             case FLV_REGION_KIND_SCALAR: {
                 FLVRegionScalar(Lane, Region);
                 ++Index;
             } break;
-
-            // TODO(nc): 8d
-            case FLV_REGION_KIND_JUMP_IF_FALSE:
+ 
+            case FLV_REGION_KIND_JUMP_IF_FALSE: {
+                b32 IsFalse = (
+                    FLVTempIsMissing(Lane, Region->Operand) ||
+                    FLVScalarI64(Lane, Region->Operand) == 0
+                );
+ 
+                Index = IsFalse 
+                    ? Region->Target 
+                    : Index + 1;
+            } break;
+ 
             case FLV_REGION_KIND_JUMP: {
-                LogError("jump regions are not implemented yet");
-                ++Index;
+                Index = Region->Target;
             } break;
         }
     }

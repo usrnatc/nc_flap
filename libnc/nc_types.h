@@ -206,9 +206,15 @@ union u512 {
 #define BYTE_SIZE       8
 #define WIDE_BYTE_SIZE 16
 
-#define NC_NAN     (0.0 / 0.0)
-#define NC_INF     (1.0 / 0.0)
-#define NC_NEG_INF (-1.0 / 0.0)
+#if defined(NC_CC_GNU) || defined(NC_CC_CLANG)
+    #define NC_NAN     (0.0 / 0.0)
+    #define NC_INF     (1.0 / 0.0)
+    #define NC_NEG_INF (-1.0 / 0.0)
+#else
+    #define NC_NAN      ((f32) NC_INF * 0.0)
+    #define NC_INF      ((f32) 1E300 * 1E300)
+    #define NC_NEG_INF  (-(f32) 1E300 * 1E300)
+#endif
 
 #define NC_PI32 3.14159265359f
 

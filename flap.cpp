@@ -100,17 +100,40 @@ FLVTest(
 ) {
     NamePool* Names = NamePoolInit();
 
-    SymTabInit(Names);
-    BuiltinTypesInit();
-    TypeTableInit(Names);
-    LexerInternKeywords(Names);
-    ParserInternNames(Names);
-    FLVStdLibInit();
-    FLVKernelInit();
+    PROFILE(SymTabInitTimer) {
+        SymTabInit(Names);
+    }
+
+    PROFILE(BuiltinTypesInitTimer) {
+        BuiltinTypesInit();
+    }
+
+    PROFILE(TypeTableInitTimer) {
+        TypeTableInit(Names);
+    }
+
+    PROFILE(LexerInternKeywordsTimer) {
+        LexerInternKeywords(Names);
+    }
+
+    PROFILE(ParserInternNamesTimer) {
+        ParserInternNames(Names);
+    }
+
+    PROFILE(FLVStdLibInitTimer) {
+        FLVStdLibInit();
+    }
+
+    PROFILE(FLVKernelInitTimer) {
+        FLVKernelInit();
+    }
 
     FLVSchema Schema = {};
 
-    FLVSchemaBuild(MemPool, Flights, FlightsCount, &Schema);
+    PROFILE(FLVSchemaBuildTimer) {
+        FLVSchemaBuild(MemPool, Flights, FlightsCount, &Schema);
+    }
+
     PrintOut(
         "\nschema: %u messages, %u fields, %u flights\n",
         Schema.MessageCount,
@@ -135,26 +158,43 @@ FLVTest(
 
         Root.Path = Path;
         Root.Source = Source;
-        Root.Tokens = LexString(ViewMemPool, Source, Names);
-        Root.LineOffsets = LineOffsetsFromSource(
-            ViewMemPool, 
-            Source, 
-            &Root.LineCount
-        );
 
-        AST* Tree = ParseTokens(ViewMemPool, &Root, NULL, 0);
+        PROFILE(LexStringTimer) {
+            Root.Tokens = LexString(ViewMemPool, Source, Names);
+        }
+
+        PROFILE(LineOffsetsFromSourceTimer) {
+            Root.LineOffsets = LineOffsetsFromSource(
+                ViewMemPool, 
+                Source, 
+                &Root.LineCount
+            );
+        }
+
+        AST* Tree = NULL;
+
+        PROFILE(ParseTokensTimer) {
+            Tree = ParseTokens(ViewMemPool, &Root, NULL, 0);
+        }
+
         FLVSlot* Slots = NULL;
         u32 SlotsCount = 0;
 
-        CheckAST(ViewMemPool, Tree, &Schema, &Slots, &SlotsCount);
+        PROFILE(CheckASTTimer) {
+            CheckAST(ViewMemPool, Tree, &Schema, &Slots, &SlotsCount);
+        }
 
-        FLVLowered Lowered = FLVLower(
-            ViewMemPool,
-            Tree,
-            &Schema,
-            Slots,
-            SlotsCount
-        );
+        FLVLowered Lowered = {};
+
+        PROFILE(FLVLowerTimer) {
+            Lowered = FLVLower(
+                ViewMemPool,
+                Tree,
+                &Schema,
+                Slots,
+                SlotsCount
+            );
+        }
 
         PrintOut(
             "%u slots, %u analyses, %u layout nodes, errors: %s\n",
@@ -177,29 +217,40 @@ FLVTest(
         }
 
         if (FlightsCount) {
-            FLVBoundSlot* Bound = FLVBindSlots(
-                ViewMemPool, 
-                Flights[0], 
-                Slots, 
-                SlotsCount
-            );
+            FLVBoundSlot* Bound = NULL;
+
+            PROFILE(FLVBindSlotsTimer) {
+                Bound = FLVBindSlots(
+                    ViewMemPool, 
+                    Flights[0], 
+                    Slots, 
+                    SlotsCount
+                );
+            }
+
             Arena* LaneMemPool = ArenaAlloc();
             Arena* ResultMemPool = ArenaAlloc();
 
             for (u32 Program = 0; Program < Lowered.ProgramCount; ++Program) {
                 FLVLane Lane = {};
 
-                FLVLaneInit(
-                    &Lane, 
-                    LaneMemPool, 
-                    ResultMemPool, 
-                    &Lowered.Program[Program], 
-                    Flights[0], 
-                    Bound, 
-                    SlotsCount, 
-                    0
-                );
-                FLVLaneRun(&Lane);
+                PROFILE(FLVLaneInitTimer) {
+                    FLVLaneInit(
+                        &Lane, 
+                        LaneMemPool, 
+                        ResultMemPool, 
+                        &Lowered.Program[Program], 
+                        Flights[0], 
+                        Bound, 
+                        SlotsCount, 
+                        0
+                    );
+                }
+
+                PROFILE(FLVLaneRunTimer) {
+                    FLVLaneRun(&Lane);
+                }
+
                 PrintOut("analysis %u on flight 0:\n", Program);
 
                 Str8List Lines = FLVRenderItemsPrint(ViewMemPool, &Lane);
@@ -217,7 +268,9 @@ FLVTest(
         ArenaRelease(ViewMemPool);
     }
 
-    SymTabReset();
+    PROFILE(SymTabResetTimer) {
+        SymTabReset();
+    }
 }
 
 void 
@@ -263,15 +316,15 @@ EntryPoint(CommandLine* CLI)
     }
 
     local char* FLIPaths[] = {
-        "H:\\rfdesign\\nc_flap\\tools\\logs\\00000010.BIN",
-        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000034.BIN",
-        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000038.BIN",
-        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000047.BIN",
-        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000048.BIN",
-        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000050.fli",
-        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000058.BIN",
-        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000061.BIN",
-        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000064.BIN"
+        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000010.BIN",
+        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000034.BIN",
+        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000038.BIN",
+        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000047.BIN",
+        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000048.BIN",
+        "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000050.BIN",
+        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000058.BIN",
+        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000061.BIN",
+        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000064.BIN"
     };
     FLIKey Keys[ARRAY_COUNT(FLIPaths)] = {};
 
@@ -322,11 +375,12 @@ EntryPoint(CommandLine* CLI)
             }
 
             local char const* ViewPaths[] = {
-                "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\power.flv",
-                "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\vibration.flv",
-                "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\ekf.flv",
-                "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\tuning.flv",
-                "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\overview.flv"
+                "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\flv_examples\\power.flv",
+                "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\flv_examples\\vibration.flv",
+                "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\flv_examples\\ekf.flv",
+                "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\flv_examples\\tuning.flv",
+                "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\flv_examples\\overview.flv",
+                "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\flv_examples\\tester.flv"
             };
 
             FLVTest(
