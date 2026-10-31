@@ -126,10 +126,6 @@ FLVTest(
         FLVStdLibInit();
     }
 
-    PROFILE(FLVKernelInitTimer) {
-        FLVKernelInit();
-    }
-
     FLVSchema Schema = {};
 
     PROFILE(FLVSchemaBuildTimer) {
@@ -318,15 +314,15 @@ EntryPoint(CommandLine* CLI)
     }
 
     local char* FLIPaths[] = {
-        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000010.BIN",
-        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000034.BIN",
-        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000038.BIN",
-        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000047.BIN",
-        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000048.BIN",
-        "H:\\rfdesign\\nc_flap\\tools\\logs\\00000050.BIN",
-        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000058.BIN",
-        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000061.BIN",
-        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000064.BIN"
+        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000010.BIN",
+        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000034.BIN",
+        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000038.BIN",
+        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000047.BIN",
+        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000048.BIN",
+        "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000050.BIN",
+        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000058.BIN",
+        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000061.BIN",
+        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000064.BIN"
     };
     FLIKey Keys[ARRAY_COUNT(FLIPaths)] = {};
 
@@ -377,12 +373,12 @@ EntryPoint(CommandLine* CLI)
             }
 
             local char const* ViewPaths[] = {
-                "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\power.flv",
-                "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\vibration.flv",
-                "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\ekf.flv",
-                "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\tuning.flv",
-                "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\overview.flv",
-                "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\tester.flv"
+                "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\flv_examples\\power.flv",
+                "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\flv_examples\\vibration.flv",
+                "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\flv_examples\\ekf.flv",
+                "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\flv_examples\\tuning.flv",
+                "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\flv_examples\\overview.flv",
+                "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\flv_examples\\tester.flv"
             };
 
             FLVTest(

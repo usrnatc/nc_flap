@@ -266,6 +266,7 @@ typedef FLV_KERNEL_FUNC_SIG(FLVKernelFuncType);
 // @runtime____________________________________________________________________
 extern FLVKernelInfo const FLV_KERNEL_INFO_TABLE[FLV_KERNEL_COUNT];
 extern Str8 const FLV_KERNEL_NAME_TABLE[FLV_KERNEL_COUNT];
+extern u64 const FLV_ELEMENT_KIND_SIZE_TABLE[FLV_ELEMENT_KIND_COUNT];
 extern FLVKernelFuncType* const FLV_KERNEL_TABLE[FLV_KERNEL_COUNT];
 
 // @functions__________________________________________________________________

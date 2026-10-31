@@ -11,36 +11,6 @@
 #include "flv_kernel.h"
 #include "flv_bind.h"
 
-INTERNAL u64
-FLVTempSize(u8 Kind)
-{
-    u64 Result = 0;
-
-    switch (Kind) {
-        default: {} break;
-
-        case FLV_ELEMENT_KIND_I64:
-        case FLV_ELEMENT_KIND_F64: {
-            Result = FLV_CHUNK_SAMPLES * sizeof(u64);
-        } break;
-
-        case FLV_ELEMENT_KIND_MASK: {
-            Result = FLV_CHUNK_MASK_WORDS * sizeof(u64);
-        } break;
-
-        case FLV_ELEMENT_KIND_SINGLE_I64:
-        case FLV_ELEMENT_KIND_SINGLE_F64: {
-            Result = sizeof(u64);
-        } break;
-
-        case FLV_ELEMENT_KIND_SELECTION: {
-            Result = sizeof(FLVSelection);
-        } break;
-    }
-
-    return Result;
-}
-
 void
 FLVLaneInit(
     FLVLane* Lane,
@@ -133,7 +103,7 @@ FLVLaneInit(
  
 
     for (u32 Index = 0; Index < Program->TempCount; ++Index) {
-        u64 Size = FLVTempSize(Program->TempKind[Index]);
+        u64 Size = FLV_ELEMENT_KIND_SIZE_TABLE[Program->TempKind[Index]];
 
         if (Size) {
             Lane->Temps[Index] = ArenaPushSize(
