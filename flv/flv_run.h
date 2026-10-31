@@ -6,60 +6,19 @@
 #include "fli.h"
 #include "flv_lower.h"
 #include "flv_bind.h"
+#include "flv_visualisation.h"
 
 struct Arena;
 
 // @defines____________________________________________________________________
 #define FLV_CHUNK_SAMPLES    4096
 #define FLV_CHUNK_MASK_WORDS (FLV_CHUNK_SAMPLES / 64)
-
-#define FLV_I64_HOLE I64_MAX
-
-#define FLV_ARITH_HEAD(Type)                                                \
-    if (FLVTempIsMissing(Lane, Op.LHS) || FLVTempIsMissing(Lane, Op.RHS)) { \
-        FLVTempSetMissing(Lane, Op.Dst);                                    \
-                                                                            \
-        return;                                                             \
-    }                                                                       \
-                                                                            \
-    Type* Dst = (Type*) FLVTempPtr(Lane, Op.Dst);                           \
-    u64   Count = Lane->ChunkCount
-
-#define FLV_OP_ADD(A, B)     ((A) + (B))
-#define FLV_OP_SUB(A, B)     ((A) - (B))
-#define FLV_OP_MUL(A, B)     ((A) * (B))
-#define FLV_OP_DIV_I64(A, B) ((B) ? (A) / (B) : FLV_I64_HOLE)
-#define FLV_OP_DIV_F64(A, B) ((A) / (B))
-#define FLV_OP_MOD_I64(A, B) ((B) ? (A) % (B) : FLV_I64_HOLE)
-#define FLV_OP_MOD_F64(A, B) FMod((A), (B))
-
-#define FLV_EVENT_ID_ARMED    10
-#define FLV_EVENT_ID_DISARMED 11
-
-typedef u8 FLVRenderKind;
-enum : u8 {
-    FLV_RENDER_KIND_NULL,
-    FLV_RENDER_KIND_CURVE,
-    FLV_RENDER_KIND_TABLE,
-    FLV_RENDER_KIND_TEXT,
-    FLV_RENDER_KIND_FLAG,
-    FLV_RENDER_KIND_COUNT
-};
+#define FLV_I64_HOLE         I64_MAX
 
 // @types______________________________________________________________________
-struct FLVTimeRange {
-    u64 StartUSecs;
-    u64 EndUSecs;
-};
-
 struct FLVSelection {
-    FLVTimeRange* V;
-    u64           Count;
-};
-
-struct FLVIndexRange {
-    u64 Head;
-    u64 Tail;
+    r1u64* V;
+    u64    Count;
 };
 
 struct FLVColumn {
@@ -68,38 +27,6 @@ struct FLVColumn {
     FLIScalarKind Kind;
     u8            ElementSize;
     u8            __Padding[6];
-};
-
-struct FLVRenderCurve {
-    u64* TimeUSecs;
-    f64* Values;
-    u64  Count;
-    u32  LabelStringIndex;
-    u8   Axis;
-    u8   __Padding[3];
-};
-
-struct FLVRenderFlag {
-    FLVTimeRange* Ranges;
-    u64           Count;
-    u64           TotalDurationUSecs;
-    u32           LabelStringIndex;
-    u32           __Padding;
-};
-
-struct FLVRenderItem {
-    FLVRenderKind Kind;
-    u8            IsMissing;
-    u16           __Padding;
-    u32           AnalysisIndex;
-    u32           FlightIndex;
-    u32           EmitIndex;
-
-    union {
-        FLVRenderCurve Curve;
-        FLVRenderFlag  Flag;
-        Str8           Text;
-    };
 };
 
 struct FLVLane {
@@ -122,7 +49,8 @@ struct FLVLane {
     FLVRegion const*    Region;
     FLVColumn const*    BaseTime;
     u64 const*          Mask;
-    FLVIndexRange*      Ranges;
+    u64 const*          MaskAll;
+    r1u64*              Ranges;
     u64                 RangesCount;
     u64                 RegionSampleCount;
     u64                 ChunkBase;
@@ -133,7 +61,6 @@ struct FLVLane {
 
 
 // @functions__________________________________________________________________
-void FLVKernelInit(void);
 void FLVLaneInit(FLVLane* Lane, Arena* MemPool, Arena* ResultMemPool, FLVProgram const* Program, FLIParsed* FLI, FLVBoundSlot const* Slots, u32 SlotsCount, u32 FlightIndex);
 void FLVLaneRun(FLVLane* Lane);
 Str8List FLVRenderItemsPrint(Arena* MemPool, FLVLane const* Lane);

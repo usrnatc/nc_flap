@@ -11,167 +11,6 @@
 #include "flv_kernel.h"
 #include "flv_bind.h"
 
-// FIXME(nc): this is fucking stupid to have taking up space in the binary
-global u64 const FLV_MASK_ALL[FLV_CHUNK_MASK_WORDS] = {
-    U64_MAX, U64_MAX, U64_MAX, U64_MAX,
-    U64_MAX, U64_MAX, U64_MAX, U64_MAX, 
-    U64_MAX, U64_MAX, U64_MAX, U64_MAX,
-    U64_MAX, U64_MAX, U64_MAX, U64_MAX, 
-    U64_MAX, U64_MAX, U64_MAX, U64_MAX,
-    U64_MAX, U64_MAX, U64_MAX, U64_MAX, 
-    U64_MAX, U64_MAX, U64_MAX, U64_MAX,
-    U64_MAX, U64_MAX, U64_MAX, U64_MAX, 
-    U64_MAX, U64_MAX, U64_MAX, U64_MAX,
-    U64_MAX, U64_MAX, U64_MAX, U64_MAX, 
-    U64_MAX, U64_MAX, U64_MAX, U64_MAX,
-    U64_MAX, U64_MAX, U64_MAX, U64_MAX, 
-    U64_MAX, U64_MAX, U64_MAX, U64_MAX,
-    U64_MAX, U64_MAX, U64_MAX, U64_MAX, 
-    U64_MAX, U64_MAX, U64_MAX, U64_MAX,
-    U64_MAX, U64_MAX, U64_MAX, U64_MAX
-};
-
-INTERNAL
-FLV_KERNEL_FUNC_SIG(FLVKernelStub)
-{
-    LogError(
-        "kernel %S is not implemented yet",
-        PRINT_STR(FLV_KERNEL_NAME_TABLE[Op.Kernel])
-    );
-    FLVTempSetMissing(Lane, Op.Dst);
-}
-
-void
-FLVKernelInit(void)
-{
-    for (u32 Index = 0; Index < FLV_KERNEL_COUNT; ++Index)
-        FLV_KERNEL_TABLE[Index] = FLVKernelStub;
-
-    FLV_KERNEL_TABLE[FLV_KERNEL_LOAD_I64] = FLVKernelLoadI64;
-    FLV_KERNEL_TABLE[FLV_KERNEL_LOAD_F64] = FLVKernelLoadF64;
-    FLV_KERNEL_TABLE[FLV_KERNEL_LOAD_INSTANCE] = FLVKernelLoadInstance;
-    FLV_KERNEL_TABLE[FLV_KERNEL_CONVERT_I64_F64] = FLVKernelConvertI64F64;
-    FLV_KERNEL_TABLE[FLV_KERNEL_NEG_I64] = FLVKernelNEG_I64;
-    FLV_KERNEL_TABLE[FLV_KERNEL_NEG_F64] = FLVKernelNEG_F64;
-    FLV_KERNEL_TABLE[FLV_KERNEL_ABS_I64] = FLVKernelABS_I64;
-    FLV_KERNEL_TABLE[FLV_KERNEL_ABS_F64] = FLVKernelABS_F64;
-
-#define X2(Name)                                                             \
-    FLV_KERNEL_TABLE[FLV_KERNEL_##Name##_I64_T] = FLVKernel##Name##_I64_T;   \
-    FLV_KERNEL_TABLE[FLV_KERNEL_##Name##_I64_S] = FLVKernel##Name##_I64_S;   \
-    FLV_KERNEL_TABLE[FLV_KERNEL_##Name##_F64_T] = FLVKernel##Name##_F64_T;   \
-    FLV_KERNEL_TABLE[FLV_KERNEL_##Name##_F64_S] = FLVKernel##Name##_F64_S;
-#define X3(Name)                                                             \
-    X2(Name)                                                                 \
-    FLV_KERNEL_TABLE[FLV_KERNEL_##Name##_I64_RS] = FLVKernel##Name##_I64_RS; \
-    FLV_KERNEL_TABLE[FLV_KERNEL_##Name##_F64_RS] = FLVKernel##Name##_F64_RS;
-
-    X2(ADD)
-    X3(SUB)
-    X2(MUL)
-    X3(DIV)
-    X3(MOD)
-
-#undef X3
-#undef X2
-
-#define X(Cmp)                                                           \
-    FLV_KERNEL_TABLE[FLV_KERNEL_##Cmp##_I64_T] = FLVKernel##Cmp##_I64_T; \
-    FLV_KERNEL_TABLE[FLV_KERNEL_##Cmp##_I64_S] = FLVKernel##Cmp##_I64_S; \
-    FLV_KERNEL_TABLE[FLV_KERNEL_##Cmp##_F64_T] = FLVKernel##Cmp##_F64_T; \
-    FLV_KERNEL_TABLE[FLV_KERNEL_##Cmp##_F64_S] = FLVKernel##Cmp##_F64_S;
-
-    X(CMP_LT)
-    X(CMP_LE)
-    X(CMP_GT)
-    X(CMP_GE)
-    X(CMP_EQ)
-    X(CMP_NE)
-
-#undef X
-
-    FLV_KERNEL_TABLE[FLV_KERNEL_MASK_AND] = FLVKernelMaskAnd;
-    FLV_KERNEL_TABLE[FLV_KERNEL_MASK_OR] = FLVKernelMaskOr;
-    FLV_KERNEL_TABLE[FLV_KERNEL_MASK_NOT] = FLVKernelMaskNot;
-    FLV_KERNEL_TABLE[FLV_KERNEL_SEL_FROM_MASK] = FLVKernelSelFromMask;
-    FLV_KERNEL_TABLE[FLV_KERNEL_SEL_FROM_TIME_RANGE] = FLVKernelSelFromTimeRange;
-    FLV_KERNEL_TABLE[FLV_KERNEL_SEL_MODE] = FLVKernelSelMode;
-    FLV_KERNEL_TABLE[FLV_KERNEL_SEL_EVENT] = FLVKernelSelEvent;
-    FLV_KERNEL_TABLE[FLV_KERNEL_SEL_ARMED] = FLVKernelSelArmed;
-    FLV_KERNEL_TABLE[FLV_KERNEL_SEL_AND] = FLVKernelSelAnd;
-    FLV_KERNEL_TABLE[FLV_KERNEL_SEL_OR] = FLVKernelSelOr;
-    FLV_KERNEL_TABLE[FLV_KERNEL_SEL_NOT] = FLVKernelSelNot;
-    FLV_KERNEL_TABLE[FLV_KERNEL_EMIT_CURVE] = FLVKernelEmitCurve;
-    FLV_KERNEL_TABLE[FLV_KERNEL_EMIT_FLAG] = FLVKernelEmitFlag;
-    FLV_KERNEL_TABLE[FLV_KERNEL_EMIT_MISSING] = FLVKernelEmitMissing;
-    FLV_KERNEL_TABLE[FLV_KERNEL_SEL_DURATION] = FLVKernelSelDuration;
- 
-#define X(Name) FLV_KERNEL_TABLE[FLV_KERNEL_##Name] = FLVKernel##Name;
- 
-    X(MEAN_I64)
-    X(MEAN_F64)
-    X(STDDEV_I64)
-    X(STDDEV_F64)
-    X(MIN_I64)
-    X(MIN_F64)
-    X(MAX_I64)
-    X(MAX_F64)
-    X(SUM_I64)
-    X(SUM_F64)
-    X(FIRST_I64)
-    X(FIRST_F64)
-    X(LAST_I64)
-    X(LAST_F64)
-    X(REDUCE_COUNT)
-    X(S_ADD_I64)
-    X(S_ADD_F64)
-    X(S_SUB_I64)
-    X(S_SUB_F64)
-    X(S_MUL_I64)
-    X(S_MUL_F64)
-    X(S_DIV_I64)
-    X(S_DIV_F64)
-    X(S_MOD_I64)
-    X(S_MOD_F64)
-    X(S_NEG_I64)
-    X(S_NEG_F64)
-    X(S_ABS_I64)
-    X(S_ABS_F64)
-    X(S_CMP_LT_I64)
-    X(S_CMP_LT_F64)
-    X(S_CMP_LE_I64)
-    X(S_CMP_LE_F64)
-    X(S_CMP_GT_I64)
-    X(S_CMP_GT_F64)
-    X(S_CMP_GE_I64)
-    X(S_CMP_GE_F64)
-    X(S_CMP_EQ_I64)
-    X(S_CMP_EQ_F64)
-    X(S_CMP_NE_I64)
-    X(S_CMP_NE_F64)
-    X(S_AND)
-    X(S_OR)
-    X(S_NOT)
-    X(S_CONVERT_I64_F64)
- 
-#undef X
-
-#define X(Name) FLV_KERNEL_TABLE[FLV_KERNEL_##Name] = FLVKernel##Name;
- 
-    X(DIFF_I64)
-    X(DIFF_F64)
-    X(RATE_I64)
-    X(RATE_F64)
-    X(ROLLING_MEAN_I64) 
-    X(ROLLING_MEAN_F64)
-    X(ROLLING_MIN_I64)
-    X(ROLLING_MIN_F64)
-    X(ROLLING_MAX_I64)
-    X(ROLLING_MAX_F64)
- 
-#undef X
-}
-
 INTERNAL u64
 FLVTempSize(u8 Kind)
 {
@@ -306,6 +145,11 @@ FLVLaneInit(
         }
     }
 
+    u64* MaskAll = ArenaPushArray(MemPool, u64, FLV_CHUNK_MASK_WORDS);
+
+    MemSet(MaskAll, 0xFF, FLV_CHUNK_MASK_WORDS * sizeof(u64));
+    Lane->MaskAll = MaskAll;
+
     for (u32 Index = 0; Index < Program->EmitCount; ++Index) {
         Lane->Items[Index].AnalysisIndex = Program->AnalysisIndex;
         Lane->Items[Index].FlightIndex = FlightIndex;
@@ -379,9 +223,9 @@ FLVRegionRanges(FLVLane* Lane, FLVRegion const* Region)
     Lane->RegionSampleCount = 0;
 
     if (Region->RangeSelection == FLV_OPERAND_NONE) {
-        Lane->Ranges = ArenaPushArray(Lane->MemPool, FLVIndexRange, 1);
-        Lane->Ranges[0].Head = 0;
-        Lane->Ranges[0].Tail = Count;
+        Lane->Ranges = ArenaPushArray(Lane->MemPool, r1u64, 1);
+        Lane->Ranges[0].Min = 0;
+        Lane->Ranges[0].Max = Count;
         Lane->RangesCount = 1;
         Lane->RegionSampleCount = Count;
 
@@ -390,17 +234,17 @@ FLVRegionRanges(FLVLane* Lane, FLVRegion const* Region)
 
     FLVSelection const* Sel = FLVSelectionPtr(Lane, Region->RangeSelection);
 
-    Lane->Ranges = ArenaPushArray(Lane->MemPool, FLVIndexRange, Sel->Count);
+    Lane->Ranges = ArenaPushArray(Lane->MemPool, r1u64, Sel->Count);
 
     for (u64 Index = 0; Index < Sel->Count; ++Index) {
-        u64 Head = FLVLowerBoundU64(Time, Count, Sel->V[Index].StartUSecs);
-        u64 Tail = FLVUpperBoundU64(Time, Count, Sel->V[Index].EndUSecs);
+        u64 Head = FLVLowerBoundU64(Time, Count, Sel->V[Index].Min);
+        u64 Tail = FLVUpperBoundU64(Time, Count, Sel->V[Index].Max);
 
         if (Tail <= Head)
             continue;
 
-        Lane->Ranges[Lane->RangesCount].Head = Head;
-        Lane->Ranges[Lane->RangesCount].Tail = Tail;
+        Lane->Ranges[Lane->RangesCount].Min = Head;
+        Lane->Ranges[Lane->RangesCount].Max = Tail;
         Lane->RegionSampleCount += Tail - Head;
         ++Lane->RangesCount;
     }
@@ -437,23 +281,20 @@ FLVRegionRun(FLVLane* Lane, FLVRegion const* Region)
     }
 
     FLVRegionRanges(Lane, Region);
-    FLVRegionSelectionBuildsBegin(Lane, Region);
-    FLVRegionReductionsBegin(Lane, Region);
-    FLVRegionWindowsBegin(Lane, Region);
-    FLVRegionEmitsBegin(Lane, Region);
+    FLVKernelsRegionBegin(Lane, Region);
 
     for (u64 RangeIndex = 0; RangeIndex < Lane->RangesCount; ++RangeIndex) {
-        FLVIndexRange Range = Lane->Ranges[RangeIndex];
+        r1u64 Range = Lane->Ranges[RangeIndex];
 
-        FLVRangeWindowsReset(Lane, Region);
+        FLVKernelsRangeReset(Lane, Region);
 
         for (
-            u64 Base = Range.Head;
-            Base < Range.Tail;
+            u64 Base = Range.Min;
+            Base < Range.Max;
             Base += FLV_CHUNK_SAMPLES
         ) {
             Lane->ChunkBase = Base;
-            Lane->ChunkCount = MIN(FLV_CHUNK_SAMPLES, Range.Tail - Base);
+            Lane->ChunkCount = MIN(FLV_CHUNK_SAMPLES, Range.Max - Base);
             Lane->Mask = NULL;
 
             for (u32 OpIndex = 0; OpIndex < Region->OpCount; ++OpIndex) {
@@ -471,9 +312,7 @@ FLVRegionRun(FLVLane* Lane, FLVRegion const* Region)
             }
         }
     }
-
-    FLVRegionSelectionBuildsEnd(Lane, Region);
-    FLVRegionReductionsEnd(Lane, Region);
+    FLVKernelsRegionEnd(Lane, Region);
     Lane->Region = NULL;
     Lane->BaseTime = NULL;
     Lane->Mask = NULL;
@@ -641,8 +480,8 @@ FLVRenderItemsPrint(Arena* MemPool, FLVLane const* Lane)
                         ArenaPushStrFmt(
                             MemPool,
                             "      [%llu us .. %llu us]",
-                            Flag->Ranges[RangeIndex].StartUSecs,
-                            Flag->Ranges[RangeIndex].EndUSecs
+                            Flag->Ranges[RangeIndex].Min,
+                            Flag->Ranges[RangeIndex].Max
                         )
                     );
                 }
