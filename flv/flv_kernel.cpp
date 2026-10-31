@@ -638,6 +638,7 @@ FLV_REDUCE_KERNEL(REDUCE_COUNT, i64, I64, FLV_BODY_NONE)
         return;                                                           \
     }                                                                     \
                                                                           \
+    u64 const* Mask = Lane->Mask ? Lane->Mask : Lane->MaskAll;            \
     Type const* A = (Type const*) FLVTempPtr(Lane, Op.LHS);               \
     u64 const*  T = (u64 const*) Lane->BaseTime->Data + Lane->ChunkBase;  \
     u64 Count = Lane->ChunkCount
@@ -648,17 +649,22 @@ FLV_REDUCE_KERNEL(REDUCE_COUNT, i64, I64, FLV_BODY_NONE)
     {                                                                     \
         FLV_WINDOW_HEAD(Type);                                            \
         Type* Dst = (Type*) FLVTempPtr(Lane, Op.Dst);                     \
+        Type  Prev = W->Prev.Field;                                       \
+        b32   HasPrev = W->HasPrev;                                       \
                                                                           \
-        if (!Count)                                                       \
-            return;                                                       \
+        for (u64 Index = 0; Index < Count; ++Index) {                     \
+            if (!FLVMaskBit(Mask, Index)) {                               \
+                Dst[Index] = Hole;                                        \
+                continue;                                                 \
+            }                                                             \
                                                                           \
-        Dst[0] = W->HasPrev ? A[0] - W->Prev.Field : Hole;                \
+            Dst[Index] = HasPrev ? A[Index] - Prev : Hole;                \
+            Prev = A[Index];                                              \
+            HasPrev = TRUE;                                               \
+        }                                                                 \
                                                                           \
-        for (u64 Index = 1; Index < Count; ++Index)                       \
-            Dst[Index] = A[Index] - A[Index - 1];                         \
-                                                                          \
-        W->Prev.Field = A[Count - 1];                                     \
-        W->HasPrev = TRUE;                                                \
+        W->Prev.Field = Prev;                                             \
+        W->HasPrev = HasPrev;                                             \
     }
  
 FLV_DIFF_KERNEL(DIFF_I64, i64, I64, FLV_I64_HOLE)
@@ -671,24 +677,29 @@ FLV_DIFF_KERNEL(DIFF_F64, f64, F64, NC_NAN)
     FLV_KERNEL_FUNC_SIG(FLVKernel##Name)                                  \
     {                                                                     \
         FLV_WINDOW_HEAD(Type);                                            \
-        f64* Dst = (f64*) FLVTempPtr(Lane, Op.Dst);                       \
+        f64*  Dst = (f64*) FLVTempPtr(Lane, Op.Dst);                      \
+        Type  Prev = W->Prev.Field;                                       \
+        u64   PrevTime = W->PrevTimeUSecs;                                \
+        b32   HasPrev = W->HasPrev;                                       \
                                                                           \
-        if (!Count)                                                       \
-            return;                                                       \
+        for (u64 Index = 0; Index < Count; ++Index) {                     \
+            if (!FLVMaskBit(Mask, Index)) {                               \
+                Dst[Index] = NC_NAN;                                      \
+                continue;                                                 \
+            }                                                             \
                                                                           \
-        Dst[0] = W->HasPrev                                               \
-            ? (f64) (A[0] - W->Prev.Field) * SECONDS(1) /                 \
-              (f64) (T[0] - W->PrevTimeUSecs)                             \
-            : NC_NAN;                                                     \
-                                                                          \
-        for (u64 Index = 1; Index < Count; ++Index) {                     \
-            Dst[Index] = (f64) (A[Index] - A[Index - 1]) * SECONDS(1) /   \
-                (f64) (T[Index] - T[Index - 1]);                          \
+            Dst[Index] = HasPrev                                          \
+                ? (f64) (A[Index] - Prev) * SECONDS(1.0) /                \
+                  (f64) (T[Index] - PrevTime)                             \
+                : NC_NAN;                                                 \
+            Prev = A[Index];                                              \
+            PrevTime = T[Index];                                          \
+            HasPrev = TRUE;                                               \
         }                                                                 \
                                                                           \
-        W->Prev.Field = A[Count - 1];                                     \
-        W->PrevTimeUSecs = T[Count - 1];                                  \
-        W->HasPrev = TRUE;                                                \
+        W->Prev.Field = Prev;                                             \
+        W->PrevTimeUSecs = PrevTime;                                      \
+        W->HasPrev = HasPrev;                                             \
     }
  
 FLV_RATE_KERNEL(RATE_I64, i64, I64)
@@ -703,15 +714,20 @@ FLV_RATE_KERNEL(RATE_F64, f64, F64)
         --W->Count;                                                          \
     }
  
-#define FLV_ROLLING_MEAN_KERNEL(Name, Type, Field)                          \
+#define FLV_ROLLING_MEAN_KERNEL(Name, Type, Field, Hole)                    \
     INTERNAL                                                                \
     FLV_KERNEL_FUNC_SIG(FLVKernel##Name)                                    \
     {                                                                       \
         FLV_WINDOW_HEAD(Type);                                              \
         Type* Dst = (Type*) FLVTempPtr(Lane, Op.Dst);                       \
-        u64 Width = FLVScalarTimeUSecs(Lane, Op.RHS);                       \
+        u64  Width = FLVScalarTimeUSecs(Lane, Op.RHS);                      \
                                                                             \
         for (u64 Index = 0; Index < Count; ++Index) {                       \
+            if (!FLVMaskBit(Mask, Index)) {                                 \
+                Dst[Index] = Hole;                                          \
+                continue;                                                   \
+            }                                                               \
+                                                                            \
             FLV_EVICT_FRONT(                                                \
                 W->Summation.Field -= W->Values[FLV_RING(W, W->Head)].Field \
             );                                                              \
@@ -726,15 +742,20 @@ FLV_RATE_KERNEL(RATE_F64, f64, F64)
         }                                                                   \
     }
  
-#define FLV_ROLLING_EXTREME_KERNEL(Name, Type, Field, PopSym)             \
+#define FLV_ROLLING_EXTREME_KERNEL(Name, Type, Field, Hole, PopSym)       \
     INTERNAL                                                              \
     FLV_KERNEL_FUNC_SIG(FLVKernel##Name)                                  \
     {                                                                     \
         FLV_WINDOW_HEAD(Type);                                            \
         Type* Dst = (Type*) FLVTempPtr(Lane, Op.Dst);                     \
-        u64 Width = FLVScalarTimeUSecs(Lane, Op.RHS);                     \
+        u64  Width = FLVScalarTimeUSecs(Lane, Op.RHS);                    \
                                                                           \
         for (u64 Index = 0; Index < Count; ++Index) {                     \
+            if (!FLVMaskBit(Mask, Index)) {                               \
+                Dst[Index] = Hole;                                        \
+                continue;                                                 \
+            }                                                             \
+                                                                          \
             FLV_EVICT_FRONT({});                                          \
                                                                           \
             while (                                                       \
@@ -754,12 +775,12 @@ FLV_RATE_KERNEL(RATE_F64, f64, F64)
         }                                                                 \
     }
  
-FLV_ROLLING_MEAN_KERNEL(ROLLING_MEAN_I64, i64, I64)
-FLV_ROLLING_MEAN_KERNEL(ROLLING_MEAN_F64, f64, F64)
-FLV_ROLLING_EXTREME_KERNEL(ROLLING_MIN_I64, i64, I64, >=)
-FLV_ROLLING_EXTREME_KERNEL(ROLLING_MIN_F64, f64, F64, >=)
-FLV_ROLLING_EXTREME_KERNEL(ROLLING_MAX_I64, i64, I64, <=)
-FLV_ROLLING_EXTREME_KERNEL(ROLLING_MAX_F64, f64, F64, <=)
+FLV_ROLLING_MEAN_KERNEL(ROLLING_MEAN_I64, i64, I64, FLV_I64_HOLE)
+FLV_ROLLING_MEAN_KERNEL(ROLLING_MEAN_F64, f64, F64, NC_NAN)
+FLV_ROLLING_EXTREME_KERNEL(ROLLING_MIN_I64, i64, I64, FLV_I64_HOLE, >=)
+FLV_ROLLING_EXTREME_KERNEL(ROLLING_MIN_F64, f64, F64, NC_NAN, >=)
+FLV_ROLLING_EXTREME_KERNEL(ROLLING_MAX_I64, i64, I64, FLV_I64_HOLE, <=)
+FLV_ROLLING_EXTREME_KERNEL(ROLLING_MAX_F64, f64, F64, NC_NAN, <=)
  
 #undef FLV_ROLLING_EXTREME_KERNEL
 #undef FLV_ROLLING_MEAN_KERNEL
