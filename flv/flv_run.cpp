@@ -3,7 +3,6 @@
 #include "nc_memory.h"
 #include "nc_arena.h"
 #include "nc_string.h"
-#include "nc_log.h"
 
 #include "fli.h"
 
@@ -11,7 +10,6 @@
 #include "flv_lower.h"
 #include "flv_kernel.h"
 #include "flv_bind.h"
-#include "flv_stdlib.h"
 #include "flv_token.h"
 
 void
@@ -381,21 +379,130 @@ FLVLaneRun(FLVLane* Lane)
     }
 }
 
-Str8List
-FLVRenderItemsPrint(Arena* MemPool, FLVLane const* Lane)
+FLVRunSet*
+FLVRunSetInit(
+    Arena* MemPool,
+    FLVLowered const* Lowered,
+    FLVSlot const* Slots,
+    u32 SlotsCount,
+    FLIParsed** Flights,
+    u32 FlightCount
+) {
+    FLVRunSet* Set = ArenaPushStructZero(MemPool, FLVRunSet);
+ 
+    Set->Programs = Lowered->Program;
+    Set->Flights = Flights;
+    Set->SlotsCount = SlotsCount;
+    Set->ProgramsCount = Lowered->ProgramCount;
+    Set->FlightsCount = FlightCount;
+    Set->ItemsCount = FlightCount * Lowered->ProgramCount;
+    Set->Bound = ArenaPushArray(MemPool, FLVBoundSlot*, FlightCount);
+    Set->EmitBase = ArenaPushArray(MemPool, u32, Lowered->ProgramCount + 1);
+    Set->Items = ArenaPushArrayZero(MemPool, FLVRunItem, Set->ItemsCount);
+ 
+    for (u32 Flight = 0; Flight < FlightCount; ++Flight) {
+        Set->Bound[Flight] = FLVBindSlots(
+            MemPool,
+            Flights[Flight],
+            Slots,
+            SlotsCount
+        );
+    }
+ 
+    Set->EmitBase[0] = 0;
+ 
+    for (u32 Program = 0; Program < Lowered->ProgramCount; ++Program) {
+        Set->EmitBase[Program + 1] = Set->EmitBase[Program] + Lowered->Program[Program].EmitCount;
+    }
+ 
+    Set->Flags = ArenaPushArrayZero(
+        MemPool,
+        FLVFlagSummary,
+        (u64) Set->EmitBase[Lowered->ProgramCount] * FlightCount
+    );
+ 
+    for (u32 Index = 0; Index < Set->ItemsCount; ++Index)
+        Set->Items[Index].ResultMemPool = ArenaAlloc();
+ 
+    return Set;
+}
+ 
+void
+FLVRunSetExecute(FLVRunSet* Set)
 {
+    r1u64 Range = LaneRange(Set->ItemsCount);
+ 
+    for (u64 Index = Range.Min; Index < Range.Max; ++Index) {
+        TempArena Scratch = GetScratch(NULL, 0);
+        FLVRunItem* Item = &Set->Items[Index];
+        u32 Flight = (u32) (Index / Set->ProgramsCount);
+        u32 Program = (u32) (Index % Set->ProgramsCount);
+        FLVLane Lane = {};
+ 
+        FLVLaneInit(
+            &Lane,
+            Scratch.MemPool,
+            Item->ResultMemPool,
+            &Set->Programs[Program],
+            Set->Flights[Flight],
+            Set->Bound[Flight],
+            Set->SlotsCount,
+            Flight
+        );
+        FLVLaneRun(&Lane);
+        Item->Items = Lane.Items;
+        ReleaseScratch(Scratch);
+    }
+}
+ 
+void
+FLVRunSetSummarize(FLVRunSet* Set)
+{
+    r1u64 Range = LaneRange(Set->ItemsCount);
+ 
+    for (u64 Index = Range.Min; Index < Range.Max; ++Index) {
+        FLVRunItem const* Item = &Set->Items[Index];
+        u32 Flight = (u32) (Index / Set->ProgramsCount);
+        u32 Program = (u32) (Index % Set->ProgramsCount);
+        FLVProgram const* P = &Set->Programs[Program];
+ 
+        for (u32 Emit = 0; Emit < P->EmitCount; ++Emit) {
+            if (P->Emits[Emit].DisplayKind != TOKEN_KIND_FLAG)
+                continue;
+ 
+            FLVRenderItem const* R = &Item->Items[Emit];
+            FLVFlagSummary* F = FLVFlagAt(Set, Program, Emit, Flight);
+ 
+            F->IsMissing = R->IsMissing;
+ 
+            if (!R->IsMissing) {
+                F->RangesCount = R->Flag.Count;
+                F->TotalDurationUSecs = R->Flag.TotalDurationUSecs;
+                F->IsSet = R->Flag.Count > 0;
+            }
+        }
+    }
+}
+
+Str8List
+FLVRenderItemsPrint(
+    Arena* MemPool, 
+    FLVProgram const* Program, 
+    FLVRenderItem* Items
+) {
     Str8List Result = {};
-    FLVProgram const* Program = Lane->Program;
 
     for (u32 Index = 0; Index < Program->EmitCount; ++Index) {
         if (
             Program->Emits[Index].DisplayKind == TOKEN_KIND_TABLE &&
-            Lane->TableRefs[Index].Head != Index
+            Index && 
+            Program->Emits[Index - 1].DisplayKind == TOKEN_KIND_TABLE &&
+            Program->Emits[Index - 1].Group == Program->Emits[Index].Group
         ) {
             continue;
         }
 
-        FLVRenderItem const* Item = &Lane->Items[Index];
+        FLVRenderItem const* Item = &Items[Index];
         Str8 Label = Program->Strings[Program->Emits[Index].LabelStringIndex];
 
         if (Item->IsMissing) {

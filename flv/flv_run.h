@@ -36,6 +36,32 @@ struct FLVTableRef {
     u64 RowBase;
 };
 
+struct FLVFlagSummary {
+    u64 RangesCount;
+    u64 TotalDurationUSecs;
+    u8  IsMissing;
+    u8  IsSet;
+    u8  __Padding[6];
+};
+
+struct FLVRunItem {
+    Arena*         ResultMemPool;
+    FLVRenderItem* Items;
+};
+
+struct FLVRunSet {
+    FLVProgram const* Programs;
+    FLIParsed**       Flights;
+    FLVBoundSlot**    Bound;
+    u32*              EmitBase;
+    FLVRunItem*       Items;
+    FLVFlagSummary*   Flags;
+    u32               SlotsCount;
+    u32               ProgramsCount;
+    u32               FlightsCount;
+    u32               ItemsCount;
+};
+
 struct FLVLane {
     FLVProgram const*   Program;
     FLVBoundSlot const* Slots;
@@ -71,7 +97,28 @@ struct FLVLane {
 // @functions__________________________________________________________________
 void FLVLaneInit(FLVLane* Lane, Arena* MemPool, Arena* ResultMemPool, FLVProgram const* Program, FLIParsed* FLI, FLVBoundSlot const* Slots, u32 SlotsCount, u32 FlightIndex);
 void FLVLaneRun(FLVLane* Lane);
-Str8List FLVRenderItemsPrint(Arena* MemPool, FLVLane const* Lane);
+Str8List FLVRenderItemsPrint(Arena* MemPool, FLVProgram const* Program, FLVRunItem* Items);
+FLVRunSet* FLVRunSetInit(Arena* MemPool, FLVLowered const* Lowered, FLVSlot const* Slots, u32 SlotsCount, FLIParsed** Flights, u32 FlightsCount);
+void FLVRunSetExecute(FLVRunSet* Set);
+void FLVRunSetSummarise(FLVRunSet* Set);
+
+INTERNAL FLVRunItem*
+FLVRunItemAt(FLVRunSet* Set, u32 Flight, u32 Program)
+{
+    FLVRunItem* Result = &Set->Items[Flight * Set->ProgramsCount + Program];
+
+    return Result;
+}
+
+INTERNAL FLVFlagSummary*
+FLVFlagAt(FLVRunSet* Set, u32 Program, u32 Emit, u32 Flight)
+{
+    FLVFlagSummary* Result = &Set->Flags[
+        (Set->EmitBase[Program] + Emit) * Set->FlightsCount + Flight
+    ];
+
+    return Result;
+}
 
 INTERNAL void*
 FLVTempPtr(FLVLane* Lane, FLVOperand Operand)

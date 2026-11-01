@@ -969,7 +969,7 @@ FLV_KERNEL_FUNC_SIG(FLVKernelSEL_MODE)
 
     *Sel = FLVSelectionAlloc(Lane, ModesCount);
 
-    for (u64 Index = 1; Index < ModesCount; ++Index) {
+    for (u64 Index = 0; Index < ModesCount; ++Index) {
         if (Modes[Index].Mode != Bound->ModeNumber)
             continue;
 
@@ -1000,7 +1000,7 @@ FLV_KERNEL_FUNC_SIG(FLVKernelSEL_EVENT)
 
     *Sel = FLVSelectionAlloc(Lane, EventsCount);
 
-    for (u64 Index = 1; Index < EventsCount; ++Index) {
+    for (u64 Index = 0; Index < EventsCount; ++Index) {
         if (Events[Index].ID != (u8) ID)
             continue;
 
@@ -1021,7 +1021,7 @@ FLV_KERNEL_FUNC_SIG(FLVKernelSEL_ARMED)
 
     *Sel = FLVSelectionAlloc(Lane, EventsCount + 1);
 
-    for (u64 Index = 1; Index < EventsCount; ++Index) {
+    for (u64 Index = 0; Index < EventsCount; ++Index) {
         if (Events[Index].ID == FLV_EVENT_ID_ARMED && !IsArmed) {
             IsArmed = TRUE;
             ArmedUSecs = Events[Index].TimeUSecs;

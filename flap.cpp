@@ -215,52 +215,76 @@ FLVTest(
         }
 
         if (FlightsCount) {
-            FLVBoundSlot* Bound = NULL;
-
-            PROFILE(FLVBindSlotsTimer) {
-                Bound = FLVBindSlots(
-                    ViewMemPool, 
-                    Flights[0], 
-                    Slots, 
-                    SlotsCount
+            FLVRunSet* Set = NULL;
+ 
+            PROFILE(FLVRunSetInitTimer) {
+                Set = FLVRunSetInit(
+                    ViewMemPool,
+                    &Lowered,
+                    Slots,
+                    SlotsCount,
+                    Flights,
+                    FlightsCount
                 );
             }
-
-            Arena* LaneMemPool = ArenaAlloc();
-            Arena* ResultMemPool = ArenaAlloc();
-
-            for (u32 Program = 0; Program < Lowered.ProgramCount; ++Program) {
-                FLVLane Lane = {};
-
-                PROFILE(FLVLaneInitTimer) {
-                    FLVLaneInit(
-                        &Lane, 
-                        LaneMemPool, 
-                        ResultMemPool, 
-                        &Lowered.Program[Program], 
-                        Flights[0], 
-                        Bound, 
-                        SlotsCount, 
-                        0
-                    );
-                }
-
-                PROFILE(FLVLaneRunTimer) {
-                    FLVLaneRun(&Lane);
-                }
-
-                PrintOut("analysis %u on flight 0:\n", Program);
-
-                Str8List Lines = FLVRenderItemsPrint(ViewMemPool, &Lane);
-
-                for (Str8Node* Node = Lines.Head; Node; Node = Node->Next)
-                    PrintOut("%S\n", PRINT_STR(Node->String));
-
-                ArenaClear(LaneMemPool);
+ 
+            PROFILE(FLVRunSetExecuteTimer) {
+                FLVRunSetExecute(Set);
             }
-
-            ArenaRelease(LaneMemPool);
-            ArenaRelease(ResultMemPool);
+ 
+            PROFILE(FLVRunSetSummarizeTimer) {
+                FLVRunSetSummarize(Set);
+            }
+ 
+            for (u32 Flight = 0; Flight < FlightsCount; ++Flight) {
+                for (u32 Program = 0; Program < Lowered.ProgramCount; ++Program) {
+                    FLVRunItem* Item = FLVRunItemAt(Set, Flight, Program);
+ 
+                    PrintOut("analysis %u on flight %u:\n", Program, Flight);
+ 
+                    Str8List Lines = FLVRenderItemsPrint(
+                        ViewMemPool,
+                        &Lowered.Program[Program],
+                        Item->Items
+                    );
+ 
+                    for (Str8Node* Node = Lines.Head; Node; Node = Node->Next)
+                        PrintOut("%S\n", PRINT_STR(Node->String));
+                }
+            }
+ 
+            for (u32 Program = 0; Program < Lowered.ProgramCount; ++Program) {
+                FLVProgram const* P = &Lowered.Program[Program];
+ 
+                for (u32 Emit = 0; Emit < P->EmitCount; ++Emit) {
+                    if (P->Emits[Emit].DisplayKind != TOKEN_KIND_FLAG)
+                        continue;
+ 
+                    PrintOut(
+                        "flag \"%S\" by flight:",
+                        PRINT_STR(P->Strings[P->Emits[Emit].LabelStringIndex])
+                    );
+ 
+                    for (u32 Flight = 0; Flight < FlightsCount; ++Flight) {
+                        FLVFlagSummary* F = FLVFlagAt(
+                            Set, 
+                            Program, 
+                            Emit, 
+                            Flight
+                        );
+ 
+                        PrintOut(
+                            " %s",
+                            F->IsMissing ? "?" : (F->IsSet ? "X" : ".")
+                        );
+                    }
+ 
+                    PrintOut("\n"_s8);
+                }
+            }
+ 
+            for (u32 Index = 0; Index < Set->ItemsCount; ++Index)
+                ArenaRelease(Set->Items[Index].ResultMemPool);
         }
 
         ArenaRelease(ViewMemPool);
@@ -314,15 +338,15 @@ EntryPoint(CommandLine* CLI)
     }
 
     local char* FLIPaths[] = {
-        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000010.BIN",
-        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000034.BIN",
-        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000038.BIN",
-        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000047.BIN",
-        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000048.BIN",
-        "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000050.BIN",
-        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000058.BIN",
-        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000061.BIN",
-        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000064.BIN"
+        "H:\\rfdesign\\nc_flap\\tools\\logs\\00000010.BIN",
+        "H:\\rfdesign\\nc_flap\\tools\\logs\\00000034.BIN",
+        "H:\\rfdesign\\nc_flap\\tools\\logs\\00000038.BIN",
+        "H:\\rfdesign\\nc_flap\\tools\\logs\\00000047.BIN",
+        "H:\\rfdesign\\nc_flap\\tools\\logs\\00000048.BIN",
+        "H:\\rfdesign\\nc_flap\\tools\\logs\\00000050.BIN",
+        "H:\\rfdesign\\nc_flap\\tools\\logs\\00000058.BIN",
+        "H:\\rfdesign\\nc_flap\\tools\\logs\\00000061.BIN",
+        "H:\\rfdesign\\nc_flap\\tools\\logs\\00000064.BIN"
     };
     FLIKey Keys[ARRAY_COUNT(FLIPaths)] = {};
 
@@ -373,12 +397,12 @@ EntryPoint(CommandLine* CLI)
             }
 
             local char const* ViewPaths[] = {
-                "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\flv_examples\\power.flv",
-                "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\flv_examples\\vibration.flv",
-                "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\flv_examples\\ekf.flv",
-                "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\flv_examples\\tuning.flv",
-                "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\flv_examples\\overview.flv",
-                "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\flv_examples\\tester.flv"
+                "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\power.flv",
+                "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\vibration.flv",
+                "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\ekf.flv",
+                "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\tuning.flv",
+                "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\overview.flv",
+                "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\tester.flv"
             };
 
             FLVTest(
