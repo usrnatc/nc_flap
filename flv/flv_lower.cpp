@@ -176,7 +176,7 @@ EmitAdd(
     E->DisplayKind = DisplayKind;
     E->Axis = Axis;
     E->ElementKind = ElementKind;
-    E->__Padding = 0;
+    E->Group = State->TableGroup;
 
     return State->EmitCount++;
 }
@@ -1842,6 +1842,8 @@ EmitTableColumnFromSlot(
 no_inline void
 LowerTable(LowerState* State, ASTNodeDisplay* Display)
 {
+    ++State->TableGroup;
+
     u32 Count = Display->Header.Count;
     TypeIndex FirstType = TypeOf(State, Display->Arg[0].Expr);
 
@@ -1938,44 +1940,73 @@ LowerFlag(LowerState* State, ASTNodeDisplay* Display)
 {
     ASTDisplayArg* Cond = &Display->Arg[0];
     Str8 Label = ArgLabel(State, Cond);
-
+    TypeIndex CondType = TypeOf(State, Cond->Expr);
+ 
     if (Display->Header.Count > 1 && Display->Arg[1].IsLabel) {
         ASTNodeLiteral* Lit = (ASTNodeLiteral*) ExprAt(
-            State, 
+            State,
             Display->Arg[1].Expr
         );
-
+ 
         Label = Str(
-            Lit->Val.String.Str, 
+            Lit->Val.String.Str,
             Lit->Val.String.Count
         );
     }
-
-    FLVOperand Sel = FLV_OPERAND_NONE;
-
-    if (
-        !IsVoid(TypeOf(State, Cond->Expr)) && 
-        !State->Missing
-    ) {
-        Sel = LowerSelection(State, Cond->Expr);
-    }
-
-    if (Sel == FLV_OPERAND_NONE) {
+ 
+    if (IsVoid(CondType) || State->Missing) {
         EmitMissing(State, TOKEN_KIND_FLAG, Label);
-    } else {
-        EmitOp(
-            State, 
-            FLV_KERNEL_EMIT_FLAG, 
-            Sel, 
-            (FLVOperand) EmitAdd(
-                State, 
-                TOKEN_KIND_FLAG, 
-                1, 
-                FLV_ELEMENT_KIND_SELECTION, 
-                Label
-            )
-        );
+ 
+        return;
     }
+ 
+    if (
+        IsKind(CondType, TYPE_KIND_SERIES) ||
+        IsKind(CondType, TYPE_KIND_SELECTION)
+    ) {
+        FLVOperand Sel = LowerSelection(State, Cond->Expr);
+ 
+        if (Sel == FLV_OPERAND_NONE) {
+            EmitMissing(State, TOKEN_KIND_FLAG, Label);
+        } else {
+            EmitOp(
+                State,
+                FLV_KERNEL_EMIT_FLAG,
+                Sel,
+                (FLVOperand) EmitAdd(
+                    State,
+                    TOKEN_KIND_FLAG,
+                    1,
+                    FLV_ELEMENT_KIND_SELECTION,
+                    Label
+                )
+            );
+        }
+ 
+        return;
+    }
+ 
+    // NOTE(nc): a scalar bool flags the whole flight
+    LowerValue Value = LowerExpr(State, Cond->Expr);
+ 
+    if (Value.Kind != FLV_ELEMENT_KIND_SINGLE_I64) {
+        EmitMissing(State, TOKEN_KIND_FLAG, Label);
+ 
+        return;
+    }
+ 
+    EmitOp(
+        State,
+        FLV_KERNEL_EMIT_FLAG_SCALAR,
+        Value.Op,
+        (FLVOperand) EmitAdd(
+            State,
+            TOKEN_KIND_FLAG,
+            1,
+            FLV_ELEMENT_KIND_SINGLE_I64,
+            Label
+        )
+    );
 }
 
 INTERNAL void
@@ -2089,6 +2120,7 @@ ProgramBegin(LowerState* State)
     State->TempCount = 0;
     State->VarCount = 0;
     State->Missing = 0;
+    State->TableGroup = 0;
     State->Region = NULL;
     State->InAnalysis = TRUE;
     State->CtxSel[0] = FLV_OPERAND_NONE;

@@ -29,6 +29,13 @@ struct FLVColumn {
     u8            __Padding[6];
 };
 
+struct FLVTableRef {
+    u32 Head;
+    u32 Count;
+    u64 Stamp;
+    u64 RowBase;
+};
+
 struct FLVLane {
     FLVProgram const*   Program;
     FLVBoundSlot const* Slots;
@@ -46,6 +53,7 @@ struct FLVLane {
     FLVWindow*          Windows;
     u64                 MissingTemps;
     FLVRenderItem*      Items;
+    FLVTableRef*        TableRefs;
     FLVRegion const*    Region;
     FLVColumn const*    BaseTime;
     u64 const*          Mask;

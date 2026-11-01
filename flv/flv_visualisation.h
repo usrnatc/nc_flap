@@ -5,6 +5,8 @@
 #include "nc_math.h"
 #include "nc_string.h"
 
+#include "fli.h"
+
 // @defines____________________________________________________________________
 typedef u8 FLVRenderKind;
 enum : u8 {
@@ -34,6 +36,22 @@ struct FLVRenderFlag {
     u32    __Padding;
 };
 
+struct FLVRenderTableColumn {
+    void*         Data;
+    u32           LabelStringIndex;
+    FLIScalarKind Kind;
+    u8            Width;
+    u8            __Padding[2];
+};
+
+struct FLVRenderTable {
+    u64*                  TimeUSecs;
+    FLVRenderTableColumn* Columns;
+    u64                   RowCount;
+    u32                   ColumnCount;
+    u32                   __Padding;
+};
+
 struct FLVRenderItem {
     FLVRenderKind Kind;
     u8            IsMissing;
@@ -45,6 +63,7 @@ struct FLVRenderItem {
     union {
         FLVRenderCurve Curve;
         FLVRenderFlag  Flag;
+        FLVRenderTable Table;
         Str8           Text;
     };
 };

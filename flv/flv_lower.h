@@ -66,7 +66,7 @@ struct FLVEmit {
     u8  DisplayKind;
     u8  Axis;
     u8  ElementKind;
-    u8  __Padding;
+    u8  Group;
 };
 
 struct FLVRegion {
@@ -182,6 +182,7 @@ struct LowerState {
     u32*             ChildCursor;
     u32              ProgramCount;
     u32              LayoutCount;
+    u8               TableGroup;
 };
 
 // @runtime____________________________________________________________________

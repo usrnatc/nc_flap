@@ -1225,6 +1225,86 @@ FLV_KERNEL_FUNC_SIG(FLVKernelEMIT_FLAG)
 }
 
 INTERNAL
+FLV_KERNEL_FUNC_SIG(FLVKernelEMIT_FLAG_SCALAR)
+{
+    u32 EmitIndex = FLVGetOperandIndex(Op.RHS);
+    FLVEmit const* Emit = &Lane->Program->Emits[EmitIndex];
+    FLVRenderItem* Item = &Lane->Items[EmitIndex];
+    FLVRenderFlag* Flag = &Item->Flag;
+ 
+    if (FLVTempIsMissing(Lane, Op.LHS)) {
+        Item->IsMissing = TRUE;
+ 
+        return;
+    }
+ 
+    b32 IsSet = FLVScalarI64(Lane, Op.LHS) != 0;
+ 
+    Item->Kind = FLV_RENDER_KIND_FLAG;
+    Flag->Ranges = ArenaPushArray(Lane->ResultMemPool, r1u64, 1);
+    Flag->Count = IsSet;
+    Flag->TotalDurationUSecs = IsSet ? Lane->FlightEndUSecs : 0;
+    Flag->LabelStringIndex = Emit->LabelStringIndex;
+    Flag->Ranges[0] = Rng((u64) 0, Lane->FlightEndUSecs);
+}
+
+INTERNAL
+FLV_KERNEL_FUNC_SIG(FLVKernelEMIT_TABLE_COLUMN)
+{
+    u32 EmitIndex = FLVGetOperandIndex(Op.RHS);
+    FLVTableRef* Ref = &Lane->TableRefs[EmitIndex];
+    FLVTableRef* HeadRef = &Lane->TableRefs[Ref->Head];
+    FLVRenderTable* Table = &Lane->Items[Ref->Head].Table;
+    FLVRenderTableColumn* Column = &Table->Columns[EmitIndex - Ref->Head];
+    u64 const* Mask = Lane->Mask ? Lane->Mask : Lane->MaskAll;
+    u8 const* Src = NULL;
+ 
+    if (FLVGetOperandKind(Op.LHS) == FLV_OPERAND_KIND_SLOT) {
+        FLVColumn const* Source = &Lane->Columns[FLVGetOperandIndex(Op.LHS)];
+ 
+        if (Source->Data)
+            Src = (u8 const*) Source->Data + Lane->ChunkBase * Column->Width;
+    } else if (!FLVTempIsMissing(Lane, Op.LHS)) {
+        Src = (u8 const*) FLVTempPtr(Lane, Op.LHS);
+    }
+ 
+    if (HeadRef->Stamp != Lane->ChunkBase) {
+        u64 const* Time = (u64 const*) Lane->BaseTime->Data + Lane->ChunkBase;
+        u64 Row = Table->RowCount;
+ 
+        HeadRef->Stamp = Lane->ChunkBase;
+        HeadRef->RowBase = Row;
+ 
+        for (u64 Index = 0; Index < Lane->ChunkCount; ++Index) {
+            Table->TimeUSecs[Row] = Time[Index];
+            Row += FLVMaskBit(Mask, Index);
+        }
+ 
+        Table->RowCount = Row;
+    }
+ 
+    if (!Src) {
+        Column->Data = NULL;
+ 
+        return;
+    }
+ 
+    u8* Dst = (u8*) Column->Data + HeadRef->RowBase * Column->Width;
+    u64 Width = Column->Width;
+ 
+    if (Lane->Mask) {
+        u64 Row = 0;
+ 
+        for (u64 Index = 0; Index < Lane->ChunkCount; ++Index) {
+            MemCpy(Dst + Row * Width, Src + Index * Width, Width);
+            Row += FLVMaskBit(Mask, Index);
+        }
+    } else {
+        MemCpy(Dst, Src, Lane->ChunkCount * Width);
+    }
+}
+
+INTERNAL
 FLV_KERNEL_FUNC_SIG(FLVKernelEMIT_MISSING)
 {
     Lane->Items[FLVGetOperandIndex(Op.RHS)].IsMissing = TRUE;
@@ -1319,29 +1399,85 @@ FLVKernelsRegionBegin(FLVLane* Lane, FLVRegion const* Region)
     // NOTE(nc): EmitsBegin
     for (u32 Index = 0; Index < Region->OpCount; ++Index) {
         FLVOp Op = Lane->Program->Ops[Region->HeadOp + Index];
-
-        if (Op.Kernel != FLV_KERNEL_EMIT_CURVE)
-            continue;
-
         u32 EmitIndex = FLVGetOperandIndex(Op.RHS);
-        FLVEmit const* Emit = &Lane->Program->Emits[EmitIndex];
-        FLVRenderItem* Item = &Lane->Items[EmitIndex];
-        FLVRenderCurve* Curve = &Item->Curve;
-
-        Item->Kind = FLV_RENDER_KIND_CURVE;
-        Curve->TimeUSecs = ArenaPushArray(
-           Lane->ResultMemPool, 
-           u64, 
-           Lane->RegionSampleCount
-       );
-        Curve->Values = ArenaPushArray(
-           Lane->ResultMemPool, 
-           f64, 
-           Lane->RegionSampleCount
-        );
-        Curve->Count = 0;
-        Curve->LabelStringIndex = Emit->LabelStringIndex;
-        Curve->Axis = Emit->Axis;
+ 
+        switch (Op.Kernel) {
+            default: {} break;
+ 
+            case FLV_KERNEL_EMIT_CURVE: {
+                FLVEmit const* Emit = &Lane->Program->Emits[EmitIndex];
+                FLVRenderItem* Item = &Lane->Items[EmitIndex];
+                FLVRenderCurve* Curve = &Item->Curve;
+ 
+                Item->Kind = FLV_RENDER_KIND_CURVE;
+                Curve->TimeUSecs = ArenaPushArray(
+                    Lane->ResultMemPool,
+                    u64,
+                    Lane->RegionSampleCount
+                );
+                Curve->Values = ArenaPushArray(
+                    Lane->ResultMemPool,
+                    f64,
+                    Lane->RegionSampleCount
+                );
+                Curve->Count = 0;
+                Curve->LabelStringIndex = Emit->LabelStringIndex;
+                Curve->Axis = Emit->Axis;
+            } break;
+ 
+            case FLV_KERNEL_EMIT_TABLE_COLUMN: {
+                FLVTableRef const* Ref = &Lane->TableRefs[EmitIndex];
+                FLVTableRef const* HeadRef = &Lane->TableRefs[Ref->Head];
+                FLVEmit const* Emit = &Lane->Program->Emits[EmitIndex];
+                FLVRenderItem* Item = &Lane->Items[Ref->Head];
+                FLVRenderTable* Table = &Item->Table;
+ 
+                if (Item->Kind != FLV_RENDER_KIND_TABLE) {
+                    Item->Kind = FLV_RENDER_KIND_TABLE;
+                    Table->TimeUSecs = ArenaPushArray(
+                        Lane->ResultMemPool,
+                        u64,
+                        Lane->RegionSampleCount
+                    );
+                    Table->Columns = ArenaPushArrayZero(
+                        Lane->ResultMemPool,
+                        FLVRenderTableColumn,
+                        HeadRef->Count
+                    );
+                    Table->RowCount = 0;
+                    Table->ColumnCount = HeadRef->Count;
+ 
+                    for (u32 C = 0; C < HeadRef->Count; ++C) {
+                        Table->Columns[C].LabelStringIndex = Lane->Program->Emits[Ref->Head + C].LabelStringIndex;
+                    }
+                }
+ 
+                FLVRenderTableColumn* Column = &Table->Columns[EmitIndex - Ref->Head];
+ 
+                if (FLVGetOperandKind(Op.LHS) == FLV_OPERAND_KIND_SLOT) {
+                    FLVColumn const* Source = &Lane->Columns[
+                        FLVGetOperandIndex(Op.LHS)
+                    ];
+ 
+                    Column->Kind = Source->Kind;
+                    Column->Width = Source->ElementSize;
+                } else {
+                    Column->Kind = (Emit->ElementKind == FLV_ELEMENT_KIND_F64)
+                        ? FLI_SCALAR_KIND_F64
+                        : FLI_SCALAR_KIND_I64;
+                    Column->Width = 8;
+                }
+ 
+                if (Column->Width) {
+                    Column->Data = ArenaPushSize(
+                        Lane->ResultMemPool,
+                        Lane->RegionSampleCount * Column->Width,
+                        8,
+                        FALSE
+                    );
+                }
+            } break;
+        }
     }
 }
 
@@ -1458,7 +1594,6 @@ FLVKernelsRangeReset(FLVLane* Lane, FLVRegion const* Region)
 }
 
 #define FLVKernelNONE              FLVKernelStub
-#define FLVKernelEMIT_TABLE_COLUMN FLVKernelStub
 
 #define X(Name, Inputs, Dst, Flags) FLVKernel##Name,
 FLVKernelFuncType* const FLV_KERNEL_TABLE[FLV_KERNEL_COUNT] = {
@@ -1467,4 +1602,3 @@ FLVKernelFuncType* const FLV_KERNEL_TABLE[FLV_KERNEL_COUNT] = {
 #undef X
 
 #undef FLVKernelNONE
-#undef FLVKernelEMIT_TABLE_COLUMN

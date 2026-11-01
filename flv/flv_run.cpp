@@ -1,15 +1,18 @@
-#include "flv_stdlib.h"
 #include "nc_defines.h"
 #include "nc_types.h"
 #include "nc_memory.h"
 #include "nc_arena.h"
 #include "nc_string.h"
 #include "nc_log.h"
+
 #include "fli.h"
+
 #include "flv_run.h"
 #include "flv_lower.h"
 #include "flv_kernel.h"
 #include "flv_bind.h"
+#include "flv_stdlib.h"
+#include "flv_token.h"
 
 void
 FLVLaneInit(
@@ -61,8 +64,35 @@ FLVLaneInit(
         FLVRenderItem,
         Program->EmitCount
     );
+    Lane->TableRefs = ArenaPushArrayZero(
+        MemPool,
+        FLVTableRef,
+        Program->EmitCount
+    );
 
-    if (InfosCount > 1) {
+    for (u32 Index = 0; Index < Program->EmitCount; ++Index) {
+        FLVEmit const* Emit = &Program->Emits[Index];
+        u32 Head = Index;
+
+        if (Emit->DisplayKind != TOKEN_KIND_TABLE) {
+            ++Index;
+            continue;
+        }
+
+        while (
+            Index < Program->EmitCount &&
+            Program->Emits[Index].DisplayKind == TOKEN_KIND_TABLE &&
+            Program->Emits[Index].Group == Emit->Group
+        ) {
+            Lane->TableRefs[Index].Head = Head;
+            ++Index;
+        }
+
+        Lane->TableRefs[Head].Count = Index - Head;
+        Lane->TableRefs[Head].Stamp = U64_MAX;
+    }
+
+    if (InfosCount) {
         FLIFileInfo* Info = &Infos[InfosCount - 1];
 
         Lane->FlightEndUSecs = Info->EndTimeUSecs - Info->StartTimeUSecs;
@@ -358,6 +388,13 @@ FLVRenderItemsPrint(Arena* MemPool, FLVLane const* Lane)
     FLVProgram const* Program = Lane->Program;
 
     for (u32 Index = 0; Index < Program->EmitCount; ++Index) {
+        if (
+            Program->Emits[Index].DisplayKind == TOKEN_KIND_TABLE &&
+            Lane->TableRefs[Index].Head != Index
+        ) {
+            continue;
+        }
+
         FLVRenderItem const* Item = &Lane->Items[Index];
         Str8 Label = Program->Strings[Program->Emits[Index].LabelStringIndex];
 
@@ -452,6 +489,129 @@ FLVRenderItemsPrint(Arena* MemPool, FLVLane const* Lane)
                             "      [%llu us .. %llu us]",
                             Flag->Ranges[RangeIndex].Min,
                             Flag->Ranges[RangeIndex].Max
+                        )
+                    );
+                }
+            } break;
+
+            case FLV_RENDER_KIND_TABLE: {
+                FLVRenderTable const* Table = &Item->Table;
+ 
+                ListPush(
+                    MemPool,
+                    &Result,
+                    ArenaPushStrFmt(
+                        MemPool,
+                        "  emit %u: table, %llu rows, %u columns",
+                        Index,
+                        Table->RowCount,
+                        Table->ColumnCount
+                    )
+                );
+ 
+                for (u32 C = 0; C < Table->ColumnCount; ++C) {
+                    FLVRenderTableColumn const* Column = &Table->Columns[C];
+                    Str8 Name = Program->Strings[Column->LabelStringIndex];
+                    Str8 Cell = "-"_s8;
+ 
+                    if (Column->Data && Table->RowCount) {
+                        switch (Column->Kind) {
+                            default: {
+                                Cell = Str((u8*) Column->Data, Column->Width);
+                            } break;
+ 
+                            case FLI_SCALAR_KIND_U8: { 
+                                Cell = ArenaPushStrFmt(
+                                    MemPool, 
+                                    "%u", 
+                                    *(u8*) Column->Data
+                                ); 
+                            } break;
+
+                            case FLI_SCALAR_KIND_I8: { 
+                                Cell = ArenaPushStrFmt(
+                                    MemPool, 
+                                    "%d", 
+                                    *(i8*) Column->Data
+                                ); 
+                            } break;
+
+                            case FLI_SCALAR_KIND_U16: { 
+                                Cell = ArenaPushStrFmt(
+                                    MemPool, 
+                                    "%u", 
+                                    *(u16*) Column->Data
+                                ); 
+                            } break;
+
+                            case FLI_SCALAR_KIND_I16: { 
+                                Cell = ArenaPushStrFmt(
+                                    MemPool, 
+                                    "%d", 
+                                    *(i16*) Column->Data
+                                ); 
+                            } break;
+
+                            case FLI_SCALAR_KIND_U32: { 
+                                Cell = ArenaPushStrFmt(
+                                    MemPool, 
+                                    "%u", 
+                                    *(u32*) Column->Data
+                                ); 
+                            } break;
+
+                            case FLI_SCALAR_KIND_I32: { 
+                                Cell = ArenaPushStrFmt(
+                                    MemPool, 
+                                    "%d", 
+                                    *(i32*) Column->Data
+                                ); 
+                            } break;
+
+                            case FLI_SCALAR_KIND_U64: { 
+                                Cell = ArenaPushStrFmt(
+                                    MemPool, 
+                                    "%llu", 
+                                    *(u64*) Column->Data
+                                ); 
+                            } break;
+
+                            case FLI_SCALAR_KIND_I64: { 
+                                Cell = ArenaPushStrFmt(
+                                    MemPool, 
+                                    "%lld", 
+                                    *(i64*) Column->Data
+                                ); 
+                            } break;
+
+                            case FLI_SCALAR_KIND_F32: { 
+                                Cell = ArenaPushStrFmt(
+                                    MemPool, 
+                                    "%f", 
+                                    *(f32*) Column->Data
+                                ); 
+                            } break;
+
+                            case FLI_SCALAR_KIND_F64: { 
+                                Cell = ArenaPushStrFmt(
+                                    MemPool, 
+                                    "%f", 
+                                    *(f64*) Column->Data
+                                ); 
+                            } break;
+                        }
+                    }
+ 
+                    ListPush(
+                        MemPool,
+                        &Result,
+                        ArenaPushStrFmt(
+                            MemPool,
+                            "      %S: kind %u, width %u, row 0 = %S",
+                            PRINT_STR(Name),
+                            Column->Kind,
+                            Column->Width,
+                            PRINT_STR(Cell)
                         )
                     );
                 }
