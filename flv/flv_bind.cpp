@@ -3,12 +3,13 @@
 #include "nc_arena.h"
 #include "nc_string.h"
 #include "nc_tls.h"
+
 #include "fli.h"
-#include "flv_bind.h"
+
+// #include "flv_bind.h"
 #include "flv_schema.h"
 #include "flv_stdlib.h"
-#include "flv_symbol_table.h"
-#include "flv_intern.h"
+// #include "flv_compile.h"
  
 #define EMPTY_FLV_INDEX_VALUE 0
  
@@ -65,14 +66,14 @@ BindMessageType(FLIParsed* FLI, FLVBoundSlot* Bound, u32 MessageTypeIndex)
     }
 }
  
-FLVBoundSlot*
+FLVBoundSlot* 
 FLVBindSlots(
     Arena* MemPool, 
     FLIParsed* FLI, 
     FLVSlot const* Slots, 
+    FLVSlotName const* SlotNames, 
     u32 SlotCount
 ) {
-    NamePool* Names = GetTLS()->SYMBOL_TABLE->Names;
     FLVBoundSlot* Result = ArenaPushArray(MemPool, FLVBoundSlot, SlotCount);
     FLINameMap* MessageMap = FLIElementFromNameIndex(
         FLI, 
@@ -125,7 +126,7 @@ FLVBindSlots(
                 u32 MessageTypeIndex = MessageTypeIndexFromName(
                     FLI, 
                     &ParsedMessageMap, 
-                    GetName(Names, Slot->Message)
+                    SlotNames[Index].Message
                 );
  
                 if (MessageTypeIndex == U32_MAX)
@@ -137,8 +138,8 @@ FLVBindSlots(
             case FLV_SLOT_KIND_FIELD: {
                 u32 ColumnIndex = FLIColumnIndexFromNames(
                     FLI, 
-                    GetName(Names, Slot->Message), 
-                    GetName(Names, Slot->Field)
+                    SlotNames[Index].Message,
+                    SlotNames[Index].Field
                 );
  
                 if (!FLIIndexIsValid(ColumnIndex)) {
@@ -160,7 +161,7 @@ FLVBindSlots(
             case FLV_SLOT_KIND_MODE: {
                 Bound->ModeNumber = FLVModeNumberFromName(
                     VehicleKind, 
-                    GetName(Names, Slot->Field)
+                    SlotNames[Index].Field
                 );
                 Bound->IsMissing = (Bound->ModeNumber == FLV_MODE_NUMBER_NONE);
             } break;

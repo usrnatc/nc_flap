@@ -2,8 +2,10 @@
 #define __FLV_BIND_H__
 
 #include "nc_types.h"
+
 #include "fli.h"
-#include "flv_schema.h"
+
+#include "flv_compile.h"
 
 struct Arena;
 
@@ -27,6 +29,6 @@ struct FLVBoundSlot {
 
 
 // @functions__________________________________________________________________
-FLVBoundSlot* FLVBindSlots(Arena* MemPool, FLIParsed* FLI, FLVSlot const* Flots, u32 SlotsCount);
+FLVBoundSlot* FLVBindSlots(Arena* MemPool, FLIParsed* FLI, FLVSlot const* Slots, FLVSlotName const* SlotNames, u32 SlotCount);
 
 #endif // __FLV_BIND_H__

@@ -3,8 +3,9 @@
 
 #include "nc_arena.h"
 #include "nc_string.h"
-#include "flv_base_types.h"
-#include "flv_ast.h"
+
+// #include "flv_base_types.h"
+// #include "flv_ast.h"
 
 struct NamePool;
 

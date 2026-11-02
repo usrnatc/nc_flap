@@ -2,6 +2,7 @@
 #define __FLV_TYPE_CHECK_H__
 
 #include "nc_types.h"
+
 #include "flv_base_types.h"
 #include "flv_schema.h"
 #include "flv_type.h"

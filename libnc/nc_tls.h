@@ -28,6 +28,7 @@ struct ThreadLocalStorage {
     struct UIState*          UI_STATE;
     struct ConfigContext*    CFG_CTX;
     struct SymTab*           SYMBOL_TABLE;
+    struct FLVCompiler*      FLV_COMPILER;
     struct ParserState*      PARSER_STATE;
     Arena*                   ARENA_THREAD_SCRATCH_POOL[ARENA_SCRATCH_COUNT];
 };

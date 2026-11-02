@@ -2,13 +2,14 @@
 #include "nc_types.h"
 #include "nc_string.h"
 #include "nc_tls.h"
-#include "flv_stdlib.h"
-#include "flv_symbol_table.h"
-#include "flv_intern.h"
-#include "flv_type.h"
-#include "flv_parser.h"
 
-FLVBuiltin FLV_STDLIB_TABLE[FLV_STDLIB_ID_COUNT] = {
+// #include "flv_stdlib.h"
+// #include "flv_symbol_table.h"
+// #include "flv_intern.h"
+// #include "flv_type.h"
+// #include "flv_parser.h"
+
+FLVBuiltin const FLV_STDLIB_TEMPLATE[FLV_STDLIB_ID_COUNT] = {
     {
         Str8Lit("mean"),
         FLV_SIGNATURE_KIND_SERIES_TO_F64,
@@ -100,9 +101,6 @@ FLVBuiltin FLV_STDLIB_TABLE[FLV_STDLIB_ID_COUNT] = {
         FALSE
     }
 };
-
-TypeIndex FLV_STDLIB_FLIGHT = {};
-BindIndex FLV_STDLIB_ARMED = {};
 
 #define X(N, V) { Str8Lit(#N), V },
 

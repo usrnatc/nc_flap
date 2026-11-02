@@ -3,10 +3,10 @@
 
 #include "nc_types.h"
 #include "nc_string.h"
+
 #include "fli.h"
-#include "flv_lower.h"
-#include "flv_bind.h"
-#include "flv_visualisation.h"
+
+#include "flv_compile.h"
 
 struct Arena;
 
@@ -98,7 +98,7 @@ struct FLVLane {
 void FLVLaneInit(FLVLane* Lane, Arena* MemPool, Arena* ResultMemPool, FLVProgram const* Program, FLIParsed* FLI, FLVBoundSlot const* Slots, u32 SlotsCount, u32 FlightIndex);
 void FLVLaneRun(FLVLane* Lane);
 Str8List FLVRenderItemsPrint(Arena* MemPool, FLVProgram const* Program, FLVRunItem* Items);
-FLVRunSet* FLVRunSetInit(Arena* MemPool, FLVLowered const* Lowered, FLVSlot const* Slots, u32 SlotsCount, FLIParsed** Flights, u32 FlightsCount);
+FLVRunSet* FLVRunSetInit(Arena* MemPool, FLVLowered const* Lowered, FLVSlot const* Slots, FLVSlotName const* SlotNames, u32 SlotsCount, FLIParsed** Flights, u32 FlightsCount);
 void FLVRunSetExecute(FLVRunSet* Set);
 void FLVRunSetSummarise(FLVRunSet* Set);
 

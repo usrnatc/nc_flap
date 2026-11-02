@@ -3,9 +3,10 @@
 #include "nc_print.h"
 #include "nc_string.h"
 #include "nc_tls.h"
-#include "flv_type_check.h"
+
+// #include "flv_type_check.h"
 #include "flv_ast.h"
-#include "flv_type.h"
+// #include "flv_type.h"
 #include "flv_token.h"
 #include "flv_symbol_table.h"
 #include "flv_parser.h"

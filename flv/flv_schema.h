@@ -2,6 +2,7 @@
 #define __FLV_SCHEMA_H__
 
 #include "nc_types.h"
+
 #include "flv_base_types.h"
 
 struct Arena;

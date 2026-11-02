@@ -2,10 +2,11 @@
 #include "nc_memory.h"
 #include "nc_arena.h"
 #include "nc_tls.h"
-#include "flv_symbol_table.h"
-#include "flv_token.h"
-#include "flv_intern.h"
-#include "flv_type.h"
+
+// #include "flv_symbol_table.h"
+// #include "flv_token.h"
+// #include "flv_intern.h"
+// #include "flv_type.h"
 
 #if !defined(AST_NODE_INDEX_INVALID)
     #define AST_NODE_INDEX_INVALID U32_MAX

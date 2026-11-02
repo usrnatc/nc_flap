@@ -1,12 +1,11 @@
 #include "nc_defines.h"
+#include "nc_tls.h"
 #include "nc_types.h"
 #include "nc_string.h"
 #include "nc_simd.h"
-#include "nc_memory.h"
 #include "nc_arena.h"
-#include "flv_lexer.h"
-#include "flv_token.h"
-#include "flv_intern.h"
+
+#include "flv_compiler.h"
 
 // TODO(nathan): Investigate parallel -- can run sublexers in parallel
 
@@ -36,7 +35,6 @@ global const TokenKind KEYWORD_KINDS[] = {
 };
 
 global const u64 KEYWORDS_COUNT = ARRAY_COUNT(KEYWORDS);
-global u32 KEYWORD_NAME_BASE = NAME_INDEX_INVALID_VALUE;
 
 // ((((val >> 32) ^ val) & 0xffffffff) * (uint64_t)3523216747) >> 32;
 //    for (int i = 1; i < num_keywords; ++i) {

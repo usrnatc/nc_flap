@@ -2,10 +2,11 @@
 #define __FLV_LEXER_H__
 
 #include "nc_types.h"
-#include "nc_string.h"
-#include "flv_token.h"
-#include "flv_intern.h"
 #include "nc_simd.h"
+#include "nc_string.h"
+
+// #include "flv_token.h"
+// #include "flv_intern.h"
 
 struct LexerState {
     TokenKind* Kinds;

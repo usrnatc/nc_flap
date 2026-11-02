@@ -3,9 +3,8 @@
 
 #include "nc_types.h"
 #include "nc_string.h"
-#include "flv_base_types.h"
-#include "flv_type.h"
-#include "flv_token.h"
+
+#include "flv_compiler.h"
 
 struct AST;
 struct ASTNodeScope;
@@ -98,7 +97,6 @@ struct ParserState {
 
 // @runtime____________________________________________________________________
 extern const OpName OP_NAME_TABLE[];
-extern NameIndex OP_NAMES[256];
 
 // @functions__________________________________________________________________
 ExprIndex ParsePrimary(void);

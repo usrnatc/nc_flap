@@ -6,6 +6,7 @@
 #include "nc_log.h"
 #include "nc_tls.h"
 #include "nc_file.h"
+
 #include "flv_parser.h"
 #include "flv_ast.h"
 #include "flv_token.h"
@@ -13,7 +14,7 @@
 #include "flv_intern.h"
 #include "flv_type.h"
 #include "flv_type_check.h"
-#include "flv_lexer.h"
+// #include "flv_lexer.h"
 
 void
 FLVLogErrorAt(SourceLoc Loc, char const* Fmt, ...)

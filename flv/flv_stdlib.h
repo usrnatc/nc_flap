@@ -3,7 +3,8 @@
 
 #include "nc_types.h"
 #include "nc_string.h"
-#include "flv_base_types.h"
+
+#include "flv_compiler.h"
 
 // @defines____________________________________________________________________
 typedef u16 FLVStdLibID;
@@ -127,9 +128,7 @@ struct FLVBuiltin {
 };
 
 // @runtime____________________________________________________________________
-extern FLVBuiltin FLV_STDLIB_TABLE[FLV_STDLIB_ID_COUNT];
-extern TypeIndex FLV_STDLIB_FLIGHT;
-extern BindIndex FLV_STDLIB_ARMED;
+extern FLVBuiltin const FLV_STDLIB_TEMPLATE[FLV_STDLIB_ID_COUNT];
 extern FLVModeName const* const FLV_MODE_TABLE[FLV_VEHICLE_KIND_COUNT];
 extern u32 const FLV_MODE_TABLE_COUNT[FLV_VEHICLE_KIND_COUNT];
 

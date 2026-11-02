@@ -6,11 +6,11 @@
 
 #include "fli.h"
 
-#include "flv_run.h"
-#include "flv_lower.h"
+// #include "flv_run.h"
+// #include "flv_lower.h"
 #include "flv_kernel.h"
-#include "flv_bind.h"
-#include "flv_token.h"
+// #include "flv_bind.h"
+// #include "flv_token.h"
 
 void
 FLVLaneInit(
@@ -384,6 +384,7 @@ FLVRunSetInit(
     Arena* MemPool,
     FLVLowered const* Lowered,
     FLVSlot const* Slots,
+    FLVSlotName const* SlotNames,
     u32 SlotsCount,
     FLIParsed** Flights,
     u32 FlightCount
@@ -405,6 +406,7 @@ FLVRunSetInit(
             MemPool,
             Flights[Flight],
             Slots,
+            SlotNames,
             SlotsCount
         );
     }

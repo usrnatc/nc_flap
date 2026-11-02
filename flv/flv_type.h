@@ -3,8 +3,10 @@
 
 #include "nc_types.h"
 #include "nc_arena.h"
+
 #include "flv_base_types.h"
 #include "flv_intern.h"
+#include "flv_compiler.h"
 
 // @defines____________________________________________________________________
 #define TYPE_INDEX_INVALID_TYPE U32_MAX
@@ -92,7 +94,7 @@ struct TypeTable {
 };
 
 // @runtime____________________________________________________________________
-extern TypeTable* TYPE_TABLE;
+
 
 // @functions__________________________________________________________________
 void TypeTableInit(NamePool* Names);

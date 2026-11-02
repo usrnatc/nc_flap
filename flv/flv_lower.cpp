@@ -4,10 +4,11 @@
 #include "nc_arena.h"
 #include "nc_string.h"
 #include "nc_tls.h"
-#include "flv_lower.h"
+
+// #include "flv_lower.h"
 #include "flv_kernel.h"
 #include "flv_ast.h"
-#include "flv_type.h"
+// #include "flv_type.h"
 #include "flv_token.h"
 #include "flv_symbol_table.h"
 #include "flv_parser.h"
@@ -2427,9 +2428,9 @@ OperandStr(
     Arena* MemPool, 
     FLVProgram const* Program, 
     FLVSlot const* Slots, 
+    FLVSlotName const* SlotNames,
     FLVOperand Op
 ) {
-    NamePool* Names = GetTLS()->SYMBOL_TABLE->Names;
     u32 Index = FLVGetOperandIndex(Op);
 
     switch (FLVGetOperandKind(Op)) {
@@ -2441,29 +2442,33 @@ OperandStr(
 
         case FLV_OPERAND_KIND_SLOT: {
             FLVSlot const* Slot = &Slots[Index];
-            Str8 Message = (Slot->Message.V != NAME_INDEX_INVALID_VALUE) 
-                ? GetName(Names, Slot->Message) 
-                : "mode"_s8;
-            Str8 Field = (Slot->Field.V != NAME_INDEX_INVALID_VALUE) 
-                ? GetName(Names, Slot->Field) 
-                : "*"_s8;
-
+            FLVSlotName const* Name = &SlotNames[Index];
+            Str8 Message = (Slot->Kind == FLV_SLOT_KIND_MODE) 
+                ? "mode"_s8 
+                : Name->Message;
+            Str8 Field = (Slot->Kind == FLV_SLOT_KIND_MODE) 
+                ? Name->Mode 
+                : Name->Field;
+ 
+            if (!Field.Size)
+                Field = "*"_s8;
+ 
             if (Slot->Instance == FLV_INSTANCE_ANY) {
                 return ArenaPushStrFmt(
-                    MemPool, 
-                    "slot%u<%S.%S>", 
-                    Index, 
-                    PRINT_STR(Message), 
+                    MemPool,
+                    "slot%u<%S.%S>",
+                    Index,
+                    PRINT_STR(Message),
                     PRINT_STR(Field)
                 );
             }
-
+ 
             return ArenaPushStrFmt(
-                MemPool, 
-                "slot%u<%S[%u].%S>", 
-                Index, 
-                PRINT_STR(Message), 
-                Slot->Instance, 
+                MemPool,
+                "slot%u<%S[%u].%S>",
+                Index,
+                PRINT_STR(Message),
+                Slot->Instance,
                 PRINT_STR(Field)
             );
         } break;
@@ -2502,7 +2507,8 @@ Str8List
 FLVProgramPrint(
     Arena* MemPool, 
     FLVProgram const* Program, 
-    FLVSlot const* Slots
+    FLVSlot const* Slots,
+    FLVSlotName const* SlotNames
 ) {
     Str8List Result = {};
 
@@ -2538,7 +2544,8 @@ FLVProgramPrint(
                             OperandStr(
                                 MemPool, 
                                 Program, 
-                                Slots, 
+                                Slots,
+                                SlotNames,
                                 FLVOperandAlloc(
                                     FLV_OPERAND_KIND_SLOT, 
                                     Region->BaseSlot
@@ -2550,6 +2557,7 @@ FLVProgramPrint(
                                 MemPool, 
                                 Program, 
                                 Slots, 
+                                SlotNames,
                                 Region->RangeSelection
                             )
                         ),
@@ -2558,6 +2566,7 @@ FLVProgramPrint(
                                 MemPool, 
                                 Program, 
                                 Slots, 
+                                SlotNames,
                                 Region->Mask
                             )
                         )
@@ -2590,6 +2599,7 @@ FLVProgramPrint(
                                 MemPool, 
                                 Program, 
                                 Slots, 
+                                SlotNames,
                                 Region->Operand
                             )
                         ), 
@@ -2629,7 +2639,15 @@ FLVProgramPrint(
                         MemPool, 
                         "    %S %S \"%S\" axis=%u", 
                         PRINT_STR(FLV_KERNEL_NAME_TABLE[Op->Kernel]), 
-                        PRINT_STR(OperandStr(MemPool, Program, Slots, Op->LHS)),
+                        PRINT_STR(
+                            OperandStr(
+                                MemPool, 
+                                Program, 
+                                Slots,
+                                SlotNames,
+                                Op->LHS
+                            )
+                        ),
                         PRINT_STR(Program->Strings[E->LabelStringIndex]),
                         E->Axis
                     )
@@ -2641,10 +2659,34 @@ FLVProgramPrint(
                     ArenaPushStrFmt(
                         MemPool, 
                         "    %S = %S %S %S", 
-                        PRINT_STR(OperandStr(MemPool, Program, Slots, Op->Dst)),
+                        PRINT_STR(
+                            OperandStr(
+                                MemPool, 
+                                Program, 
+                                Slots, 
+                                SlotNames,
+                                Op->Dst
+                            )
+                        ),
                         PRINT_STR(FLV_KERNEL_NAME_TABLE[Op->Kernel]), 
-                        PRINT_STR(OperandStr(MemPool, Program, Slots, Op->LHS)),
-                        PRINT_STR(OperandStr(MemPool, Program, Slots, Op->RHS))
+                        PRINT_STR(
+                            OperandStr(
+                                MemPool, 
+                                Program, 
+                                Slots,
+                                SlotNames,
+                                Op->LHS
+                            )
+                        ),
+                        PRINT_STR(
+                            OperandStr(
+                                MemPool, 
+                                Program, 
+                                Slots, 
+                                SlotNames,
+                                Op->RHS
+                            )
+                        )
                     )
                 );
             }

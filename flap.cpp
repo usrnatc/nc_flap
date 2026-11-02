@@ -15,6 +15,7 @@
 #include "flv_type_check.h"
 #include "flv_bind.h"
 #include "flv_lower.h"
+#include "flv_compile.h"
 #include "flv_kernel.h"
 #include "flv_run.h"
 
@@ -33,6 +34,7 @@
 #include "flv_type_check.cpp"
 #include "flv_bind.cpp"
 #include "flv_lower.cpp"
+#include "flv_compile.cpp"
 #include "flv_kernel.cpp"
 #include "flv_run.cpp"
 
@@ -92,160 +94,85 @@ AsyncThreadEntryPoint(void* Params)
     }
 }
 
+struct FLVTestView {
+    Str8   Path;
+    Arena* MemPool;
+    u64    Hash;
+    b32*   Printed;
+    u32    Count;
+    b32    HasError;
+};
+
 INTERNAL void
 FLVTest(
-    Arena* MemPool,
-    FLIParsed** Flights,
-    u32 FlightsCount,
+    FLIKey const* Keys,
+    u64 KeysCount,
     char const** ViewPaths,
-    u32 ViewCount
+    u32 ViewCount,
+    u64 IdleUSecs
 ) {
-    NamePool* Names = NamePoolInit();
-
-    PROFILE(SymTabInitTimer) {
-        SymTabInit(Names);
-    }
-
-    PROFILE(BuiltinTypesInitTimer) {
-        BuiltinTypesInit();
-    }
-
-    PROFILE(TypeTableInitTimer) {
-        TypeTableInit(Names);
-    }
-
-    PROFILE(LexerInternKeywordsTimer) {
-        LexerInternKeywords(Names);
-    }
-
-    PROFILE(ParserInternNamesTimer) {
-        ParserInternNames(Names);
-    }
-
-    PROFILE(FLVStdLibInitTimer) {
-        FLVStdLibInit();
-    }
-
-    FLVSchema Schema = {};
-
-    PROFILE(FLVSchemaBuildTimer) {
-        FLVSchemaBuild(MemPool, Flights, FlightsCount, &Schema);
-    }
-
-    PrintOut(
-        "\nschema: %u messages, %u fields, %u flights\n",
-        Schema.MessageCount,
-        Schema.FieldCount,
-        FlightsCount
+    TempArena Scratch = GetScratch(NULL, 0);
+    FLVTestView* Views = ArenaPushArrayZero(
+        Scratch.MemPool, 
+        FLVTestView, 
+        ViewCount
     );
-
+    u64 LastChangeUSecs = TimeNow();
+ 
     for (u32 Index = 0; Index < ViewCount; ++Index) {
-        Arena* ViewMemPool = ArenaAlloc();
-        Str8 Path = Str((char*) ViewPaths[Index]);
-        Str8 Source = ReadFileContentsEx(ViewMemPool, Path, NC_SIMD_ALIGN256);
-
-        PrintOut("\n=== %S ===\n", PRINT_STR(Path));
-
-        if (!Source.Size) {
-            PrintOut("could not read file\n"_s8);
-            ArenaRelease(ViewMemPool);
-            continue;
-        }
-
-        ParsedFile Root = {};
-
-        Root.Path = Path;
-        Root.Source = Source;
-
-        PROFILE(LexStringTimer) {
-            Root.Tokens = LexString(ViewMemPool, Source, Names);
-        }
-
-        PROFILE(LineOffsetsFromSourceTimer) {
-            Root.LineOffsets = LineOffsetsFromSource(
-                ViewMemPool, 
-                Source, 
-                &Root.LineCount
-            );
-        }
-
-        AST* Tree = NULL;
-
-        PROFILE(ParseTokensTimer) {
-            Tree = ParseTokens(ViewMemPool, &Root, NULL, 0);
-        }
-
-        FLVSlot* Slots = NULL;
-        u32 SlotsCount = 0;
-
-        PROFILE(CheckASTTimer) {
-            CheckAST(ViewMemPool, Tree, &Schema, &Slots, &SlotsCount);
-        }
-
-        FLVLowered Lowered = {};
-
-        PROFILE(FLVLowerTimer) {
-            Lowered = FLVLower(
-                ViewMemPool,
-                Tree,
-                &Schema,
-                Slots,
-                SlotsCount
-            );
-        }
-
-        PrintOut(
-            "%u slots, %u analyses, %u layout nodes, errors: %s\n",
-            SlotsCount,
-            Lowered.ProgramCount,
-            Lowered.LayoutCount,
-            Lowered.HasError ? "YES" : "NO"
-        );
-
-        for (u32 Program = 0; Program < Lowered.ProgramCount; ++Program) {
-            Str8List Lines = FLVProgramPrint(
-                ViewMemPool, 
-                &Lowered.Program[Program], 
-                Slots
-            );
-
-            for (Str8Node* Node = Lines.Head; Node; Node = Node->Next) {
-                PrintOut("%S\n", PRINT_STR(Node->String));
-            }
-        }
-
-        if (FlightsCount) {
-            FLVRunSet* Set = NULL;
+        Views[Index].Path = Str((char*) ViewPaths[Index]);
+        Views[Index].MemPool = ArenaAlloc();
+    }
  
-            PROFILE(FLVRunSetInitTimer) {
-                Set = FLVRunSetInit(
-                    ViewMemPool,
-                    &Lowered,
-                    Slots,
-                    SlotsCount,
-                    Flights,
-                    FlightsCount
+    for (;;) {
+        Access* Acc = AccessOpen();
+        b32 Changed = FALSE;
+ 
+        for (u32 ViewIndex = 0; ViewIndex < ViewCount; ++ViewIndex) {
+            FLVTestView* View = &Views[ViewIndex];
+            FLVUnit* Unit = FLVUnitFromPath(
+                Acc, 
+                View->Path, 
+                Keys, 
+                KeysCount, 
+                0
+            );
+ 
+            if (!Unit)
+                continue;
+ 
+            if (Unit->Hash != View->Hash) {
+                ArenaClear(View->MemPool);
+                View->Hash = Unit->Hash;
+                View->Count = Unit->Lowered.ProgramCount * (u32) KeysCount;
+                View->Printed = ArenaPushArrayZero(
+                    View->MemPool, 
+                    b32, 
+                    View->Count
                 );
-            }
+                View->HasError = Unit->HasError;
+                Changed = TRUE;
  
-            PROFILE(FLVRunSetExecuteTimer) {
-                FLVRunSetExecute(Set);
-            }
+                PrintOut(
+                    "\n=== %S === hash %016llx, %u slots, %u analyses, %u layout nodes, errors: %s\n",
+                    PRINT_STR(View->Path),
+                    Unit->Hash,
+                    Unit->SlotsCount,
+                    Unit->Lowered.ProgramCount,
+                    Unit->Lowered.LayoutCount,
+                    Unit->HasError ? "YES" : "NO"
+                );
  
-            PROFILE(FLVRunSetSummarizeTimer) {
-                FLVRunSetSummarize(Set);
-            }
- 
-            for (u32 Flight = 0; Flight < FlightsCount; ++Flight) {
-                for (u32 Program = 0; Program < Lowered.ProgramCount; ++Program) {
-                    FLVRunItem* Item = FLVRunItemAt(Set, Flight, Program);
- 
-                    PrintOut("analysis %u on flight %u:\n", Program, Flight);
- 
-                    Str8List Lines = FLVRenderItemsPrint(
-                        ViewMemPool,
-                        &Lowered.Program[Program],
-                        Item->Items
+                for (
+                    u32 Program = 0; 
+                    Program < Unit->Lowered.ProgramCount; 
+                    ++Program
+                ) {
+                    Str8List Lines = FLVProgramPrint(
+                        View->MemPool,
+                        &Unit->Lowered.Program[Program],
+                        Unit->Slots,
+                        Unit->SlotNames
                     );
  
                     for (Str8Node* Node = Lines.Head; Node; Node = Node->Next)
@@ -253,46 +180,69 @@ FLVTest(
                 }
             }
  
-            for (u32 Program = 0; Program < Lowered.ProgramCount; ++Program) {
-                FLVProgram const* P = &Lowered.Program[Program];
+            if (View->HasError)
+                continue;
  
-                for (u32 Emit = 0; Emit < P->EmitCount; ++Emit) {
-                    if (P->Emits[Emit].DisplayKind != TOKEN_KIND_FLAG)
+            for (
+                u32 Program = 0; 
+                Program < Unit->Lowered.ProgramCount; 
+                ++Program
+            ) {
+                for (u64 Flight = 0; Flight < KeysCount; ++Flight) {
+                    u32 Slot = Program * (u32) KeysCount + (u32) Flight;
+ 
+                    if (View->Printed[Slot])
                         continue;
  
-                    PrintOut(
-                        "flag \"%S\" by flight:",
-                        PRINT_STR(P->Strings[P->Emits[Emit].LabelStringIndex])
+                    FLVRenderItem* Items = FLVResultFromUnit(
+                        Acc,
+                        Unit,
+                        Keys,
+                        KeysCount,
+                        Keys[Flight],
+                        Program,
+                        0
                     );
  
-                    for (u32 Flight = 0; Flight < FlightsCount; ++Flight) {
-                        FLVFlagSummary* F = FLVFlagAt(
-                            Set, 
-                            Program, 
-                            Emit, 
-                            Flight
-                        );
+                    if (!Items)
+                        continue;
  
-                        PrintOut(
-                            " %s",
-                            F->IsMissing ? "?" : (F->IsSet ? "X" : ".")
-                        );
-                    }
+                    View->Printed[Slot] = TRUE;
+                    Changed = TRUE;
  
-                    PrintOut("\n"_s8);
+                    PrintOut(
+                        "[%S] analysis %u on flight %llu:\n",
+                        PRINT_STR(StrSkipLastSlash(View->Path)),
+                        Program,
+                        Flight
+                    );
+ 
+                    Str8List Lines = FLVRenderItemsPrint(
+                        View->MemPool,
+                        &Unit->Lowered.Program[Program],
+                        Items
+                    );
+ 
+                    for (Str8Node* Node = Lines.Head; Node; Node = Node->Next)
+                        PrintOut("%S\n", PRINT_STR(Node->String));
                 }
             }
- 
-            for (u32 Index = 0; Index < Set->ItemsCount; ++Index)
-                ArenaRelease(Set->Items[Index].ResultMemPool);
         }
-
-        ArenaRelease(ViewMemPool);
+ 
+        AccessClose(Acc);
+ 
+        if (Changed)
+            LastChangeUSecs = TimeNow();
+        else if (TimeNow() - LastChangeUSecs > IdleUSecs)
+            break;
+ 
+        AsyncWaitTick(TimeNow() + MILLISECONDS(50));
     }
-
-    PROFILE(SymTabResetTimer) {
-        SymTabReset();
-    }
+ 
+    for (u32 Index = 0; Index < ViewCount; ++Index)
+        ArenaRelease(Views[Index].MemPool);
+ 
+    ReleaseScratch(Scratch);
 }
 
 void 
@@ -357,67 +307,22 @@ EntryPoint(CommandLine* CLI)
         FLIOpen(Keys[Index]);
     }
 
-    for (;;) {
-        Access* Acc = AccessOpen();
-        b32 GotAllFLIs = TRUE;
-        u64 NumFLIsLoaded = 0;
-
-        for (u64 Index = 0; Index < ARRAY_COUNT(FLIPaths); ++Index) {
-            FLIParsed* FLI = FLIParsedFromKey(
-                Acc,
-                Keys[Index],
-                TRUE,
-                MILLISECONDS(50)
-            );
-
-            if (FLI == EMPTY_FLI_PARSED_VALUE)
-                GotAllFLIs = FALSE;
-            else
-                ++NumFLIsLoaded;
-        }
-
-        PrintOut(
-            "\rloaded [%llu/%llu], %llu active threads, %llu active processes",
-            NumFLIsLoaded,
-            ARRAY_COUNT(FLIPaths),
-            FLI_SHARED->ConversionThreadCount,
-            FLI_SHARED->ConversionProcessCount
-        );
-        AccessClose(Acc);
-
-        if (!GotAllFLIs)
-            AsyncWaitTick(TimeNow() + MILLISECONDS(50));
-
-        if (GotAllFLIs) {
-            Access* Acc = AccessOpen();
-            FLIParsed* Flights[ARRAY_COUNT(FLIPaths)] = {};
-
-            for (u64 Index = 0; Index < ARRAY_COUNT(FLIPaths); ++Index) {
-                Flights[Index] = FLIParsedFromKey(Acc, Keys[Index], TRUE, 0);
-            }
-
-            local char const* ViewPaths[] = {
-                "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\power.flv",
-                "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\vibration.flv",
-                "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\ekf.flv",
-                "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\tuning.flv",
-                "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\overview.flv",
-                "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\tester.flv"
-            };
-
-            FLVTest(
-                Scratch.MemPool,
-                Flights,
-                ARRAY_COUNT(FLIPaths),
-                ViewPaths,
-                ARRAY_COUNT(ViewPaths)
-            );
-
-            AccessClose(Acc);
-            break;
-        }
-    }
-
+    local char const* ViewPaths[] = {
+        "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\power.flv",
+        "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\vibration.flv",
+        "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\ekf.flv",
+        "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\tuning.flv",
+        "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\overview.flv",
+        "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\tester.flv"
+    };
+ 
+    FLVTest(
+        Keys,
+        ARRAY_COUNT(FLIPaths),
+        ViewPaths,
+        ARRAY_COUNT(ViewPaths),
+        SECONDS(60)
+    );
     AtomicExchangeU32(&GLOBAL_ASYNC_EXIT, TRUE, MEM_ORDER_SEQ_CST);
     AsyncWake(FALSE);
 

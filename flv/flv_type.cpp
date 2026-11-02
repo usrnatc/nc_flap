@@ -1,10 +1,9 @@
-#include "flv_type.h"
 #include "nc_print.h"
 #include "nc_memory.h"
 #include "nc_arena.h"
-#include "flv_symbol_table.h"
 
-TypeTable* TYPE_TABLE = NULL;
+// #include "flv_type.h"
+// #include "flv_symbol_table.h"
 
 internal force_inline u32
 HashMix(u32 BaseHash, u32 Value)
