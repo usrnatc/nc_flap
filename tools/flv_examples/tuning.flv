@@ -1,0 +1,36 @@
+// this file produces two graphs stacked vertically on eachother
+//
+//
+// something like this
+//
+//  +-----------------------------------------------------+
+//  |                                                     |
+//  |           the rate graph                            |
+//  |                                                     |
+//  +-----------------------------------------------------+
+//  |                                                     |
+//  |           the roll and pitch graph                  |
+//  |                                                     |
+//  +-----------------------------------------------------+
+//
+// how would someone be able to say, graph this on the left axis and this 
+// on the right?
+//
+
+rate {
+    graph(
+        RATE.R,
+        RATE.RDes[abs(RATE.RDes) > 10],
+        RATE.P,
+        RATE.PDes[abs(RATE.PDes) > 10]
+    );
+}
+
+attitude {
+    graph(
+        ATT.Roll,
+        ATT.DesRoll,
+        ATT.Pitch,
+        ATT.DesPitch
+    );
+}

@@ -1,0 +1,52 @@
+// ┌─────────────────────────────────────────────────────┐
+// │                     attitude                        │
+// │  (Roll vs DesRoll and Pitch vs DesPitch overlaid)   │
+// ├──────────────────────────┬──────────────────────────┤
+// │        timeline          │         faults           │
+// │ ┌──────────────────────┐ │ ┌──────────────────────┐ │
+// │ │ CTUN.ThO[armed]      │ │ │ BAT.Volt, BAT.Curr   │ │
+// │ │   (graph)            │ │ │   (graph)            │ │
+// │ ├──────────────────────┤ │ ├──────────────────────┤ │
+// │ │ MSG[armed]           │ │ │ MSG[Severity >= 2]   │ │
+// │ │   (table)            │ │ │   (table)            │ │
+// │ └──────────────────────┘ │ └──────────────────────┘ │
+// └──────────────────────────┴──────────────────────────┘
+
+
+overview {
+    attitude {
+        graph(
+            ATT.Roll,
+            ATT.DesRoll,
+            ATT.Pitch,
+            ATT.DesPitch
+        );
+    }
+
+    events {
+        timeline {
+            {
+                graph(CTUN.ThO[1s..50s]);
+            }
+
+            {
+                table(MSG[1s..50s]);
+            }
+        }
+
+        faults {
+            {
+                graph(
+                    BAT.Volt,
+                    Bat.Curr
+                );
+            }
+
+            {
+                // I am not sold on this syntax exactly, but something like
+                // this would be very useful to filter messages
+                table(MSG[Severity >= 2]);
+            }
+        }
+    }
+}

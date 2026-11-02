@@ -1,0 +1,13 @@
+hover {
+    graph(
+        VIBE.VibeX[GPS.Spd < 3],
+        VIBE.VibeY[GPS.Spd < 3]
+    );
+
+    flag(VIBE.VibeX > 30);
+    flag(VIBE.Clip0 > 0);
+}
+
+forward {
+    graph(IMU.AccZ[GPS.Spd > 8]);
+}

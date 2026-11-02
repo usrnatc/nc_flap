@@ -1,0 +1,15 @@
+pos {
+    graph(
+        NKF1.PN[mode(AUTO)],
+        GPS.Lat[mode(AUTO)]
+    );
+}
+
+innov {
+    graph(
+        NKF3.IVN,
+        NKF3.IVE
+    );
+
+    flag(NKF4.SV > 5.0);
+}

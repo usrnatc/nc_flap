@@ -1,0 +1,10 @@
+sag {
+    graph(
+        BAT.Volt,
+        BAT.Curr
+    );
+}
+
+low {
+    flag(BAT.Volt < 14, "hello world");
+}
