@@ -8,6 +8,7 @@
 #include "nc_file.h"
 
 #include "flv_ast.h"
+#include "flv_compile.h"
 #include "flv_token.h"
 #include "flv_symbol_table.h"
 #include "flv_intern.h"
@@ -1446,25 +1447,27 @@ ParseImport(void)
  
         return;
     }
- 
-    Str8 Source = ReadFileContentsEx(
-        GetTLS()->PARSER_STATE->Tree->MemPool, 
-        Path, 
-        NC_SIMD_ALIGN256
+
+    u128 SourceHash = {};
+    Str8 Source = FLVImportSource(
+        GetTLS()->PARSER_STATE->Tree->MemPool,
+        Path,
+        &SourceHash
     );
- 
+
     if (!Source.Size) {
-        PARSE_ERROR(NameTok, "cannot read import \"%S\"", PRINT_STR(Path));
+        GetTLS()->PARSER_STATE->ImportNotReady = TRUE;
 
         return;
     }
- 
+
     u32 SavedFile = GetTLS()->PARSER_STATE->CurrentFile;
     TokIndex SavedIndex = GetTLS()->PARSER_STATE->CurrentIndex;
     ASTNodeScope* SavedScopeNode = GetTLS()->PARSER_STATE->CurrentScopeNode;
     u32 SavedDepth = GetTLS()->PARSER_STATE->ScopeDepth;
     u32 FileIndex = PushFile(Path, Source);
  
+    GetTLS()->PARSER_STATE->Files[FileIndex].Hash = SourceHash;
     SelectFile(FileIndex);
     GetTLS()->PARSER_STATE->CurrentIndex = {};
     GetTLS()->PARSER_STATE->CurrentScopeNode = NULL;

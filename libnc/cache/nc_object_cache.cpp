@@ -107,8 +107,8 @@ __OCObjectFromKey(Access* Acc, Str8 Key, OCObjectParams* Params, u64 EndTimeUSec
                 if (IsStale) {
                     b32 GotTask = !AtomicCASU64(
                         &Node->WorkingCount, 
-                        1, 
                         0, 
+                        1, 
                         MEM_ORDER_SEQ_CST, 
                         MEM_ORDER_SEQ_CST
                     );
@@ -173,6 +173,14 @@ __OCObjectFromKey(Access* Acc, Str8 Key, OCObjectParams* Params, u64 EndTimeUSec
                         N->V.CreateFunc = Params->CreateFunc;
                     }
 
+                    PrintOut(
+                        "[OC] request: func %p, key %016llx, gen %llu, high %u, wide %u\n",
+                        (void*) Params->CreateFunc,
+                        KeyHash,
+                        Params->Generation,
+                        !!(Params->Flags & OC_HIGH_PRIORITY),
+                        !!(Params->Flags & OC_WIDE)
+                    );
                     AsyncWake(!!(Params->Flags & OC_HIGH_PRIORITY));
                 }
 
@@ -388,7 +396,21 @@ OCAsyncTick(void)
 
             b32 Retry = FALSE;
             u64 Gen = R->Generation;
-            OCObject Val = R->CreateFunc(R->Key, R->CancelSignal, &Retry, &Gen);
+
+            PrintOut(
+                "[OC] run: task %llu, %llu, func %p, gen %llu\n",
+                TaskIndex,
+                Task->ThinCount,
+                (void*) R->CreateFunc,
+                R->Generation
+            );
+
+            OCObject Val = R->CreateFunc(
+                R->Key, 
+                R->CancelSignal, 
+                &Retry, 
+                &Gen
+            );
 
             if (
                 Retry && 
@@ -398,7 +420,11 @@ OCAsyncTick(void)
                 OCRequestBatch* Batch = &OC_SHARED->RequestBatches[TaskIndex];
 
                 LOCK_SCOPE(Batch->Mtx) {
-                    OCRequestNode* N = ArenaPushArray(Batch->MemPool, OCRequestNode, 1);
+                    OCRequestNode* N = ArenaPushArray(
+                        Batch->MemPool, 
+                        OCRequestNode, 
+                        1
+                    );
 
                     SLL_QUEUE_PUSH(Batch->HeadWide, Batch->TailWide, N);
                     ++Batch->WideCount;
@@ -475,6 +501,7 @@ OCAsyncTick(void)
                 AtomicLoadU64(ReqTakeCounterPtr, MEM_ORDER_SEQ_CST) >= Task->ThinCount / 2 &&
                 AtomicLoadU32(&ASYNC_LOOP_REPEAT_HIGH_PRIORITY, MEM_ORDER_SEQ_CST)
             ) {
+                PrintOut("[OC] thin batch %llu cancelled by high priority wake\n", TaskIndex);
                 AtomicExchangeU64(CancelledPtr, 1, MEM_ORDER_SEQ_CST);
             }
 

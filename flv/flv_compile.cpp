@@ -1,3 +1,4 @@
+#include "nc_print.h"
 #include "nc_types.h"
 #include "nc_memory.h"
 #include "nc_content.h"
@@ -10,6 +11,8 @@
 #include "flv_lexer.h"
 #include "flv_parser.h"
 #include "flv_type_check.h"
+
+FLVClosureTable FLV_CLOSURES = {};
 
 INTERNAL b32
 FLVCompilerSchemaUpdate(
@@ -53,22 +56,169 @@ FLVCompilerSchemaUpdate(
     return Ready;
 }
 
-INTERNAL Str8
-FLVUnitKey(Arena* MemPool, Str8 Path, FLIKey const* Keys, u64 KeysCount)
+INTERNAL u128
+FLVSourceHash(Str8 Path)
 {
+    u128 Result = FSHashFromPathRange(Path, Rng((u64) 0ULL, U64_MAX), 0);
+
+    return Result;
+}
+
+INTERNAL u64
+FLVFoldHashes(u64 Seed, u128 const* Hashes, u32 Count)
+{
+    u64 Result = Seed;
+
+    for (u32 Index = 0; Index < Count; ++Index) {
+        Result = (
+            (Result * 0x9E3779B97F4A7C15ULL) ^
+            Hash(Str8Struct(&Hashes[Index]))
+        );
+    }
+
+    return Result;
+}
+
+INTERNAL Str8
+FLVSourceCpy(Arena* MemPool, Str8 Source)
+{
+    Str8 Result = {};
+
+    Result.Size = Source.Size;
+    Result.Str = (u8*) ArenaPushSize(
+        MemPool,
+        Source.Size + 64,
+        NC_SIMD_ALIGN256,
+        FALSE
+    );
+    MemCpy(Result.Str, Source.Str, Source.Size);
+    MemZero(Result.Str + Source.Size, 64);
+
+    return Result;
+}
+
+Str8 FLVImportSource(Arena *MemPool, Str8 Path, u128 *Hash)
+{
+    Str8 Result = {};
+    Access* Acc = AccessOpen();
+    u128 SourceHash = FLVSourceHash(Path);
+    Str8 Source = CDataFromHash(Acc, SourceHash);
+
+    if (Source.Size) {
+        Result = FLVSourceCpy(MemPool, Source);
+        *Hash = SourceHash;
+    }
+
+    AccessClose(Acc);
+
+    return Result;
+}
+
+INTERNAL FLVClosureSlot*
+FLVClosureSlotFromKey(u64 Key)
+{
+    if (!FLV_CLOSURES.MemPool) {
+        FLV_CLOSURES.MemPool = ArenaAlloc();
+        FLV_CLOSURES.SlotsCount = 256;
+        FLV_CLOSURES.Slots = ArenaPushArrayZero(
+            FLV_CLOSURES.MemPool,
+            FLVClosureSlot,
+            FLV_CLOSURES.SlotsCount
+        );
+    }
+
+    u64 SlotIndex = Key % FLV_CLOSURES.SlotsCount;
+    FLVClosureSlot* Result = &FLV_CLOSURES.Slots[SlotIndex];
+
+    return Result;
+}
+
+INTERNAL FLVClosure*
+FLVClosureFromPath(Str8 Path)
+{
+    FLVClosure* Result = NULL;
+    u64 Key = Hash(Path);
+    FLVClosureSlot* Slot = FLVClosureSlotFromKey(Key);
+
+    for (FLVClosureNode* Node = Slot->Head; Node; Node = Node->Next) {
+        if (Node->V.Key == Key && StrMatch(Node->V.Path, Path, 0)) {
+            Result = &Node->V;
+            break;
+        }
+    }
+
+    return Result;
+}
+
+INTERNAL void
+FLVClosureUpdate(Str8 Path, FLVUnit const* Unit)
+{
+    FLVClosure* Closure = FLVClosureFromPath(Path);
+
+    if (!Closure) {
+        u64 Key = Hash(Path);
+        FLVClosureSlot* Slot = FLVClosureSlotFromKey(Key);
+        FLVClosureNode* Node = ArenaPushArrayZero(
+            FLV_CLOSURES.MemPool,
+            FLVClosureNode,
+            1
+        );
+
+        Node->V.Key = Key;
+        Node->V.Path = ArenaPushStrCpy(
+            FLV_CLOSURES.MemPool,
+            Path
+        );
+        DLL_PUSH_BACK(Slot->Head, Slot->Tail, Node);
+        Closure = &Node->V;
+    }
+
+    b32 IsSame = (Closure->ImportCount == Unit->ImportCount);
+
+    for (u32 Index = 0; IsSame && Index < Unit->ImportCount; ++Index) {
+        IsSame = StrMatch(
+            Closure->ImportPaths[Index],
+            Unit->ImportPaths[Index],
+            0
+        );
+    }
+
+    if (IsSame)
+        return;
+
+    Closure->ImportCount = Unit->ImportCount;
+    Closure->ImportPaths = ArenaPushArray(
+        FLV_CLOSURES.MemPool,
+        Str8,
+        Unit->ImportCount
+    );
+
+    for (u32 Index = 0; Index < Unit->ImportCount; ++Index) {
+        Closure->ImportPaths[Index] = ArenaPushStrCpy(
+            FLV_CLOSURES.MemPool,
+            Unit->ImportPaths[Index]
+        );
+    }
+}
+
+INTERNAL Str8
+FLVUnitKey(
+    Arena* MemPool, 
+    Str8 Path, 
+    FLIKey const* Keys, 
+    u64 KeysCount,
+    u128 RootHash,
+    u64 ImportsHash
+) {
     Str8List Parts = {};
 
     ListPush(MemPool, &Parts, Str8Struct(&Path.Size));
     ListPush(MemPool, &Parts, Path);
     ListPush(MemPool, &Parts, FLVFlightSetKey(MemPool, Keys, KeysCount));
+    ListPush(MemPool, &Parts, Str8Struct(&RootHash));
+    ListPush(MemPool, &Parts, Str8Struct(&ImportsHash));
 
     return StrListJoin(MemPool, &Parts, NULL);
-}
-
-INTERNAL u128
-FLVSourceHash(Str8 Path)
-{
-    return FSHashFromPathRange(Path, Rng((u64) 0, U64_MAX), 0);
 }
 
 INTERNAL OCObject
@@ -84,8 +234,8 @@ FLVUnitObjectCreate(
     u64 Offset = 0;
     Str8 Path = {};
     u64 KeysCount = 0;
+    u128 RootHash = {};
 
-    *Generation = FSChangeGeneration();
     Offset += SerialPopStruct(Key, Offset, &Path.Size);
     Path.Str = ArenaPushArray(Scratch.MemPool, u8, Path.Size);
     Offset += SerialPop(Key, Offset, Path.Str, Path.Size, 1);
@@ -94,19 +244,29 @@ FLVUnitObjectCreate(
     FLIKey* Keys = ArenaPushArray(Scratch.MemPool, FLIKey, KeysCount);
 
     Offset += SerialPop(Key, Offset, Keys, KeysCount * sizeof(FLIKey), 1);
+    Offset += SerialPopStruct(Key, Offset, &RootHash);
 
     FLVCompiler* Compiler = FLVCompilerSelected();
     u64 SetHash = Hash(FLVFlightSetKey(Scratch.MemPool, Keys, KeysCount));
-    b32 SchemaReady = FLVCompilerSchemaUpdate(Compiler, Acc, Keys, KeysCount, SetHash);
-    u128 SourceHash = FLVSourceHash(Path);
-    Str8 Source = CDataFromHash(Acc, SourceHash);
+    b32 SchemaReady = FLVCompilerSchemaUpdate(
+        Compiler, 
+        Acc, 
+        Keys, 
+        KeysCount, 
+        SetHash
+    );
+    Str8 Source = CDataFromHash(Acc, RootHash);
 
     if (!SchemaReady || !Source.Size) {
+        PrintOut(
+            "[FLV] unit %S: RETRY (schema ready %u, source %llu bytes, root %016llx%016llx)\n",
+            PRINT_STR(Path),
+            SchemaReady,
+            Source.Size,
+            RootHash.U64[0],
+            RootHash.U64[1]
+        );
         *Retry = TRUE;
-        AccessClose(Acc);
-        ReleaseScratch(Scratch);
-
-        return Result;
     }
 
     Arena* MemPool = ArenaAlloc();
@@ -114,17 +274,11 @@ FLVUnitObjectCreate(
     ParsedFile Root = {};
 
     Unit->MemPool = MemPool;
+    Unit->Key = ArenaPushStrCpy(MemPool, Key);
     Unit->Path = ArenaPushStrCpy(MemPool, Path);
     Root.Path = Unit->Path;
-    Root.Source.Size = Source.Size;
-    Root.Source.Str = (u8*) ArenaPushSize(
-        MemPool, 
-        Source.Size + 64, 
-        NC_SIMD_ALIGN256, 
-        FALSE
-    );
-    MemCpy(Root.Source.Str, Source.Str, Source.Size);
-    MemZero(Root.Source.Str + Source.Size, 64);
+    Root.Source = FLVSourceCpy(MemPool, Source);
+    Root.Hash = RootHash;
     Root.Tokens = LexString(MemPool, Root.Source, Compiler->Names);
     Root.LineOffsets = LineOffsetsFromSource(
         MemPool, 
@@ -133,6 +287,19 @@ FLVUnitObjectCreate(
     );
 
     AST* Tree = ParseTokens(MemPool, &Root, NULL, 0);
+
+    if (GetTLS()->PARSER_STATE->ImportNotReady) {
+        PrintOut(
+            "[FLV] unit %S: RETRY (import not ready)\n", 
+            PRINT_STR(Path)
+        );
+        ArenaRelease(MemPool);
+        *Retry = TRUE;
+        AccessClose(Acc);
+        ReleaseScratch(Scratch);
+
+        return Result;
+    }
 
     CheckAST(
         MemPool,
@@ -199,22 +366,28 @@ FLVUnitObjectCreate(
 
     Unit->ImportCount = Tree->FilesCount - 1;
     Unit->ImportPaths = ArenaPushArray(MemPool, Str8, Unit->ImportCount);
-
-    u64 UnitHash = Hash(Str8Struct(&SourceHash)) ^ Compiler->Schema->Hash;
+    Unit->ImportHashes = ArenaPushArray(MemPool, u128, Unit->ImportCount);
 
     for (u32 Index = 0; Index < Unit->ImportCount; ++Index) {
-        Str8 ImportPath = Tree->Files[Index + 1].Path;
-        u128 ImportHash = FLVSourceHash(ImportPath);
+        ParsedFile const* File = &Tree->Files[Index + 1];
 
-        Unit->ImportPaths[Index] = ArenaPushStrCpy(MemPool, ImportPath);
-        UnitHash = (
-            (UnitHash * 0x9E3779B97F4A7C15ULL) ^ 
-            Hash(Str8Struct(&ImportHash))
-        );
+        Unit->ImportPaths[Index] = ArenaPushStrCpy(MemPool, File->Path);
+        Unit->ImportHashes[Index] = File->Hash;
     }
 
-    Unit->Hash = UnitHash;
-
+    Unit->Hash = FLVFoldHashes(
+        Hash(Str8Struct(&RootHash)), 
+        Unit->ImportHashes, 
+        Unit->ImportCount
+    ) ^ Compiler->Schema->Hash;
+    PrintOut(
+        "[FLV] unit %S: compiled, root %016llx%016llx, imports %u, hash %016llx\n",
+        PRINT_STR(Path),
+        RootHash.U64[0],
+        RootHash.U64[1],
+        Unit->ImportCount,
+        Unit->Hash
+    );
     Result.V[0] = INT_FROM_PTR(MemPool);
     Result.V[1] = INT_FROM_PTR(Unit);
     AccessClose(Acc);
@@ -230,20 +403,32 @@ FLVUnitObjectDestroy(OCObject Object)
         ArenaRelease((Arena*) PTR_FROM_INT(Object.V[0]));
 }
 
+INTERNAL FLVUnit*
+FLVUnitFromKey(Access* Acc, Str8 Key, u64 EndTimeUSecs)
+{
+    OCObject Object = OCObjectFromKey(
+        Acc,
+        Key,
+        FLVUnitObjectCreate,
+        FLVUnitObjectDestroy,
+        EndTimeUSecs,
+        __Params.Generation = 0
+    );
+
+    return (FLVUnit*) PTR_FROM_INT(Object.V[1]);
+}
+
 INTERNAL Str8
 FLVResultKey(
     Arena* MemPool,
-    Str8 Path,
-    FLIKey const* Keys,
-    u64 KeysCount,
-    u64 UnitHash,
+    Str8 UnitKey,
     FLIKey Flight,
     u32 Program
 ) {
     Str8List Parts = {};
  
-    ListPush(MemPool, &Parts, FLVUnitKey(MemPool, Path, Keys, KeysCount));
-    ListPush(MemPool, &Parts, Str8Struct(&UnitHash));
+    ListPush(MemPool, &Parts, Str8Struct(&UnitKey.Size));
+    ListPush(MemPool, &Parts, UnitKey);
     ListPush(MemPool, &Parts, Str8Struct(&Flight));
     ListPush(MemPool, &Parts, Str8Struct(&Program));
  
@@ -261,31 +446,23 @@ FLVResultObjectCreate(
     TempArena Scratch = GetScratch(NULL, 0);
     Access* Acc = AccessOpen();
     u64 Offset = 0;
-    Str8 Path = {};
-    u64 KeysCount = 0;
-    u64 UnitHash = 0;
+    Str8 UnitKey = {};
     FLIKey Flight = {};
     u32 Program = 0;
  
     *Generation = FLILoadGeneration();
-    Offset += SerialPopStruct(Key, Offset, &Path.Size);
-    Path.Str = ArenaPushArray(Scratch.MemPool, u8, Path.Size);
-    Offset += SerialPop(Key, Offset, Path.Str, Path.Size, 1);
-    Offset += SerialPopStruct(Key, Offset, &KeysCount);
- 
-    FLIKey* Keys = ArenaPushArray(Scratch.MemPool, FLIKey, KeysCount);
- 
-    Offset += SerialPop(Key, Offset, Keys, KeysCount * sizeof(FLIKey), 1);
-    Offset += SerialPopStruct(Key, Offset, &UnitHash);
+    Offset += SerialPopStruct(Key, Offset, &UnitKey.Size);
+    UnitKey.Str = ArenaPushArray(Scratch.MemPool, u8, UnitKey.Size);
+    Offset += SerialPop(Key, Offset, UnitKey.Str, UnitKey.Size, 1);
     Offset += SerialPopStruct(Key, Offset, &Flight);
     Offset += SerialPopStruct(Key, Offset, &Program);
  
-    FLVUnit* Unit = FLVUnitFromPath(Acc, Path, Keys, KeysCount, 0);
+    FLVUnit* Unit = FLVUnitFromKey(Acc, UnitKey, 0);
     FLIParsed* FLI = FLIParsedFromKey(Acc, Flight, TRUE, 0);
  
     if (!Unit || FLI == EMPTY_FLI_PARSED_VALUE) {
         *Retry = TRUE;
-    } else if (Unit->Hash == UnitHash && Program < Unit->Lowered.ProgramCount) {
+    } else if (Program < Unit->Lowered.ProgramCount) {
         Arena* MemPool = ArenaAlloc();
         FLVBoundSlot* Bound = FLVBindSlots(
             MemPool,
@@ -337,15 +514,7 @@ FLVResultFromUnit(
     u64 EndTimeUSecs
 ) {
     TempArena Scratch = GetScratch(NULL, 0);
-    Str8 Key = FLVResultKey(
-        Scratch.MemPool,
-        Unit->Path,
-        Keys,
-        KeysCount,
-        Unit->Hash,
-        Flight,
-        Program
-    );
+    Str8 Key = FLVResultKey(Scratch.MemPool, Unit->Key, Flight, Program);
     OCObject Object = OCObjectFromKey(
         Acc,
         Key,
@@ -404,18 +573,46 @@ FLVUnitFromPath(
     u64 KeysCount, 
     u64 EndTimeUSecs
 ) {
-    TempArena Scratch = GetScratch(NULL, 0);
-    Str8 Key = FLVUnitKey(Scratch.MemPool, Path, Keys, KeysCount);
-    OCObject Object = OCObjectFromKey(
-        Acc,
-        Key,
-        FLVUnitObjectCreate,
-        FLVUnitObjectDestroy,
-        EndTimeUSecs,
-        __Params.Generation = FSChangeGeneration()
+    u128 RootHash = FSHashFromPathRange(
+        Path, 
+        Rng((u64) 0, U64_MAX), 
+        EndTimeUSecs
     );
+
+    if (RootHash == u128{})
+        return NULL;
+
+    TempArena Scratch = GetScratch(NULL, 0);
+    FLVClosure* Closure = FLVClosureFromPath(Path);
+    u64 ImportsHash = 0;
+
+    if (Closure) {
+        u128* Hashes = ArenaPushArray(
+            Scratch.MemPool, 
+            u128, 
+            Closure->ImportCount
+        );
+
+        for (u32 Index = 0; Index < Closure->ImportCount; ++Index)
+            Hashes[Index] = FLVSourceHash(Closure->ImportPaths[Index]);
+
+        ImportsHash = FLVFoldHashes(0, Hashes, Closure->ImportCount);
+    }
+
+    Str8 Key = FLVUnitKey(
+        Scratch.MemPool, 
+        Path, 
+        Keys, 
+        KeysCount, 
+        RootHash, 
+        ImportsHash
+    );
+    FLVUnit* Unit = FLVUnitFromKey(Acc, Key, EndTimeUSecs);
+
+    if (Unit)
+        FLVClosureUpdate(Path, Unit);
 
     ReleaseScratch(Scratch);
 
-    return (FLVUnit*) PTR_FROM_INT(Object.V[1]);
+    return Unit;
 }

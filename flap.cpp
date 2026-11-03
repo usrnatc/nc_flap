@@ -15,6 +15,7 @@
 #include "flv_type_check.h"
 #include "flv_bind.h"
 #include "flv_lower.h"
+#include "flv_compiler.h"
 #include "flv_compile.h"
 #include "flv_kernel.h"
 #include "flv_run.h"
@@ -34,6 +35,7 @@
 #include "flv_type_check.cpp"
 #include "flv_bind.cpp"
 #include "flv_lower.cpp"
+#include "flv_compiler.cpp"
 #include "flv_compile.cpp"
 #include "flv_kernel.cpp"
 #include "flv_run.cpp"
@@ -54,7 +56,7 @@ AsyncThreadEntryPoint(void* Params)
                     CondVarWait(
                         ASYNC_TICK_BEGIN_COND_VAR,
                         ASYNC_TICK_BEGIN_MTX,
-                        MILLISECONDS(100)
+                        TimeNow() + MILLISECONDS(100)
                     );
                 }
             }
@@ -101,6 +103,8 @@ struct FLVTestView {
     b32*   Printed;
     u32    Count;
     b32    HasError;
+    u128   RootHash;
+    b32    Ready;
 };
 
 INTERNAL void
@@ -130,6 +134,21 @@ FLVTest(
  
         for (u32 ViewIndex = 0; ViewIndex < ViewCount; ++ViewIndex) {
             FLVTestView* View = &Views[ViewIndex];
+            u128 RootHash = FSHashFromPathRange(View->Path, Rng((u64) 0, U64_MAX), 0);
+
+            if (RootHash != View->RootHash) {
+                PrintOut(
+                    "[TEST] %S: root hash %016llx%016llx -> %016llx%016llx (tick %llu)\n",
+                    PRINT_STR(StrSkipLastSlash(View->Path)),
+                    View->RootHash.U64[0],
+                    View->RootHash.U64[1],
+                    RootHash.U64[0],
+                    RootHash.U64[1],
+                    UpdateTickIndex()
+                );
+                View->RootHash = RootHash;
+            }
+
             FLVUnit* Unit = FLVUnitFromPath(
                 Acc, 
                 View->Path, 
@@ -138,6 +157,16 @@ FLVTest(
                 0
             );
  
+            if (!!Unit != View->Ready) {
+                View->Ready = !!Unit;
+                PrintOut(
+                    "[TEST] %S: unit %s (tick %llu)\n",
+                    PRINT_STR(StrSkipLastSlash(View->Path)),
+                    Unit ? "READY" : "NOT READY",
+                    UpdateTickIndex()
+                );
+            }
+
             if (!Unit)
                 continue;
  
@@ -236,7 +265,7 @@ FLVTest(
         else if (TimeNow() - LastChangeUSecs > IdleUSecs)
             break;
  
-        AsyncWaitTick(TimeNow() + MILLISECONDS(50));
+        AsyncWaitTick(MILLISECONDS(50));
     }
  
     for (u32 Index = 0; Index < ViewCount; ++Index)
@@ -289,14 +318,14 @@ EntryPoint(CommandLine* CLI)
 
     local char* FLIPaths[] = {
         "H:\\rfdesign\\nc_flap\\tools\\logs\\00000010.BIN",
-        "H:\\rfdesign\\nc_flap\\tools\\logs\\00000034.BIN",
-        "H:\\rfdesign\\nc_flap\\tools\\logs\\00000038.BIN",
-        "H:\\rfdesign\\nc_flap\\tools\\logs\\00000047.BIN",
-        "H:\\rfdesign\\nc_flap\\tools\\logs\\00000048.BIN",
-        "H:\\rfdesign\\nc_flap\\tools\\logs\\00000050.BIN",
-        "H:\\rfdesign\\nc_flap\\tools\\logs\\00000058.BIN",
-        "H:\\rfdesign\\nc_flap\\tools\\logs\\00000061.BIN",
-        "H:\\rfdesign\\nc_flap\\tools\\logs\\00000064.BIN"
+        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000034.BIN",
+        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000038.BIN",
+        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000047.BIN",
+        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000048.BIN",
+        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000050.BIN",
+        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000058.BIN",
+        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000061.BIN",
+        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000064.BIN"
     };
     FLIKey Keys[ARRAY_COUNT(FLIPaths)] = {};
 
@@ -308,11 +337,11 @@ EntryPoint(CommandLine* CLI)
     }
 
     local char const* ViewPaths[] = {
-        "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\power.flv",
-        "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\vibration.flv",
-        "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\ekf.flv",
-        "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\tuning.flv",
-        "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\overview.flv",
+        // "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\power.flv",
+        // "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\vibration.flv",
+        // "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\ekf.flv",
+        // "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\tuning.flv",
+        // "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\overview.flv",
         "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\tester.flv"
     };
  

@@ -1,9 +1,10 @@
 #include "nc_file_stream.h"
-#include "../nc_atomics.h"
+#include "nc_atomics.h"
 #include "nc_object_cache.h"
 #include "nc_content.h"
-#include "../nc_file.h"
-#include "../nc_memory.h"
+#include "nc_file.h"
+#include "nc_memory.h"
+#include "nc_print.h"
 
 FSShared* FS_SHARED = NULL;
 
@@ -38,6 +39,9 @@ FSObjectAlloc(Str8 Key, b32* CancelSignal, OUT b32* Retry, OUT u64* Generation)
     Path.Str = ArenaPushArrayZero(Scratch.MemPool, u8, Path.Size);
     KeyReadOffset += SerialPop(Key, KeyReadOffset, Path.Str, Path.Size, 1);
     KeyReadOffset += SerialPopStruct(Key, KeyReadOffset, &Range);
+
+    if (!LaneIndex())
+        PrintOut("[FS] alloc %S: start\n", PRINT_STR(Path));
 
     b32 FileOkay = FALSE;
     FileProperties FilePropsPre = {};
@@ -140,8 +144,27 @@ FSObjectAlloc(Str8 Key, b32* CancelSignal, OUT b32* Retry, OUT u64* Generation)
                 *Retry = TRUE;
                 ArenaRelease(DataMemPool);
                 MemSet(&ContentKey, 0, sizeof(ContentKey));
+                PrintOut(
+                    "[FS] read %S: RETRY (pre mod %llu post mod %llu, pre size %llu post size %llu, want %llu got %llu, handle %u)\n",
+                    PRINT_STR(Path),
+                    FilePropsPre.Modified,
+                    FilePropsPost.Modified,
+                    FilePropsPre.Size,
+                    FilePropsPost.Size,
+                    DataBufferSize,
+                    TotalBytesRead,
+                    FileHandleOkay
+                );
             } else {
-                CSubmitData(ContentKey, &DataMemPool, Str(DataBuffer, DataBufferSize));
+                u128 DataHash = CSubmitData(ContentKey, &DataMemPool, Str(DataBuffer, DataBufferSize));
+
+                PrintOut(
+                    "[FS] read %S: %llu bytes, hash %016llx%016llx\n",
+                    PRINT_STR(Path),
+                    DataBufferSize,
+                    DataHash.U64[0],
+                    DataHash.U64[1]
+                );
             }
         }
 
@@ -180,6 +203,14 @@ FSObjectAlloc(Str8 Key, b32* CancelSignal, OUT b32* Retry, OUT u64* Generation)
 
             Node->LastModifiedTimestamp = FilePropsPre.Modified;
             Node->Size = FilePropsPre.Size;
+            *Generation = Node->Generation;
+
+            PrintOut(
+                "[FS] node %S: gen %llu, modified %llu\n",
+                PRINT_STR(Path),
+                Node->Generation,
+                Node->LastModifiedTimestamp
+            );
         }
     }
 
@@ -232,13 +263,19 @@ FSKeyFromPathRange(Str8 Path, r1u64 Range, u64 EndTimeUSecs)
         }
     }
 
+    b32 Stale = FALSE;
     OCObject Object = OCObjectFromKey(
         Acc, 
         Key, 
         FSObjectAlloc, 
         FSObjectRelease, 
-        EndTimeUSecs
+        EndTimeUSecs,
+        __Params.Generation = Generation,
+        __Params.Stale = &Stale
     );
+
+    if (Stale)
+        PrintOut("[FS] key %S: stale, want gen %llu\n", PRINT_STR(Path), Generation);
 
     MemCpy(&Result, &Object, sizeof(Result));
     AccessClose(Acc);
@@ -293,8 +330,18 @@ FSAsyncTick(void)
                     for (FSNode* N = Slot->Head; N; N = N->Next) {
                         FileProperties FileProps = SystemGetFileProperties(N->Path);
 
+                            PrintOut(
+                                "[FS] change %S: modified %llu -> %llu, gen %llu -> %llu\n",
+                                PRINT_STR(N->Path),
+                                N->LastModifiedTimestamp,
+                                FileProps.Modified,
+                                N->Generation,
+                                N->Generation + 1
+                            );
+
                         if (FileProps.Modified != N->LastModifiedTimestamp) {
                             FoundWork = TRUE;
+                            N->LastModifiedTimestamp = FileProps.Modified;
                             ++N->Generation;
                             AtomicIncFetchU64(&FS_SHARED->ChangeGeneration, MEM_ORDER_SEQ_CST);
                         }

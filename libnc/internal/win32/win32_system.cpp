@@ -200,7 +200,7 @@ SleepMSecsFromEndTimeUSecs(u64 EndTimeUSecs)
     if (EndTimeUSecs == U64_MAX) {
         SleepMSecs = INFINITE;
     } else {
-        u64 BeginTimeUSecs = ((u64) TimeNow() * MILLION(1)) / GetUSecsResolution();
+        u64 BeginTimeUSecs = TimeNow();
 
         if (BeginTimeUSecs < EndTimeUSecs) {
             u64 SleepUSecs = EndTimeUSecs - BeginTimeUSecs;

@@ -5,7 +5,7 @@
 #include "nc_types.h"
 #include "nc_string.h"
 
-// #include "flv_base_types.h"
+#include "flv_base_types.h"
 
 struct Arena;
 
@@ -106,6 +106,7 @@ struct ParsedFile {
     u32*       LineOffsets;
     u32        LineCount;
     b32        IsOpen;
+    u128       Hash;
 };
 
 struct SourceLoc {

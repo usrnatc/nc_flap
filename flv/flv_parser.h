@@ -93,6 +93,7 @@ struct ParserState {
     u32            DeferredCount;
     u32            ExprCount;
     u32            ScopeDepth;
+    b32            ImportNotReady;
 };
 
 // @runtime____________________________________________________________________

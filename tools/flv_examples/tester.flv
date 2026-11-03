@@ -1,5 +1,5 @@
 analysis {
-    table(BAT[0].Volt, BAT[0].Curr, BAT[0].Volt * BAT[0].Curr);
+    table(BAT[0].Volt, BAT[0].Curr, BAT[0].Volt + BAT[0].Curr);
     table(MSG);
     table(GPS.Status, GPS.NSats, GPS.Spd);
     flag(max(GPS.Spd) > 20, "fast flight");
