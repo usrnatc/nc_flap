@@ -6,7 +6,11 @@
 
 #include "fli.h"
 
-#include "flv_compile.h"
+#include "flv_kernel.h"
+#include "flv_lower.h"
+#include "flv_bind.h"
+#include "flv_compiler.h"
+#include "flv_visualisation.h"
 
 struct Arena;
 

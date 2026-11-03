@@ -28,7 +28,7 @@ rate {
 
 attitude {
     graph(
-        ATT.Roll,
+        ATT.Roll + 4,
         ATT.DesRoll,
         ATT.Pitch,
         ATT.DesPitch

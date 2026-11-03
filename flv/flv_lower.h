@@ -4,6 +4,10 @@
 #include "nc_types.h"
 #include "nc_string.h"
 
+#include "flv_base_types.h"
+#include "flv_ast.h"
+#include "flv_schema.h"
+#include "flv_kernel.h"
 #include "flv_compiler.h"
 
 struct Arena;
@@ -185,8 +189,7 @@ struct LowerState {
 };
 
 // @runtime____________________________________________________________________
-extern FLVKernelInfo const FLV_KERNEL_INFO_TABLE[FLV_KERNEL_COUNT];
-extern Str8 const FLV_KERNEL_NAME_TABLE[FLV_KERNEL_COUNT];
+
 
 // @functions__________________________________________________________________
 FLVLowered FLVLower(Arena* MemPool, AST* Tree, FLVSchema const* Schema, FLVSlot const* Slots, u32 SlotsCount);

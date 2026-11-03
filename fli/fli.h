@@ -132,8 +132,8 @@ enum FLIParseStatus {
     X(u32,    FirmwareStringIndex)   \
     X(u32,    __Padding)             \
     X(FLIMD5, SourceMD5)             \
-    X(u64,    StartTimeUSecs)           \
-    X(u64,    EndTimeUSecs)             \
+    X(u64,    StartTimeUSecs)        \
+    X(u64,    EndTimeUSecs)          \
     X(u64,    RecordCount)           \
     X(u64,    SkippedRecordCount)    \
  
@@ -181,17 +181,17 @@ enum FLIParseStatus {
     X(f32, Value)            \
     X(f32, Default)          \
     X(u32, __Padding)        \
-    X(u64, TimeUSecs)           \
+    X(u64, TimeUSecs)        \
  
 
 #define FLI_MESSAGE_XLIST    \
-    X(u64, TimeUSecs)           \
+    X(u64, TimeUSecs)        \
     X(u32, TextStringIndex)  \
     X(u32, __Padding)        \
  
 
 #define FLI_MODE_XLIST       \
-    X(u64, TimeUSecs)           \
+    X(u64, TimeUSecs)        \
     X(u8,  Mode)             \
     X(u8,  ModeNum)          \
     X(u8,  Reason)           \
@@ -199,13 +199,13 @@ enum FLIParseStatus {
  
 
 #define FLI_EVENT_XLIST      \
-    X(u64, TimeUSecs)           \
+    X(u64, TimeUSecs)        \
     X(u8,  ID)               \
     X(u8,  __Padding[7])     \
  
 
 #define FLI_ERROR_XLIST      \
-    X(u64, TimeUSecs)           \
+    X(u64, TimeUSecs)        \
     X(u8,  Subsystem)        \
     X(u8,  Code)             \
     X(u8,  __Padding[6])     \

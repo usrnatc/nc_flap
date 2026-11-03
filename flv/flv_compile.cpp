@@ -1,8 +1,15 @@
 #include "nc_types.h"
 #include "nc_memory.h"
+#include "nc_content.h"
+#include "nc_file_stream.h"
 
 #include "flv_compile.h"
 #include "flv_schema.h"
+#include "flv_run.h"
+#include "flv_token.h"
+#include "flv_lexer.h"
+#include "flv_parser.h"
+#include "flv_type_check.h"
 
 INTERNAL b32
 FLVCompilerSchemaUpdate(
@@ -130,7 +137,7 @@ FLVUnitObjectCreate(
     CheckAST(
         MemPool,
         Tree,
-        &Compiler->Schema,
+        Compiler->Schema,
         &Unit->Slots,
         &Unit->SlotsCount
     );
@@ -138,7 +145,7 @@ FLVUnitObjectCreate(
     Unit->Lowered = FLVLower(
         MemPool, 
         Tree, 
-        &Compiler->Schema, 
+        Compiler->Schema, 
         Unit->Slots, 
         Unit->SlotsCount
     );
@@ -193,7 +200,7 @@ FLVUnitObjectCreate(
     Unit->ImportCount = Tree->FilesCount - 1;
     Unit->ImportPaths = ArenaPushArray(MemPool, Str8, Unit->ImportCount);
 
-    u64 UnitHash = Hash(Str8Struct(&SourceHash)) ^ Compiler->Schema.Hash;
+    u64 UnitHash = Hash(Str8Struct(&SourceHash)) ^ Compiler->Schema->Hash;
 
     for (u32 Index = 0; Index < Unit->ImportCount; ++Index) {
         Str8 ImportPath = Tree->Files[Index + 1].Path;

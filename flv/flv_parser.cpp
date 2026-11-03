@@ -7,14 +7,14 @@
 #include "nc_tls.h"
 #include "nc_file.h"
 
-#include "flv_parser.h"
 #include "flv_ast.h"
 #include "flv_token.h"
 #include "flv_symbol_table.h"
 #include "flv_intern.h"
 #include "flv_type.h"
 #include "flv_type_check.h"
-// #include "flv_lexer.h"
+#include "flv_lexer.h"
+#include "flv_parser.h"
 
 void
 FLVLogErrorAt(SourceLoc Loc, char const* Fmt, ...)
@@ -128,8 +128,6 @@ global const OpName OP_NAME_TABLE[] = {
         TOKEN_KIND_LOG_OR
     }
 };
-
-global NameIndex OP_NAMES[256] = {};
 
 INTERNAL Token
 CurrentToken(void)

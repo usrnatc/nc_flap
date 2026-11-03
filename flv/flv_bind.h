@@ -5,7 +5,8 @@
 
 #include "fli.h"
 
-#include "flv_compile.h"
+#include "flv_schema.h"
+#include "flv_compiler.h"
 
 struct Arena;
 
