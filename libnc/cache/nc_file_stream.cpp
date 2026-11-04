@@ -40,9 +40,6 @@ FSObjectAlloc(Str8 Key, b32* CancelSignal, OUT b32* Retry, OUT u64* Generation)
     KeyReadOffset += SerialPop(Key, KeyReadOffset, Path.Str, Path.Size, 1);
     KeyReadOffset += SerialPopStruct(Key, KeyReadOffset, &Range);
 
-    if (!LaneIndex())
-        PrintOut("[FS] alloc %S: start\n", PRINT_STR(Path));
-
     b32 FileOkay = FALSE;
     FileProperties FilePropsPre = {};
 
@@ -144,26 +141,11 @@ FSObjectAlloc(Str8 Key, b32* CancelSignal, OUT b32* Retry, OUT u64* Generation)
                 *Retry = TRUE;
                 ArenaRelease(DataMemPool);
                 MemSet(&ContentKey, 0, sizeof(ContentKey));
-                PrintOut(
-                    "[FS] read %S: RETRY (pre mod %llu post mod %llu, pre size %llu post size %llu, want %llu got %llu, handle %u)\n",
-                    PRINT_STR(Path),
-                    FilePropsPre.Modified,
-                    FilePropsPost.Modified,
-                    FilePropsPre.Size,
-                    FilePropsPost.Size,
-                    DataBufferSize,
-                    TotalBytesRead,
-                    FileHandleOkay
-                );
             } else {
-                u128 DataHash = CSubmitData(ContentKey, &DataMemPool, Str(DataBuffer, DataBufferSize));
-
-                PrintOut(
-                    "[FS] read %S: %llu bytes, hash %016llx%016llx\n",
-                    PRINT_STR(Path),
-                    DataBufferSize,
-                    DataHash.U64[0],
-                    DataHash.U64[1]
+                CSubmitData(
+                    ContentKey, 
+                    &DataMemPool, 
+                    Str(DataBuffer, DataBufferSize)
                 );
             }
         }
@@ -204,13 +186,6 @@ FSObjectAlloc(Str8 Key, b32* CancelSignal, OUT b32* Retry, OUT u64* Generation)
             Node->LastModifiedTimestamp = FilePropsPre.Modified;
             Node->Size = FilePropsPre.Size;
             *Generation = Node->Generation;
-
-            PrintOut(
-                "[FS] node %S: gen %llu, modified %llu\n",
-                PRINT_STR(Path),
-                Node->Generation,
-                Node->LastModifiedTimestamp
-            );
         }
     }
 
@@ -263,19 +238,14 @@ FSKeyFromPathRange(Str8 Path, r1u64 Range, u64 EndTimeUSecs)
         }
     }
 
-    b32 Stale = FALSE;
     OCObject Object = OCObjectFromKey(
         Acc, 
         Key, 
         FSObjectAlloc, 
         FSObjectRelease, 
         EndTimeUSecs,
-        __Params.Generation = Generation,
-        __Params.Stale = &Stale
+        __Params.Generation = Generation
     );
-
-    if (Stale)
-        PrintOut("[FS] key %S: stale, want gen %llu\n", PRINT_STR(Path), Generation);
 
     MemCpy(&Result, &Object, sizeof(Result));
     AccessClose(Acc);

@@ -61,13 +61,14 @@ struct OCNode {
     Str8        Key;
     u64         LastRequestedGeneration;
     u64         LastCompletedGeneration;
-    OCObject      V;
+    OCObject    V;
     AccessPoint Point;
     u64         WorkingCount;
     u64         CompletionCount;
     u64         EvictionThresholdUSecs;
+    u64         LastTouchedRequestGeneration;
     b32         Cancelled;
-    u64         __Reserved;
+    b32         OtherNodesDependOnMe;
 };
 
 struct OCSlot {
@@ -97,6 +98,7 @@ struct OCRequestBatch {
 
 struct OCShared {
     Arena*         MemPool;
+    u64            RequestGeneration;
     u64            CacheSlotsCount;
     OCCache**      CacheSlots;
     StripeArray    CacheStripes;
