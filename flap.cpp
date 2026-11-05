@@ -305,6 +305,8 @@ EntryPoint(CommandLine* CLI)
         ASYNC_THREADS_COUNT
     );
 
+    FLVCompilerInit();
+
     for (u64 Index = 0; Index < ASYNC_THREADS_COUNT; ++Index) {
         LaneCtxs[Index].Index = Index;
         LaneCtxs[Index].Count = ASYNC_THREADS_COUNT;
@@ -318,14 +320,14 @@ EntryPoint(CommandLine* CLI)
 
     local char* FLIPaths[] = {
         "H:\\rfdesign\\nc_flap\\tools\\logs\\00000010.BIN",
-        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000034.BIN",
-        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000038.BIN",
-        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000047.BIN",
-        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000048.BIN",
-        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000050.BIN",
-        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000058.BIN",
-        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000061.BIN",
-        // "H:\\rfdesign\\nc_flap\\tools\\logs\\00000064.BIN"
+        "H:\\rfdesign\\nc_flap\\tools\\logs\\00000034.BIN",
+        "H:\\rfdesign\\nc_flap\\tools\\logs\\00000038.BIN",
+        "H:\\rfdesign\\nc_flap\\tools\\logs\\00000047.BIN",
+        "H:\\rfdesign\\nc_flap\\tools\\logs\\00000048.BIN",
+        "H:\\rfdesign\\nc_flap\\tools\\logs\\00000050.BIN",
+        "H:\\rfdesign\\nc_flap\\tools\\logs\\00000058.BIN",
+        "H:\\rfdesign\\nc_flap\\tools\\logs\\00000061.BIN",
+        "H:\\rfdesign\\nc_flap\\tools\\logs\\00000064.BIN"
     };
     FLIKey Keys[ARRAY_COUNT(FLIPaths)] = {};
 
@@ -337,11 +339,11 @@ EntryPoint(CommandLine* CLI)
     }
 
     local char const* ViewPaths[] = {
-        // "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\power.flv",
-        // "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\vibration.flv",
-        // "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\ekf.flv",
-        // "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\tuning.flv",
-        // "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\overview.flv",
+        "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\power.flv",
+        "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\vibration.flv",
+        "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\ekf.flv",
+        "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\tuning.flv",
+        "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\overview.flv",
         "H:\\rfdesign\\nc_flap\\tools\\flv_examples\\tester.flv"
     };
  

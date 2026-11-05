@@ -4,12 +4,15 @@
 #include "nc_types.h"
 #include "nc_string.h"
 #include "nc_tls.h"
+#include "nc_system.h"
 
 #include "flv_base_types.h"
 
 struct Arena;
 struct NamePool;
 struct TypeTable;
+struct SymTab;
+struct ParserState;
 struct FLVBuiltin;
 struct FLVSchema;
 
@@ -21,20 +24,25 @@ struct FLVSchema;
 #define FLV_STDLIB_FLIGHT (GetTLS()->FLV_COMPILER->StdLibFlight)
 #define FLV_STDLIB_ARMED  (GetTLS()->FLV_COMPILER->StdLibArmed)
 
+#define FLV_LOCK_SCOPE_COMPILER() DEFER(FLVCompilerLock(), FLVCompilerUnlock())
+
 // @types______________________________________________________________________
 struct FLVCompiler {
-    Arena*      MemPool;
-    Arena*      SchemaMemPool;
-    NamePool*   Names;
-    TypeTable*  Types;
-    FLVSchema*  Schema;
-    FLVBuiltin* StdLib;
-    u64         SchemaKeyHash;
-    u32         KeywordNameBase;
-    u32         __Padding;
-    NameIndex   OpNames[256];
-    TypeIndex   StdLibFlight;
-    BindIndex   StdLibArmed;
+    Arena*       MemPool;
+    Arena*       SchemaMemPool;
+    Handle       Mtx;
+    NamePool*    Names;
+    TypeTable*   Types;
+    SymTab*      SymbolTable;
+    ParserState* Parser;
+    FLVSchema*   Schema;
+    FLVBuiltin*  StdLib;
+    u64          SchemaKeyHash;
+    u32          KeywordNameBase;
+    u32          __Padding;
+    NameIndex    OpNames[256];
+    TypeIndex    StdLibFlight;
+    BindIndex    StdLibArmed;
 };
 
 struct FLVSlotName {
@@ -44,9 +52,11 @@ struct FLVSlotName {
 };
 
 // @runtime____________________________________________________________________
-
+extern FLVCompiler* FLV_COMPILER_SHARED;
 
 // @functions__________________________________________________________________
-FLVCompiler* FLVCompilerSelected(void);
+void FLVCompilerInit(void);
+FLVCompiler* FLVCompilerLock(void);
+void FLVCompilerUnlock(void);
 
 #endif // __FLV_COMPILER_H__

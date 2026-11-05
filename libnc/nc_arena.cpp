@@ -19,8 +19,22 @@ ArenaInit(void)
 INTERNAL void
 ArenaRelease(Arena* MemPool)
 {
-    for (Arena* Node = MemPool->Current, *Previous = NULL; Node; Node = Previous) {
+#if defined(NC_ARENA_FREE_TAIL)
+    Arena* Prev = MemPool->Current;
+
+    for ( ; Prev->Prev; Prev = Prev->Prev);
+
+    Prev->Prev = MemPool->FreeTail;
+    MemPool->FreeTail = NULL;
+#endif
+
+    for (
+        Arena* Node = MemPool->Current, *Previous = NULL; 
+        Node; 
+        Node = Previous
+    ) {
         Previous = Node->Prev;
+        ASAN_UNPOISON(Node, Node->Committed);
         MemRelease(Node, Node->Reserved);
     }
 }
@@ -32,8 +46,13 @@ ArenaPushSize(Arena* MemPool, u64 Size, u64 Align, b32 Zero)
     u64 PrevPosition = ALIGNTO(Current->Position, Align);
     u64 NewPosition = PrevPosition + Size;
 
-    if (Current->Reserved < NewPosition && !(MemPool->Flags & ARENA_FLAG_NO_CHAIN)) {
+    if (
+        Current->Reserved < NewPosition && 
+        !(MemPool->Flags & ARENA_FLAG_NO_CHAIN)
+    ) {
         Arena* NewBlock = NULL;
+
+    #if defined(NC_ARENA_FREE_TAIL)
         Arena* PrevBlock;
 
         for (
@@ -50,6 +69,7 @@ ArenaPushSize(Arena* MemPool, u64 Size, u64 Align, b32 Zero)
                 break;
             }
         }
+    #endif
 
         if (!NewBlock) {
             u64 ReserveSize = Current->ReserveSize;
@@ -129,6 +149,19 @@ ArenaPushSize(Arena* MemPool, u64 Size, u64 Align, b32 Zero)
     return Result;
 }
 
+INTERNAL void 
+ArenaReleaseFreeBlocks(Arena* MemPool)
+{
+#if defined(NC_ARENA_FREE_TAIL)
+    Arena* FreeTail = MemPool->FreeTail;
+
+    MemPool->FreeTail = NULL;
+
+    if (FreeTail)
+        ArenaRelease(FreeTail);
+#endif
+}
+
 INTERNAL u64
 ArenaGetPosition(Arena* MemPool)
 {
@@ -143,12 +176,31 @@ ArenaPopTo(Arena *MemPool, u64 Position)
     u64 BigPosition = CLAMP_BOT(ARENA_HEADER_SIZE, Position);
     Arena* Current = MemPool->Current;
 
-    for (Arena* Prev = NULL; Current->BasePosition >= BigPosition; Current = Prev) {
+#if defined(NC_ARENA_FREE_TAIL)
+    for (
+        Arena* Prev = NULL; 
+        Current->BasePosition >= BigPosition; 
+        Current = Prev
+    ) {
         Prev = Current->Prev;
         Current->Position = ARENA_HEADER_SIZE;
         SLL_STACK_PUSH_EX(MemPool->FreeTail, Current, Prev);
-        ASAN_POISON((u8*) Current + ARENA_HEADER_SIZE, Current->ReserveSize - ARENA_HEADER_SIZE);
+        ASAN_POISON(
+            (u8*) Current + ARENA_HEADER_SIZE, 
+            Current->ReserveSize - ARENA_HEADER_SIZE
+        );
     }
+#else
+    for (
+        Arena* Prev = NULL;
+        Current->BasePosition >= BigPosition;
+        Current = Prev
+    ) {
+        Prev = Current->Prev;
+        ASAN_UNPOISON(Current, Current->Committed);
+        MemRelease(Current, Current->Reserved);
+    }
+#endif
 
     MemPool->Current = Current;
 
@@ -312,7 +364,11 @@ __ArenaAlloc(ArenaParams* Params)
     Result->Reserved = ReserveSize;
     Result->AllocationSiteFile = Params->AllocationSiteFile;
     Result->AllocationSiteLine = Params->AllocationSiteLine;
+
+#if defined(NC_ARENA_FREE_TAIL)
     Result->FreeTail = NULL;
+#endif
+
     ASAN_POISON(Base, CommitSize);
     ASAN_UNPOISON(Base, ARENA_HEADER_SIZE);
 

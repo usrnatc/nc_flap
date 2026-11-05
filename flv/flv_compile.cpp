@@ -11,6 +11,7 @@
 #include "flv_lexer.h"
 #include "flv_parser.h"
 #include "flv_type_check.h"
+#include "flv_symbol_table.h"
 
 FLVClosureTable FLV_CLOSURES = {};
 
@@ -246,7 +247,7 @@ FLVUnitObjectCreate(
     Offset += SerialPop(Key, Offset, Keys, KeysCount * sizeof(FLIKey), 1);
     Offset += SerialPopStruct(Key, Offset, &RootHash);
 
-    FLVCompiler* Compiler = FLVCompilerSelected();
+    FLVCompiler* Compiler = FLVCompilerLock();
     u64 SetHash = Hash(FLVFlightSetKey(Scratch.MemPool, Keys, KeysCount));
     b32 SchemaReady = FLVCompilerSchemaUpdate(
         Compiler, 
@@ -258,17 +259,15 @@ FLVUnitObjectCreate(
     Str8 Source = CDataFromHash(Acc, RootHash);
 
     if (!SchemaReady || !Source.Size) {
-        PrintOut(
-            "[FLV] unit %S: RETRY (schema ready %u, source %llu bytes, root %016llx%016llx)\n",
-            PRINT_STR(Path),
-            SchemaReady,
-            Source.Size,
-            RootHash.U64[0],
-            RootHash.U64[1]
-        );
         *Retry = TRUE;
+        FLVCompilerUnlock();
+        AccessClose(Acc);
+        ReleaseScratch(Scratch);
+
+        return Result;
     }
 
+    SymTabMark BindingsMark = SymTabMarkGet();
     Arena* MemPool = ArenaAlloc();
     FLVUnit* Unit = ArenaPushStructZero(MemPool, FLVUnit);
     ParsedFile Root = {};
@@ -289,10 +288,8 @@ FLVUnitObjectCreate(
     AST* Tree = ParseTokens(MemPool, &Root, NULL, 0);
 
     if (GetTLS()->PARSER_STATE->ImportNotReady) {
-        PrintOut(
-            "[FLV] unit %S: RETRY (import not ready)\n", 
-            PRINT_STR(Path)
-        );
+        SymTabPopToMark(BindingsMark);
+        FLVCompilerUnlock();
         ArenaRelease(MemPool);
         *Retry = TRUE;
         AccessClose(Acc);
@@ -380,16 +377,10 @@ FLVUnitObjectCreate(
         Unit->ImportHashes, 
         Unit->ImportCount
     ) ^ Compiler->Schema->Hash;
-    PrintOut(
-        "[FLV] unit %S: compiled, root %016llx%016llx, imports %u, hash %016llx\n",
-        PRINT_STR(Path),
-        RootHash.U64[0],
-        RootHash.U64[1],
-        Unit->ImportCount,
-        Unit->Hash
-    );
     Result.V[0] = INT_FROM_PTR(MemPool);
     Result.V[1] = INT_FROM_PTR(Unit);
+    SymTabPopToMark(BindingsMark);
+    FLVCompilerUnlock();
     AccessClose(Acc);
     ReleaseScratch(Scratch);
 
@@ -464,6 +455,7 @@ FLVResultObjectCreate(
         *Retry = TRUE;
     } else if (Program < Unit->Lowered.ProgramCount) {
         Arena* MemPool = ArenaAlloc();
+        Arena* RunMemPool = ArenaAlloc();
         FLVBoundSlot* Bound = FLVBindSlots(
             MemPool,
             FLI,
@@ -475,7 +467,7 @@ FLVResultObjectCreate(
  
         FLVLaneInit(
             &CompilerLane,
-            Scratch.MemPool,
+            RunMemPool,
             MemPool,
             &Unit->Lowered.Program[Program],
             FLI,
@@ -484,7 +476,7 @@ FLVResultObjectCreate(
             0
         );
         FLVLaneRun(&CompilerLane);
- 
+        ArenaRelease(RunMemPool);
         Result.V[0] = INT_FROM_PTR(MemPool);
         Result.V[1] = INT_FROM_PTR(CompilerLane.Items);
         Result.V[2] = Unit->Lowered.Program[Program].EmitCount;

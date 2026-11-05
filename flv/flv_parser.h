@@ -121,6 +121,8 @@ void ParseImport(void);
 void ParseProg(b32 IsImported);
 SourceLoc LocFromFiles(ParsedFile const* Files, TokIndex Tok);
 AST* ParseTokens(Arena* MemPool, ParsedFile const* Root, Str8 const* SearchPaths, u32 SearchPathCount);
+void ParserStateInit(ParserState* State);
+void ParserStateReset(ParserState* State);
 void* ASTNodeStmtAlloc(u32 Size);
 void* ASTNodeExprAlloc(u32 Size, u8 NodeType);
 void* ASTNodeDeclAlloc(u32 Size);

@@ -38,7 +38,6 @@
 #define ArenaPushVArrayZero(MemPool, Type, Count)         (Type*) ArenaPushSize(MemPool, sizeof(Type) * (Count), NC_SIMD_ALIGN, TRUE)
 #define ArenaPushArrayZeroEx(MemPool, Type, Count, Align) (Type*) ArenaPushSize(MemPool, sizeof(Type) * (Count), Align, TRUE)
 
-
 typedef u32 ArenaFlag;
 enum : u32 {
     ARENA_FLAG_NO_CHAIN     = (1 << 0),
@@ -73,7 +72,10 @@ struct Arena {
     ArenaFlag Flags;
     u8*       AllocationSiteFile;
     i32       AllocationSiteLine;
+
+#if defined(NC_ARENA_FREE_TAIL)
     Arena*    FreeTail;
+#endif
 };
 STATIC_ASSERT(sizeof(Arena) <= ARENA_HEADER_SIZE, ArenaHeaderSizeCheck);
 
@@ -96,5 +98,6 @@ INTERNAL void ArenaEndTemp(TempArena TempMemPool);
 INTERNAL Arena* __GetScratch(Arena** Conflicts, u64 Count);
 INTERNAL Arena* ArenaAllocEx(u64 ReserveSize = ARENA_EX_RESERVE_SIZE);
 INTERNAL u8* ArenaExBase(Arena* Stream);
+INTERNAL void ArenaReleaseFreeBlocks(Arena* MemPool);
 
 #endif // __NC_ARENA_H__

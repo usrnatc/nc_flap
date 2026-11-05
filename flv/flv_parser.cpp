@@ -290,6 +290,47 @@ ArenaExPushSize(ArenaEx* Stream, u64 Size)
  
     return Result;
 }
+
+void 
+ParserStateInit(ParserState* State)
+{
+    MemZero(State, sizeof(*State));
+    State->StmtMemPool = ArenaAllocEx();
+    State->DeclMemPool = ArenaAllocEx();
+    State->InitMemPool = ArenaAllocEx();
+    State->DeferredMemPool = ArenaAllocEx(GB(1));
+    State->WorkMemPool = ArenaAllocEx(GB(1));
+    State->FilesMemPool = ArenaAllocEx(MB(1));
+    ArenaExInit(&State->ExprMemPool, EXPR_ARENA_RESERVE_SIZE);
+}
+
+void 
+ParserStateReset(ParserState* State)
+{
+    ArenaEx ExprMemPool = State->ExprMemPool;
+    Arena* StmtMemPool = State->StmtMemPool;
+    Arena* DeclMemPool = State->DeclMemPool;
+    Arena* InitMemPool = State->InitMemPool;
+    Arena* DeferredMemPool = State->DeferredMemPool;
+    Arena* WorkMemPool = State->WorkMemPool;
+    Arena* FilesMemPool = State->FilesMemPool;
+
+    MemZero(State, sizeof(*State));
+    ExprMemPool.Count = 0;
+    State->ExprMemPool = ExprMemPool;
+    State->StmtMemPool = StmtMemPool;
+    State->DeclMemPool = DeclMemPool;
+    State->InitMemPool = InitMemPool;
+    State->DeferredMemPool = DeferredMemPool;
+    State->WorkMemPool = WorkMemPool;
+    State->FilesMemPool = FilesMemPool;
+    ArenaClear(StmtMemPool);
+    ArenaClear(DeclMemPool);
+    ArenaClear(InitMemPool);
+    ArenaClear(DeferredMemPool);
+    ArenaClear(WorkMemPool);
+    ArenaClear(FilesMemPool);
+}
  
 INTERNAL void
 DeferIdent(
@@ -1516,14 +1557,7 @@ ParseTokens(
 ) {
     AST* Tree;
  
-    GetTLS()->PARSER_STATE = ArenaPushArrayZero(MemPool, ParserState, 1);
-    GetTLS()->PARSER_STATE->StmtMemPool = ArenaAllocEx();
-    GetTLS()->PARSER_STATE->DeclMemPool = ArenaAllocEx();
-    GetTLS()->PARSER_STATE->InitMemPool = ArenaAllocEx();
-    GetTLS()->PARSER_STATE->DeferredMemPool = ArenaAllocEx(GB(1));
-    GetTLS()->PARSER_STATE->WorkMemPool = ArenaAllocEx(GB(1));
-    GetTLS()->PARSER_STATE->FilesMemPool = ArenaAllocEx(MB(1));
-    ArenaExInit(&GetTLS()->PARSER_STATE->ExprMemPool, EXPR_ARENA_RESERVE_SIZE);
+    ParserStateReset(GetTLS()->PARSER_STATE);
     Tree = ArenaPushArrayZero(MemPool, AST, 1);
     Tree->MemPool = MemPool;
     Tree->Stmts = ArenaExBase(GetTLS()->PARSER_STATE->StmtMemPool);

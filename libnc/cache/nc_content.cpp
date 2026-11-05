@@ -65,10 +65,25 @@ CInit(void)
     C_SHARED = ArenaPushArrayZero(MemPool, CShared, 1);
     C_SHARED->MemPool = MemPool;
     C_SHARED->BlobSlotsCount = 16384;
-    C_SHARED->BlobStripesCount = MIN(C_SHARED->BlobSlotsCount, GetSystemProperties()->LogicalProcessorCount);
-    C_SHARED->BlobSlots = ArenaPushArrayZero(MemPool, CBlobSlot, C_SHARED->BlobSlotsCount);
-    C_SHARED->BlobStripes = ArenaPushArrayZero(MemPool, CStripe, C_SHARED->BlobStripesCount);
-    C_SHARED->BlobStripesFreeNodes = ArenaPushArrayZero(MemPool, CBlobNode*, C_SHARED->BlobStripesCount);
+    C_SHARED->BlobStripesCount = MIN(
+        C_SHARED->BlobSlotsCount, 
+        GetSystemProperties()->LogicalProcessorCount
+    );
+    C_SHARED->BlobSlots = ArenaPushArrayZero(
+        MemPool, 
+        CBlobSlot, 
+        C_SHARED->BlobSlotsCount
+    );
+    C_SHARED->BlobStripes = ArenaPushArrayZero(
+        MemPool, 
+        CStripe, 
+        C_SHARED->BlobStripesCount
+    );
+    C_SHARED->BlobStripesFreeNodes = ArenaPushArrayZero(
+        MemPool, 
+        CBlobNode*, 
+        C_SHARED->BlobStripesCount
+    );
 
     for (u64 Index = 0; Index < C_SHARED->BlobStripesCount; ++Index) {
         CStripe* BlobStripe = &C_SHARED->BlobStripes[Index];
@@ -79,10 +94,25 @@ CInit(void)
     }
 
     C_SHARED->KeySlotsCount = 4096;
-    C_SHARED->KeyStripesCount = MIN(C_SHARED->KeySlotsCount, GetSystemProperties()->LogicalProcessorCount);
-    C_SHARED->KeySlots = ArenaPushArrayZero(MemPool, CKeySlot, C_SHARED->KeySlotsCount);
-    C_SHARED->KeyStripes = ArenaPushArrayZero(MemPool, CStripe, C_SHARED->KeyStripesCount);
-    C_SHARED->KeyStripesFreeNodes = ArenaPushArrayZero(MemPool, CKeyNode*, C_SHARED->KeyStripesCount);
+    C_SHARED->KeyStripesCount = MIN(
+        C_SHARED->KeySlotsCount, 
+        GetSystemProperties()->LogicalProcessorCount
+    );
+    C_SHARED->KeySlots = ArenaPushArrayZero(
+        MemPool, 
+        CKeySlot, 
+        C_SHARED->KeySlotsCount
+    );
+    C_SHARED->KeyStripes = ArenaPushArrayZero(
+        MemPool, 
+        CStripe, 
+        C_SHARED->KeyStripesCount
+    );
+    C_SHARED->KeyStripesFreeNodes = ArenaPushArrayZero(
+        MemPool, 
+        CKeyNode*, 
+        C_SHARED->KeyStripesCount
+    );
 
     for (u64 Index = 0; Index < C_SHARED->KeyStripesCount; ++Index) {
         CStripe* KeyStripe = &C_SHARED->KeyStripes[Index];
@@ -93,10 +123,25 @@ CInit(void)
     }
 
     C_SHARED->RootSlotsCount = 4096;
-    C_SHARED->RootStripesCount = MIN(C_SHARED->RootSlotsCount, GetSystemProperties()->LogicalProcessorCount);
-    C_SHARED->RootSlots = ArenaPushArrayZero(MemPool, CRootSlot, C_SHARED->RootSlotsCount);
-    C_SHARED->RootStripes = ArenaPushArrayZero(MemPool, CStripe, C_SHARED->RootStripesCount);
-    C_SHARED->RootStripesFreeNodes = ArenaPushArrayZero(MemPool, CRootNode*, C_SHARED->RootStripesCount);
+    C_SHARED->RootStripesCount = MIN(
+        C_SHARED->RootSlotsCount, 
+        GetSystemProperties()->LogicalProcessorCount
+    );
+    C_SHARED->RootSlots = ArenaPushArrayZero(
+        MemPool, 
+        CRootSlot, 
+        C_SHARED->RootSlotsCount
+    );
+    C_SHARED->RootStripes = ArenaPushArrayZero(
+        MemPool, 
+        CStripe, 
+        C_SHARED->RootStripesCount
+    );
+    C_SHARED->RootStripesFreeNodes = ArenaPushArrayZero(
+        MemPool, 
+        CRootNode*, 
+        C_SHARED->RootStripesCount
+    );
 
     for (u64 Index = 0; Index < C_SHARED->RootStripesCount; ++Index) {
         CStripe* RootStripe = &C_SHARED->RootStripes[Index];
@@ -112,7 +157,10 @@ CRootAlloc(void)
 {
     CRoot Root = {};
 
-    Root.V[0] = AtomicIncFetchU64(&C_SHARED->RootIDGeneration, MEM_ORDER_SEQ_CST);
+    Root.V[0] = AtomicIncFetchU64(
+        &C_SHARED->RootIDGeneration, 
+        MEM_ORDER_SEQ_CST
+    );
 
     u64 SlotIndex = Root.V[0] % C_SHARED->RootSlotsCount;
     u64 StripeIndex = SlotIndex % C_SHARED->RootStripesCount;

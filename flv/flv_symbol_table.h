@@ -115,6 +115,13 @@ struct SymTab {
     u32        Depth;
 };
 
+struct SymTabMark {
+    u32 BindingsCount;
+    u32 UndoCount;
+    u32 Depth;
+    u32 __Padding;
+};
+
 void SymTabInit(NamePool* Names);
 void BuiltinTypesInit(void);
 void SymTabPrepare(void);
@@ -125,5 +132,7 @@ BindIndex AddBinding(ScopeIndex Current, NameIndex Name, DeclIndex Decl, TypeInd
 BindIndex AddFuncBinding(ScopeIndex Current, NameIndex Name, DeclIndex Decl, TypeIndex Type);
 BindIndex FindBinding(NameIndex Name);
 BindIndex FindLocalBinding(ScopeIndex Current, NameIndex Name);
+SymTabMark SymTabMarkGet(void);
+void SymTabPopToMark(SymTabMark Mark);
 
 #endif // __FLV_SYMBOL_TABLE_H__

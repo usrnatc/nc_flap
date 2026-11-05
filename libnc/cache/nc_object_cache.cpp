@@ -190,8 +190,8 @@ __OCObjectFromKey(Access* Acc, Str8 Key, OCObjectParams* Params, u64 EndTimeUSec
                 if (IsStale) {
                     b32 GotTask = !AtomicCASU64(
                         &Node->WorkingCount, 
-                        1,
                         0,
+                        1,
                         MEM_ORDER_SEQ_CST, 
                         MEM_ORDER_SEQ_CST
                     );

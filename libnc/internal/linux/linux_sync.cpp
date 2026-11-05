@@ -539,7 +539,9 @@ StripeArrayAlloc(Arena* MemPool)
     );
 
     for (u64 Index = 0; Index < Result.Count; ++Index) {
-        Result.V[Index].MemPool = ArenaAlloc();
+        Result.V[Index].MemPool = ArenaAlloc(
+            __Params.CommitSize = KB(4)
+        );
         Result.V[Index].RWMtx = RWMutexAlloc();
         Result.V[Index].CondVar = CondVarAlloc();
     }

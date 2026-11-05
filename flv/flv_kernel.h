@@ -30,7 +30,7 @@ enum : u16 {
 
 #define FLV_OPERAND_KIND_SHIFT 14
 #define FLV_OPERAND_INDEX_MASK 0x3FFFU
-#define FLV_OPERAND_NONE 0xFFFFU
+#define FLV_OPERAND_NONE       0xFFFFU
 
 #define FLV_KERNEL_FLAG_RUN       (1 << 0)
 #define FLV_KERNEL_FLAG_SCALAR    (1 << 1)
@@ -38,6 +38,8 @@ enum : u16 {
 #define FLV_KERNEL_FLAG_WINDOW    (1 << 3)
 #define FLV_KERNEL_FLAG_EMIT      (1 << 4)
 #define FLV_KERNEL_FLAG_ROLLING   (1 << 5)
+
+#define FLV_SELECTION_CHUNK_RANGES U8_MAX
 
 #define FLV_ARITH_HEAD(Type)                                                \
     if (FLVTempIsMissing(Lane, Op.LHS) || FLVTempIsMissing(Lane, Op.RHS)) { \
@@ -249,14 +251,20 @@ struct FLVWindow {
     u32        __Padding;
 };
 
+struct FLVSelectionChunk {
+    FLVSelectionChunk* Next;
+    u64                Count;
+    r1u64              V[FLV_SELECTION_CHUNK_RANGES];
+};
+
 struct FLVSelectionBuild {
-    r1u64* V;
-    u64    Count;
-    u64    Capacity;
-    u64    OpenStartUSecs;
-    u64    OpenEndUSecs;
-    b32    IsOpen;
-    u32    __Padding;
+    FLVSelectionChunk* Head;
+    FLVSelectionChunk* Tail;
+    u64                Count;
+    u64                OpenStartUSecs;
+    u64                OpenEndUSecs;
+    b32                IsOpen;
+    u32                __Padding;
 };
 
 

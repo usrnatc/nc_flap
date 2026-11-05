@@ -45,11 +45,15 @@ ThreadContextReadSrcLoc(OUT char** FileName, OUT u64* LineNum)
 ThreadContext* 
 ThreadContextAlloc(void)
 {
-    Arena* MemPool = ArenaAlloc();
+    Arena* MemPool = ArenaAlloc(
+        __Params.CommitSize = KB(4)
+    );
     ThreadContext* Result = ArenaPushArrayZero(MemPool, ThreadContext, 1);
 
     Result->MemPools[0] = MemPool;
-    Result->MemPools[1] = ArenaAlloc();
+    Result->MemPools[1] = ArenaAlloc(
+        __Params.CommitSize = KB(4)
+    );
     Result->LaneCtx.Count = 1;
 
     return Result;
@@ -108,8 +112,11 @@ AccessOpen(void)
 {
     ThreadContext* LOCAL_THREAD_CTX = GetTLS()->LOCAL_THREAD_CTX;
 
-    if (!LOCAL_THREAD_CTX->AccessMemPool)
-        LOCAL_THREAD_CTX->AccessMemPool = ArenaAlloc();
+    if (!LOCAL_THREAD_CTX->AccessMemPool) {
+        LOCAL_THREAD_CTX->AccessMemPool = ArenaAlloc(
+            __Params.CommitSize = KB(4)
+        );
+    }
 
     Access* Acc = LOCAL_THREAD_CTX->FreeAccess;
 

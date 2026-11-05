@@ -129,6 +129,34 @@ SymTabReset(void)
     }
 }
 
+SymTabMark
+SymTabMarkGet(void)
+{
+    SymTabMark Result = {};
+    SymTab* const __SymTab = GetTLS()->SYMBOL_TABLE;
+
+    Result.BindingsCount = __SymTab->BindingsCount;
+    Result.UndoCount = __SymTab->UndoCount;
+    Result.Depth = __SymTab->Depth;
+
+    return Result;
+}
+
+void
+SymTabPopToMark(SymTabMark Mark)
+{
+    SymTab* Table = GetTLS()->SYMBOL_TABLE;
+
+    ASSERT(Table->UndoCount == Mark.UndoCount);
+    ASSERT(Table->Depth == Mark.Depth);
+
+    ArenaPopTo(
+        Table->BindingsMemPool, 
+        ARENA_HEADER_SIZE + (u64) Mark.BindingsCount * sizeof(Binding)
+    );
+    Table->BindingsCount = Mark.BindingsCount;
+}
+
 ScopeIndex 
 ScopeEnter(void)
 {

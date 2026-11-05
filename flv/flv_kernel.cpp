@@ -10,10 +10,10 @@
 #include "fli.h"
 
 #include "flv_kernel.h"
-// #include "flv_lower.h"
-// #include "flv_bind.h"
-// #include "flv_run.h"
-// #include "flv_stdlib.h"
+#include "flv_lower.h"
+#include "flv_bind.h"
+#include "flv_run.h"
+#include "flv_stdlib.h"
 
 #define X(Name, Inputs, Dst, Flags) { Inputs, FLV_ELEMENT_KIND_##Dst, Flags, 0 },
 FLVKernelInfo const FLV_KERNEL_INFO_TABLE[FLV_KERNEL_COUNT] = {
@@ -124,6 +124,44 @@ FLVSelectionAlloc(FLVLane* Lane, u64 Capacity)
 
     Result.V = ArenaPushArray(Lane->MemPool, r1u64, Capacity);
     Result.Count = 0;
+
+    return Result;
+}
+
+INTERNAL void
+FLVSelectionBuildPush(FLVLane* Lane, FLVSelectionBuild* Build, r1u64 Range)
+{
+    FLVSelectionChunk* Chunk = Build->Tail;
+
+    if (!Chunk || Chunk->Count == FLV_SELECTION_CHUNK_RANGES) {
+        Chunk = ArenaPushStruct(Lane->MemPool, FLVSelectionChunk);
+        Chunk->Next = NULL;
+        Chunk->Count = 0;
+        SLL_QUEUE_PUSH(Build->Head, Build->Tail, Chunk);
+    }
+
+    Chunk->V[Chunk->Count] = Range;
+    ++Chunk->Count;
+    ++Build->Count;
+}
+
+INTERNAL FLVSelection
+FLVSelectionFromBuild(FLVLane* Lane, FLVSelectionBuild const* Build)
+{
+    FLVSelection Result = FLVSelectionAlloc(Lane, Build->Count);
+
+    for (
+        FLVSelectionChunk* Chunk = Build->Head; 
+        Chunk; 
+        Chunk = Chunk->Next
+    ) {
+        MemCpy(
+            Result.V + Result.Count, 
+            Chunk->V, 
+            Chunk->Count * sizeof(r1u64)
+        );
+        Result.Count += Chunk->Count;
+    }
 
     return Result;
 }
@@ -921,11 +959,11 @@ FLV_KERNEL_FUNC_SIG(FLVKernelSEL_FROM_MASK)
 
             Build->OpenEndUSecs = Time[Index];
         } else if (Build->IsOpen) {
-            ASSERT(Build->Count < Build->Capacity);
-
-            Build->V[Build->Count].Min = Build->OpenStartUSecs;
-            Build->V[Build->Count].Max = Build->OpenEndUSecs;
-            ++Build->Count;
+            FLVSelectionBuildPush(
+                Lane, 
+                Build, 
+                Rng(Build->OpenStartUSecs, Build->OpenEndUSecs)
+            );
             Build->IsOpen = FALSE;
         }
     }
@@ -950,14 +988,117 @@ FLV_KERNEL_FUNC_SIG(FLVKernelSEL_FROM_TIME_RANGE)
     }
 }
 
+INTERNAL u64
+FLVModeRanges(FLVLane* Lane, u32 ModeNumber, OUT r1u64* Result)
+{
+    u64 ModesCount = 0;
+    FLIMode* Modes = FLITableFromName(
+        Lane->FLI, 
+        Modes, 
+        MODES, 
+        &ModesCount
+    );
+    u64 Count = 0;
+    r1u64 Last = {};
+
+    for (u64 Index = 0; Index < ModesCount; ++Index) {
+        if (Modes[Index].Mode != ModeNumber)
+            continue;
+
+        u64 EndUSecs = (Index + 1 < ModesCount)
+            ? Modes[Index + 1].TimeUSecs
+            : Lane->FlightEndUSecs;
+
+        if (Count && Last.Max == Modes[Index].TimeUSecs) {
+            Last.Max = EndUSecs;
+        } else {
+            Last.Min = Modes[Index].TimeUSecs;
+            Last.Max = EndUSecs;
+            ++Count;
+        }
+
+        if (Result)
+            Result[Count - 1] = Last;
+    }
+
+    return Count;
+}
+
+INTERNAL u64
+FLVEventRanges(FLVLane* Lane, u8 ID, OUT r1u64* Result)
+{
+    u64 EventsCount = 0;
+    FLIEvt* Events = FLITableFromName(
+        Lane->FLI, 
+        Events, 
+        EVENTS, 
+        &EventsCount
+    );
+    u64 Count = 0;
+
+    for (u64 Index = 0; Index < EventsCount; ++Index) {
+        if (Events[Index].ID != ID)
+            continue;
+
+        if (Result) {
+            Result[Count] = Rng(
+                Events[Index].TimeUSecs, 
+                Events[Index].TimeUSecs
+            );
+         }
+
+        ++Count;
+    }
+
+    return Count;
+}
+
+INTERNAL u64
+FLVArmedRanges(FLVLane* Lane, OUT r1u64* Result)
+{
+    u64 EventsCount = 0;
+    FLIEvt* Events = FLITableFromName(
+        Lane->FLI, 
+        Events, 
+        EVENTS, 
+        &EventsCount
+    );
+    u64 Count = 0;
+    b32 IsArmed = FALSE;
+    u64 ArmedUSecs = 0;
+
+    for (u64 Index = 0; Index < EventsCount; ++Index) {
+        if (Events[Index].ID == FLV_EVENT_ID_ARMED && !IsArmed) {
+            IsArmed = TRUE;
+            ArmedUSecs = Events[Index].TimeUSecs;
+        } else if (
+            Events[Index].ID == FLV_EVENT_ID_DISARMED && 
+            IsArmed
+        ) {
+            if (Result)
+                Result[Count] = Rng(ArmedUSecs, Events[Index].TimeUSecs);
+
+            ++Count;
+            IsArmed = FALSE;
+        }
+    }
+
+    if (IsArmed) {
+        if (Result)
+            Result[Count] = Rng(ArmedUSecs, Lane->FlightEndUSecs);
+
+        ++Count;
+    }
+
+    return Count;
+}
+
 INTERNAL
 FLV_KERNEL_FUNC_SIG(FLVKernelSEL_MODE)
 {
     FLVSelection* Sel = FLVSelectionPtr(Lane, Op.Dst);
     u32 Slot = FLVGetOperandIndex(Op.LHS);
     FLVBoundSlot const* Bound = &Lane->Slots[Slot];
-    u64 ModesCount = 0;
-    FLIMode* Modes = FLITableFromName(Lane->FLI, Modes, MODES, &ModesCount);
 
     ASSERT(FLVGetOperandKind(Op.LHS) == FLV_OPERAND_KIND_SLOT);
 
@@ -967,77 +1108,31 @@ FLV_KERNEL_FUNC_SIG(FLVKernelSEL_MODE)
         return;
     }
 
-    *Sel = FLVSelectionAlloc(Lane, ModesCount);
+    u64 Count = FLVModeRanges(Lane, Bound->ModeNumber, NULL);
 
-    for (u64 Index = 0; Index < ModesCount; ++Index) {
-        if (Modes[Index].Mode != Bound->ModeNumber)
-            continue;
-
-        u64 EndUSecs = (Index + 1 < ModesCount)
-            ? Modes[Index + 1].TimeUSecs
-            : Lane->FlightEndUSecs;
-
-        if (
-            Sel->Count &&
-            Sel->V[Sel->Count - 1].Max == Modes[Index].TimeUSecs
-        ) {
-            Sel->V[Sel->Count - 1].Max = EndUSecs;
-        } else {
-            Sel->V[Sel->Count].Min= Modes[Index].TimeUSecs;
-            Sel->V[Sel->Count].Max = EndUSecs;
-            ++Sel->Count;
-        }
-    }
+    *Sel = FLVSelectionAlloc(Lane, Count);
+    Sel->Count = FLVModeRanges(Lane, Bound->ModeNumber, Sel->V);
 }
 
 INTERNAL
 FLV_KERNEL_FUNC_SIG(FLVKernelSEL_EVENT)
 {
     FLVSelection* Sel = FLVSelectionPtr(Lane, Op.Dst);
-    i64 ID = FLVScalarI64(Lane, Op.LHS);
-    u64 EventsCount = 0;
-    FLIEvt* Events = FLITableFromName(Lane->FLI, Events, EVENTS, &EventsCount);
+    u8 ID = (u8) FLVScalarI64(Lane, Op.LHS);
+    u64 Count = FLVEventRanges(Lane, ID, NULL);
 
-    *Sel = FLVSelectionAlloc(Lane, EventsCount);
-
-    for (u64 Index = 0; Index < EventsCount; ++Index) {
-        if (Events[Index].ID != (u8) ID)
-            continue;
-
-        Sel->V[Sel->Count].Min = Events[Index].TimeUSecs;
-        Sel->V[Sel->Count].Max = Events[Index].TimeUSecs;
-        ++Sel->Count;
-    }
+    *Sel = FLVSelectionAlloc(Lane, Count);
+    Sel->Count = FLVEventRanges(Lane, ID, Sel->V);
 }
 
 INTERNAL
 FLV_KERNEL_FUNC_SIG(FLVKernelSEL_ARMED)
 {
     FLVSelection* Sel = FLVSelectionPtr(Lane, Op.Dst);
-    u64 EventsCount = 0;
-    FLIEvt* Events = FLITableFromName(Lane->FLI, Events, EVENTS, &EventsCount);
-    b32 IsArmed = FALSE;
-    u64 ArmedUSecs = 0;
+    u64 Count = FLVArmedRanges(Lane, NULL);
 
-    *Sel = FLVSelectionAlloc(Lane, EventsCount + 1);
-
-    for (u64 Index = 0; Index < EventsCount; ++Index) {
-        if (Events[Index].ID == FLV_EVENT_ID_ARMED && !IsArmed) {
-            IsArmed = TRUE;
-            ArmedUSecs = Events[Index].TimeUSecs;
-        } else if (Events[Index].ID == FLV_EVENT_ID_DISARMED && IsArmed) {
-            Sel->V[Sel->Count].Min = ArmedUSecs;
-            Sel->V[Sel->Count].Max = Events[Index].TimeUSecs;
-            ++Sel->Count;
-            IsArmed = FALSE;
-        }
-    }
-
-    if (IsArmed) {
-        Sel->V[Sel->Count].Min = ArmedUSecs;
-        Sel->V[Sel->Count].Max = Lane->FlightEndUSecs;
-        ++Sel->Count;
-    }
+    *Sel = FLVSelectionAlloc(Lane, Count);
+    Sel->Count = FLVArmedRanges(Lane, Sel->V);
 }
 
 INTERNAL
@@ -1356,14 +1451,7 @@ FLVKernelsRegionBegin(FLVLane* Lane, FLVRegion const* Region)
             FLVGetOperandIndex(Op.Dst)
         ];
 
-        Build->Capacity = Lane->RegionSampleCount / 2 + 1;
-        Build->V = ArenaPushArray(
-            Lane->MemPool, 
-            r1u64, 
-            Build->Capacity
-        );
-        Build->Count = 0;
-        Build->IsOpen = FALSE;
+        MemZero(Build, sizeof(*Build));
     }
 
    // NOTE(nc): ReductionsBegin 
@@ -1497,16 +1585,15 @@ FLVKernelsRegionEnd(FLVLane* Lane, FLVRegion const* Region)
         FLVSelection* Sel = FLVSelectionPtr(Lane, Op.Dst);
 
         if (Build->IsOpen) {
-            ASSERT(Build->Count < Build->Capacity);
-
-            Build->V[Build->Count].Min = Build->OpenStartUSecs;
-            Build->V[Build->Count].Max = Build->OpenEndUSecs;
-            ++Build->Count;
+            FLVSelectionBuildPush(
+                Lane, 
+                Build, 
+                Rng(Build->OpenStartUSecs, Build->OpenEndUSecs)
+            );
             Build->IsOpen = FALSE;
         }
 
-        Sel->V = Build->V;
-        Sel->Count = Build->Count;
+        *Sel = FLVSelectionFromBuild(Lane, Build);
     }
 
     // NOTE(nc): ReductionsEnd
