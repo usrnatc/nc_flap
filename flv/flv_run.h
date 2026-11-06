@@ -84,6 +84,7 @@ struct FLVLane {
     u64                 MissingTemps;
     FLVRenderItem*      Items;
     FLVTableRef*        TableRefs;
+    FLVEmitBuild*       EmitBuilds;
     FLVRegion const*    Region;
     FLVColumn const*    BaseTime;
     u64 const*          Mask;
@@ -93,6 +94,7 @@ struct FLVLane {
     u64                 RegionSampleCount;
     u64                 ChunkBase;
     u64                 ChunkCount;
+    u64                 ChunkPosition;
 };
 
 // @runtime____________________________________________________________________
@@ -101,7 +103,7 @@ struct FLVLane {
 // @functions__________________________________________________________________
 void FLVLaneInit(FLVLane* Lane, Arena* MemPool, Arena* ResultMemPool, FLVProgram const* Program, FLIParsed* FLI, FLVBoundSlot const* Slots, u32 SlotsCount, u32 FlightIndex);
 void FLVLaneRun(FLVLane* Lane);
-Str8List FLVRenderItemsPrint(Arena* MemPool, FLVProgram const* Program, FLVRunItem* Items);
+Str8List FLVRenderItemsPrint(Arena* MemPool, FLVProgram const* Program, FLIParsed* FLI, FLVRunItem* Items);
 FLVRunSet* FLVRunSetInit(Arena* MemPool, FLVLowered const* Lowered, FLVSlot const* Slots, FLVSlotName const* SlotNames, u32 SlotsCount, FLIParsed** Flights, u32 FlightsCount);
 void FLVRunSetExecute(FLVRunSet* Set);
 void FLVRunSetSummarise(FLVRunSet* Set);

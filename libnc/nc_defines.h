@@ -871,7 +871,7 @@
     #pragma comment(lib, "clang_rt.asan_dynamic-x86_64.lib")
     EXTERN_C_LINK void __asan_poison_memory_region(void const volatile* addr, size_t size);
     EXTERN_C_LINK void __asan_unpoison_memory_region(void const volatile* addr, size_t size);
-    #define ASAN_POISON(Addr, Size) __asan_poison_memory_region((Addr), (Size))
+    #define ASAN_POISON(Addr, Size)   __asan_poison_memory_region((Addr), (Size))
     #define ASAN_UNPOISON(Addr, Size) __asan_unpoison_memory_region((Addr), (Size))
 #else
     #define ASAN_POISON(...)

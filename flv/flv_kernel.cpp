@@ -166,6 +166,149 @@ FLVSelectionFromBuild(FLVLane* Lane, FLVSelectionBuild const* Build)
     return Result;
 }
 
+INTERNAL void
+FLVMaskOrBits(u64* Dst, u64 DstBit, u64 const* Src, u64 Count)
+{
+    for (u64 Word = 0; (Word << 6) < Count; ++Word) {
+        u64 Bits = Src[Word];
+        u64 Valid = Count - (Word << 6);
+        u64 Position = DstBit + (Word << 6);
+        u64 Shift = Position & 63;
+        u64 DstWord = Position >> 6;
+
+        if (Valid < 64)
+            Bits &= (1ULL << Valid) - 1;
+
+        Dst[DstWord] |= Bits << Shift;
+
+        if (Shift)
+            Dst[DstWord + 1] |= Bits >> (64 - Shift);
+    }
+}
+
+INTERNAL void
+FLVMaskSetRange(u64* Dst, u64 DstBit, u64 Count)
+{
+    for (u64 Index = 0; Index < Count; ) {
+        u64 Position = DstBit + Index;
+        u64 Shift = Position & 63;
+        u64 Take = MIN(64 - Shift, Count - Index);
+        u64 Bits = (Take == 64) ? U64_MAX : ((1ULL << Take) - 1);
+
+        Dst[Position >> 6] |= Bits << Shift;
+        Index += Take;
+    }
+}
+
+INTERNAL void
+FLVMaskSetBit(u64* Dst, u64 Position)
+{
+    Dst[Position >> 6] |= 1ULL << (Position & 63);
+}
+
+INTERNAL u32*
+FLVRankFromMask(Arena* MemPool, u64 const* Mask, u64 SampleCount)
+{
+    u64 Words = FLVSeriesWordCount(SampleCount);
+    u32* Result = ArenaPushArray(MemPool, u32, Words + 1);
+    u64 Total = 0;
+
+    ASSERT(SampleCount <= U32_MAX);
+
+    for (u64 Word = 0; Word < Words; ++Word) {
+        Result[Word] = (u32) Total;
+        Total += PopCount64(Mask[Word]);
+    }
+
+    Result[Words] = (u32) Total;
+
+    return Result;
+}
+
+INTERNAL void
+FLVEmitBuildPush(FLVLane* Lane, FLVEmitBuild* Build, void const* Src, u64 Bytes)
+{
+    FLVValueChunk* Chunk = Build->Tail;
+
+    if (!Chunk || Chunk->Count + Bytes > FLV_VALUE_CHUNK_BYTES) {
+        Chunk = ArenaPushStruct(Lane->MemPool, FLVValueChunk);
+        Chunk->Next = NULL;
+        Chunk->Count = 0;
+        SLL_QUEUE_PUSH(Build->Head, Build->Tail, Chunk);
+    }
+
+    MemCpy(Chunk->V + Chunk->Count, Src, Bytes);
+    Chunk->Count += Bytes;
+    Build->ByteCount += Bytes;
+}
+
+INTERNAL void*
+FLVEmitBuildFlatten(FLVLane* Lane, FLVEmitBuild* Build)
+{
+    u8* Result = (u8*) ArenaPushSize(
+        Lane->ResultMemPool, 
+        Build->ByteCount, 
+        8, 
+        FALSE
+    );
+    u64 Offset = 0;
+
+    for (FLVValueChunk* Chunk = Build->Head; Chunk; Chunk = Chunk->Next) {
+        MemCpy(Result + Offset, Chunk->V, Chunk->Count);
+        Offset += Chunk->Count;
+    }
+
+    return Result;
+}
+
+INTERNAL u32
+FLVEmitSourceSlot(FLVLane* Lane, FLVRegion const* Region, u32 OpIndex, FLVOperand Operand)
+{
+    if (FLVGetOperandKind(Operand) == FLV_OPERAND_KIND_SLOT)
+        return FLVGetOperandIndex(Operand);
+
+    if (FLVGetOperandKind(Operand) != FLV_OPERAND_KIND_TEMP)
+        return U32_MAX;
+
+    for (u32 Index = OpIndex; Index--; ) {
+        FLVOp P = Lane->Program->Ops[Region->HeadOp + Index];
+
+        if (P.Dst != Operand)
+            continue;
+
+        switch (P.Kernel) {
+            default: {
+                return U32_MAX;
+            } break;
+
+            case FLV_KERNEL_LOAD_I64:
+            case FLV_KERNEL_LOAD_F64: {
+                return FLVGetOperandIndex(P.LHS);
+            } break;
+
+            case FLV_KERNEL_CONVERT_I64_F64: {
+                return FLVEmitSourceSlot(Lane, Region, Index, P.LHS);
+            } break;
+        }
+    }
+
+    return U32_MAX;
+}
+
+INTERNAL r1u64*
+FLVRegionRangesCpy(FLVLane* Lane)
+{
+    r1u64* Result = ArenaPushArray(
+        Lane->ResultMemPool, 
+        r1u64, 
+        Lane->RangesCount
+    );
+
+    MemCpy(Result, Lane->Ranges, Lane->RangesCount * sizeof(r1u64));
+
+    return Result;
+}
+
 INTERNAL u64
 FLVMaskHead(u64 const* Mask, u64 Count)
 {
@@ -1248,9 +1391,25 @@ INTERNAL
 FLV_KERNEL_FUNC_SIG(FLVKernelEMIT_CURVE)
 {
     u32 EmitIndex = FLVGetOperandIndex(Op.RHS);
-    FLVEmit const* Emit = &Lane->Program->Emits[EmitIndex];
     FLVRenderItem* Item = &Lane->Items[EmitIndex];
     FLVRenderCurve* Curve = &Item->Curve;
+    FLVEmitBuild* Build = &Lane->EmitBuilds[EmitIndex];
+    u64 Count = Lane->ChunkCount;
+    u64 Position = Lane->ChunkPosition;
+
+    if (Item->IsMissing)
+        return;
+
+    if (Build->SourceSlot != U32_MAX) {
+        if (Curve->Mask) {
+            if (Lane->Mask)
+                FLVMaskOrBits(Curve->Mask, Position, Lane->Mask, Count);
+            else
+                FLVMaskSetRange(Curve->Mask, Position, Count);
+        }
+
+        return;
+    }
 
     if (FLVTempIsMissing(Lane, Op.LHS)) {
         Item->IsMissing = TRUE;
@@ -1258,33 +1417,21 @@ FLV_KERNEL_FUNC_SIG(FLVKernelEMIT_CURVE)
         return;
     }
 
-    ASSERT(Curve->Count + Lane->ChunkCount <= Lane->RegionSampleCount);
-
-    u64 const* Time = (u64 const*) Lane->BaseTime->Data + Lane->ChunkBase;
     f64 const* Value = (f64 const*) FLVTempPtr(Lane, Op.LHS);
 
-    if (Lane->Mask) {
-        u64 Count = Curve->Count;
+    for (u64 Index = 0; Index < Count; ++Index) {
+        f64 V = Value[Index];
 
-        for (u64 Index = 0; Index < Lane->ChunkCount; ++Index) {
-            Curve->TimeUSecs[Count] = Time[Index];
-            Curve->Values[Count] = Value[Index];
-            Count += FLVMaskBit(Lane->Mask, Index);
-        }
+        if (Lane->Mask && !FLVMaskBit(Lane->Mask, Index))
+            continue;
 
-        Curve->Count = Count;
-    } else {
-        MemCpy(
-            Curve->TimeUSecs + Curve->Count,
-            Time,
-            Lane->ChunkCount * sizeof(u64)
-        );
-        MemCpy(
-            Curve->Values + Curve->Count,
-            Value,
-            Lane->ChunkCount * sizeof(f64)
-        );
-        Curve->Count += Lane->ChunkCount;
+        if (V != V)
+            continue;
+
+        f32 Stored = (f32) V;
+
+        FLVMaskSetBit(Curve->Mask, Position + Index);
+        FLVEmitBuildPush(Lane, Build, &Stored, sizeof(Stored));
     }
 }
 
@@ -1351,51 +1498,43 @@ FLV_KERNEL_FUNC_SIG(FLVKernelEMIT_TABLE_COLUMN)
     FLVTableRef* HeadRef = &Lane->TableRefs[Ref->Head];
     FLVRenderTable* Table = &Lane->Items[Ref->Head].Table;
     FLVRenderTableColumn* Column = &Table->Columns[EmitIndex - Ref->Head];
-    u64 const* Mask = Lane->Mask ? Lane->Mask : Lane->MaskAll;
-    u8 const* Src = NULL;
- 
-    if (FLVGetOperandKind(Op.LHS) == FLV_OPERAND_KIND_SLOT) {
-        FLVColumn const* Source = &Lane->Columns[FLVGetOperandIndex(Op.LHS)];
- 
-        if (Source->Data)
-            Src = (u8 const*) Source->Data + Lane->ChunkBase * Column->Width;
-    } else if (!FLVTempIsMissing(Lane, Op.LHS)) {
-        Src = (u8 const*) FLVTempPtr(Lane, Op.LHS);
-    }
+    FLVEmitBuild* Build = &Lane->EmitBuilds[EmitIndex];
+    u64 Count = Lane->ChunkCount;
+    u64 Position = Lane->ChunkPosition;
  
     if (HeadRef->Stamp != Lane->ChunkBase) {
-        u64 const* Time = (u64 const*) Lane->BaseTime->Data + Lane->ChunkBase;
-        u64 Row = Table->RowCount;
- 
         HeadRef->Stamp = Lane->ChunkBase;
-        HeadRef->RowBase = Row;
- 
-        for (u64 Index = 0; Index < Lane->ChunkCount; ++Index) {
-            Table->TimeUSecs[Row] = Time[Index];
-            Row += FLVMaskBit(Mask, Index);
+
+        if (Table->Mask) {
+            if (Lane->Mask)
+                FLVMaskOrBits(Table->Mask, Position, Lane->Mask, Count);
+            else
+                FLVMaskSetRange(Table->Mask, Position, Count);
         }
- 
-        Table->RowCount = Row;
     }
  
-    if (!Src) {
-        Column->Data = NULL;
- 
+    if (Column->Column != FLV_COLUMN_NONE || Column->IsMissing)
+        return;
+
+    if (FLVTempIsMissing(Lane, Op.LHS)) {
+        Column->IsMissing = TRUE;
+
         return;
     }
- 
-    u8* Dst = (u8*) Column->Data + HeadRef->RowBase * Column->Width;
+
+    u8 const* Src = (u8 const*) FLVTempPtr(Lane, Op.LHS);
     u64 Width = Column->Width;
  
     if (Lane->Mask) {
-        u64 Row = 0;
- 
-        for (u64 Index = 0; Index < Lane->ChunkCount; ++Index) {
-            MemCpy(Dst + Row * Width, Src + Index * Width, Width);
-            Row += FLVMaskBit(Mask, Index);
+        for (u64 Index = 0; Index < Count; ++Index) {
+            if (FLVMaskBit(Lane->Mask, Index)) {
+                FLVEmitBuildPush(Lane, Build, Src + Index * Width, Width);
+            }
         }
     } else {
-        MemCpy(Dst, Src, Lane->ChunkCount * Width);
+        for (u64 Index = 0; Index < Count; ++Index) {
+            FLVEmitBuildPush(Lane, Build, Src + Index * Width, Width);
+        }
     }
 }
 
@@ -1485,6 +1624,9 @@ FLVKernelsRegionBegin(FLVLane* Lane, FLVRegion const* Region)
     }
 
     // NOTE(nc): EmitsBegin
+    r1u64* RegionRanges = NULL;
+    u64 MaskWords = FLVSeriesWordCount(Lane->RegionSampleCount) + 1;
+
     for (u32 Index = 0; Index < Region->OpCount; ++Index) {
         FLVOp Op = Lane->Program->Ops[Region->HeadOp + Index];
         u32 EmitIndex = FLVGetOperandIndex(Op.RHS);
@@ -1496,21 +1638,42 @@ FLVKernelsRegionBegin(FLVLane* Lane, FLVRegion const* Region)
                 FLVEmit const* Emit = &Lane->Program->Emits[EmitIndex];
                 FLVRenderItem* Item = &Lane->Items[EmitIndex];
                 FLVRenderCurve* Curve = &Item->Curve;
+                FLVEmitBuild* Build = &Lane->EmitBuilds[EmitIndex];
+
+                if (!RegionRanges)
+                    RegionRanges = FLVRegionRangesCpy(Lane);
+
+                MemZero(Build, sizeof(*Build));
+                Build->SourceSlot = FLVEmitSourceSlot(
+                    Lane, 
+                    Region, 
+                    Index, 
+                    Op.LHS
+                );
+                Build->Width = sizeof(f32);
+
+                b32 IsDerived = (Build->SourceSlot == U32_MAX);
+                b32 NeedMask = (IsDerived || Region->Mask != FLV_OPERAND_NONE);
  
                 Item->Kind = FLV_RENDER_KIND_CURVE;
-                Curve->TimeUSecs = ArenaPushArray(
-                    Lane->ResultMemPool,
-                    u64,
-                    Lane->RegionSampleCount
-                );
-                Curve->Values = ArenaPushArray(
-                    Lane->ResultMemPool,
-                    f64,
-                    Lane->RegionSampleCount
-                );
+                Curve->Ranges = RegionRanges;
+                Curve->RangesCount = Lane->RangesCount;
+                Curve->Mask = NeedMask
+                    ? ArenaPushArrayZero(Lane->ResultMemPool, u64, MaskWords)
+                    : NULL;
+                Curve->Rank = NULL;
+                Curve->Values = NULL;
+                Curve->SampleCount = Lane->RegionSampleCount;
                 Curve->Count = 0;
+                Curve->TimeColumn = Lane->Slots[Region->BaseSlot].TimeColumn;
+                Curve->ValueColumn = IsDerived
+                    ? FLV_COLUMN_NONE
+                    : Lane->Slots[Build->SourceSlot].Column;
                 Curve->LabelStringIndex = Emit->LabelStringIndex;
                 Curve->Axis = Emit->Axis;
+
+                if (!IsDerived && !Lane->Columns[Build->SourceSlot].Data)
+                    Item->IsMissing = TRUE;
             } break;
  
             case FLV_KERNEL_EMIT_TABLE_COLUMN: {
@@ -1519,50 +1682,67 @@ FLVKernelsRegionBegin(FLVLane* Lane, FLVRegion const* Region)
                 FLVEmit const* Emit = &Lane->Program->Emits[EmitIndex];
                 FLVRenderItem* Item = &Lane->Items[Ref->Head];
                 FLVRenderTable* Table = &Item->Table;
+                FLVEmitBuild* Build = &Lane->EmitBuilds[EmitIndex];
+
+                if (!RegionRanges)
+                    RegionRanges = FLVRegionRangesCpy(Lane);
  
                 if (Item->Kind != FLV_RENDER_KIND_TABLE) {
                     Item->Kind = FLV_RENDER_KIND_TABLE;
-                    Table->TimeUSecs = ArenaPushArray(
-                        Lane->ResultMemPool,
-                        u64,
-                        Lane->RegionSampleCount
-                    );
+                    Table->Ranges = RegionRanges;
+                    Table->RangesCount = Lane->RangesCount;
+                    Table->Mask = (Region->Mask != FLV_OPERAND_NONE)
+                        ? ArenaPushArrayZero(
+                            Lane->ResultMemPool, 
+                            u64, 
+                            MaskWords
+                        ) : NULL;
+                    Table->Rank = NULL;
                     Table->Columns = ArenaPushArrayZero(
                         Lane->ResultMemPool,
                         FLVRenderTableColumn,
                         HeadRef->Count
                     );
+                    Table->SampleCount = Lane->RegionSampleCount;
                     Table->RowCount = 0;
+                    Table->TimeColumn = Lane->Slots[Region->BaseSlot].TimeColumn;
                     Table->ColumnCount = HeadRef->Count;
  
                     for (u32 C = 0; C < HeadRef->Count; ++C) {
-                        Table->Columns[C].LabelStringIndex = Lane->Program->Emits[Ref->Head + C].LabelStringIndex;
+                        Table->Columns[C].LabelStringIndex = Lane->Program->Emits[
+                            Ref->Head + C
+                        ].LabelStringIndex;
+                        Table->Columns[C].Column = FLV_COLUMN_NONE;
                     }
                 }
  
-                FLVRenderTableColumn* Column = &Table->Columns[EmitIndex - Ref->Head];
+                FLVRenderTableColumn* Column = &Table->Columns[
+                    EmitIndex - Ref->Head
+                ];
+
+                MemZero(Build, sizeof(*Build));
+                Build->SourceSlot = FLVEmitSourceSlot(
+                    Lane, 
+                    Region, 
+                    Index, 
+                    Op.LHS
+                );
  
-                if (FLVGetOperandKind(Op.LHS) == FLV_OPERAND_KIND_SLOT) {
-                    FLVColumn const* Source = &Lane->Columns[
-                        FLVGetOperandIndex(Op.LHS)
-                    ];
+                if (Build->SourceSlot != U32_MAX) {
+                    FLVBoundSlot const* Slot = &Lane->Slots[Build->SourceSlot];
+                    FLVColumn const* Source = &Lane->Columns[Build->SourceSlot];
  
+                    Column->Column = Slot->Column;
                     Column->Kind = Source->Kind;
                     Column->Width = Source->ElementSize;
+                    Column->IsMissing = !Source->Data;
                 } else {
+                    Column->Column = FLV_COLUMN_NONE;
                     Column->Kind = (Emit->ElementKind == FLV_ELEMENT_KIND_F64)
                         ? FLI_SCALAR_KIND_F64
                         : FLI_SCALAR_KIND_I64;
                     Column->Width = 8;
-                }
- 
-                if (Column->Width) {
-                    Column->Data = ArenaPushSize(
-                        Lane->ResultMemPool,
-                        Lane->RegionSampleCount * Column->Width,
-                        8,
-                        FALSE
-                    );
+                    Build->Width = 8;
                 }
             } break;
         }
@@ -1656,6 +1836,72 @@ FLVKernelsRegionEnd(FLVLane* Lane, FLVRegion const* Region)
  
             case FLV_KERNEL_REDUCE_COUNT: {
                 Dst->I64 = (i64) R->Count;
+            } break;
+        }
+    }
+
+    // NOTE(nc): EmitsEnd
+    for (u32 Index = 0; Index < Region->OpCount; ++Index) {
+        FLVOp Op = Lane->Program->Ops[Region->HeadOp + Index];
+        u32 EmitIndex = FLVGetOperandIndex(Op.RHS);
+
+        switch (Op.Kernel) {
+            default: {} break;
+
+            case FLV_KERNEL_EMIT_CURVE: {
+                FLVRenderItem* Item = &Lane->Items[EmitIndex];
+                FLVRenderCurve* Curve = &Item->Curve;
+                FLVEmitBuild* Build = &Lane->EmitBuilds[EmitIndex];
+
+                if (Item->IsMissing)
+                    break;
+
+                if (Curve->Mask) {
+                    Curve->Rank = FLVRankFromMask(
+                        Lane->ResultMemPool, 
+                        Curve->Mask, 
+                        Curve->SampleCount
+                    );
+                    Curve->Count = Curve->Rank[
+                        FLVSeriesWordCount(Curve->SampleCount)
+                    ];
+                } else {
+                    Curve->Count = Curve->SampleCount;
+                }
+
+                if (Build->SourceSlot == U32_MAX) {
+                    ASSERT(Build->ByteCount == Curve->Count * sizeof(f32));
+
+                    Curve->Values = (f32*) FLVEmitBuildFlatten(Lane, Build);
+                }
+            } break;
+
+            case FLV_KERNEL_EMIT_TABLE_COLUMN: {
+                FLVTableRef const* Ref = &Lane->TableRefs[EmitIndex];
+                FLVRenderItem* Item = &Lane->Items[Ref->Head];
+                FLVRenderTable* Table = &Item->Table;
+                FLVRenderTableColumn* Column = &Table->Columns[
+                    EmitIndex - Ref->Head
+                ];
+                FLVEmitBuild* Build = &Lane->EmitBuilds[EmitIndex];
+
+                if (EmitIndex == Ref->Head) {
+                    if (Table->Mask) {
+                        Table->Rank = FLVRankFromMask(
+                            Lane->ResultMemPool, 
+                            Table->Mask, 
+                            Table->SampleCount
+                        );
+                        Table->RowCount = Table->Rank[
+                            FLVSeriesWordCount(Table->SampleCount)
+                        ];
+                    } else {
+                        Table->RowCount = Table->SampleCount;
+                    }
+                }
+
+                if (Column->Column == FLV_COLUMN_NONE && !Column->IsMissing)
+                    Column->Values = FLVEmitBuildFlatten(Lane, Build);
             } break;
         }
     }

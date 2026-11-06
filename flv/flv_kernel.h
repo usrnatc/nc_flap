@@ -40,6 +40,7 @@ enum : u16 {
 #define FLV_KERNEL_FLAG_ROLLING   (1 << 5)
 
 #define FLV_SELECTION_CHUNK_RANGES U8_MAX
+#define FLV_VALUE_CHUNK_BYTES      KB(16)
 
 #define FLV_ARITH_HEAD(Type)                                                \
     if (FLVTempIsMissing(Lane, Op.LHS) || FLVTempIsMissing(Lane, Op.RHS)) { \
@@ -267,6 +268,19 @@ struct FLVSelectionBuild {
     u32                __Padding;
 };
 
+struct FLVValueChunk {
+    FLVValueChunk* Next;
+    u64            Count;
+    u8             V[FLV_VALUE_CHUNK_BYTES];
+};
+
+struct FLVEmitBuild {
+    FLVValueChunk* Head;
+    FLVValueChunk* Tail;
+    u64            ByteCount;
+    u32            SourceSlot;
+    u32            Width;
+};
 
 // @defines____________________________________________________________________
 #define FLV_KERNEL_FUNC_SIG(X) void X(FLVLane* Lane, FLVOp Op)

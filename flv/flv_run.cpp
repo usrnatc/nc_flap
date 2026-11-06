@@ -6,11 +6,11 @@
 
 #include "fli.h"
 
-// #include "flv_run.h"
-// #include "flv_lower.h"
+#include "flv_run.h"
+#include "flv_lower.h"
 #include "flv_kernel.h"
-// #include "flv_bind.h"
-// #include "flv_token.h"
+#include "flv_bind.h"
+#include "flv_token.h"
 
 void
 FLVLaneInit(
@@ -65,6 +65,11 @@ FLVLaneInit(
     Lane->TableRefs = ArenaPushArrayZero(
         MemPool,
         FLVTableRef,
+        Program->EmitCount
+    );
+    Lane->EmitBuilds = ArenaPushArrayZero(
+        MemPool,
+        FLVEmitBuild,
         Program->EmitCount
     );
 
@@ -280,6 +285,7 @@ FLVRegionRun(FLVLane* Lane, FLVRegion const* Region)
 
     FLVRegionRanges(Lane, Region);
     FLVKernelsRegionBegin(Lane, Region);
+    Lane->ChunkPosition = 0;
 
     for (u64 RangeIndex = 0; RangeIndex < Lane->RangesCount; ++RangeIndex) {
         r1u64 Range = Lane->Ranges[RangeIndex];
@@ -308,6 +314,8 @@ FLVRegionRun(FLVLane* Lane, FLVRegion const* Region)
                     Lane->Mask = (u64 const*) FLVTempPtr(Lane, Op.Dst);
                 }
             }
+
+            Lane->ChunkPosition += Lane->ChunkCount;
         }
     }
     FLVKernelsRegionEnd(Lane, Region);
@@ -490,6 +498,7 @@ Str8List
 FLVRenderItemsPrint(
     Arena* MemPool, 
     FLVProgram const* Program, 
+    FLIParsed* FLI,
     FLVRenderItem* Items
 ) {
     Str8List Result = {};
@@ -539,20 +548,51 @@ FLVRenderItemsPrint(
                 FLVRenderCurve const* Curve = &Item->Curve;
 
                 if (Curve->Count) {
+                    u64 Head = FLVSeriesFirstSet(
+                        Curve->Mask, 
+                        Curve->SampleCount
+                    );
+                    u64 Tail = FLVSeriesLastSet(
+                        Curve->Mask, 
+                        Curve->SampleCount
+                    );
+                    u64 HeadSample = FLVSeriesSampleIndex(
+                        Curve->Ranges, 
+                        Curve->RangesCount, 
+                        Head
+                    );
+                    u64 TailSample = FLVSeriesSampleIndex(
+                        Curve->Ranges, 
+                        Curve->RangesCount, 
+                        Tail
+                    );
+
                     ListPush(
                         MemPool,
                         &Result,
                         ArenaPushStrFmt(
                             MemPool,
-                            "  emit %u \"%S\": curve, %llu samples, axis %u, first (%llu us, %f), last (%llu us, %f)",
+                            "  emit %u \"%S\": curve, %llu of %llu samples, %s, axis %u, first (%llu us, %f), last (%llu us, %f)",
                             Index,
                             PRINT_STR(Label),
                             Curve->Count,
+                            Curve->SampleCount,
+                            (Curve->ValueColumn != FLV_COLUMN_NONE) 
+                                ? "column ref" 
+                                : "f32 values",
                             Curve->Axis,
-                            Curve->TimeUSecs[0],
-                            Curve->Values[0],
-                            Curve->TimeUSecs[Curve->Count - 1],
-                            Curve->Values[Curve->Count - 1]
+                            FLVColumnTimeAt(
+                                FLI, 
+                                Curve->TimeColumn, 
+                                HeadSample
+                            ),
+                            FLVCurveValueAt(FLI, Curve, Head),
+                            FLVColumnTimeAt(
+                                FLI, 
+                                Curve->TimeColumn, 
+                                TailSample
+                            ),
+                            FLVCurveValueAt(FLI, Curve, Tail)
                         )
                     );
                 } else {
@@ -605,15 +645,22 @@ FLVRenderItemsPrint(
 
             case FLV_RENDER_KIND_TABLE: {
                 FLVRenderTable const* Table = &Item->Table;
+                u64 Row0 = FLVSeriesFirstSet(Table->Mask, Table->SampleCount);
+                u64 Row0Sample = FLVSeriesSampleIndex(
+                    Table->Ranges, 
+                    Table->RangesCount, 
+                    Row0
+                );
  
                 ListPush(
                     MemPool,
                     &Result,
                     ArenaPushStrFmt(
                         MemPool,
-                        "  emit %u: table, %llu rows, %u columns",
+                        "  emit %u: table, %llu rows of %llu samples, %u columns",
                         Index,
                         Table->RowCount,
+                        Table->SampleCount,
                         Table->ColumnCount
                     )
                 );
@@ -623,91 +670,20 @@ FLVRenderItemsPrint(
                     Str8 Name = Program->Strings[Column->LabelStringIndex];
                     Str8 Cell = "-"_s8;
  
-                    if (Column->Data && Table->RowCount) {
-                        switch (Column->Kind) {
-                            default: {
-                                Cell = Str((u8*) Column->Data, Column->Width);
-                            } break;
- 
-                            case FLI_SCALAR_KIND_U8: { 
-                                Cell = ArenaPushStrFmt(
-                                    MemPool, 
-                                    "%u", 
-                                    *(u8*) Column->Data
-                                ); 
-                            } break;
+                    if (!Column->IsMissing && Table->RowCount) {
+                        if (Column->Column != FLV_COLUMN_NONE) {
+                            Cell = ArenaPushStrFmt(
+                                MemPool, 
+                                "%f", 
+                                FLVColumnF64At(FLI, Column->Column, Row0Sample)
+                            );
+                        } else {
+                            u8 const* Data = (u8 const*) Column->Values;
 
-                            case FLI_SCALAR_KIND_I8: { 
-                                Cell = ArenaPushStrFmt(
-                                    MemPool, 
-                                    "%d", 
-                                    *(i8*) Column->Data
-                                ); 
-                            } break;
-
-                            case FLI_SCALAR_KIND_U16: { 
-                                Cell = ArenaPushStrFmt(
-                                    MemPool, 
-                                    "%u", 
-                                    *(u16*) Column->Data
-                                ); 
-                            } break;
-
-                            case FLI_SCALAR_KIND_I16: { 
-                                Cell = ArenaPushStrFmt(
-                                    MemPool, 
-                                    "%d", 
-                                    *(i16*) Column->Data
-                                ); 
-                            } break;
-
-                            case FLI_SCALAR_KIND_U32: { 
-                                Cell = ArenaPushStrFmt(
-                                    MemPool, 
-                                    "%u", 
-                                    *(u32*) Column->Data
-                                ); 
-                            } break;
-
-                            case FLI_SCALAR_KIND_I32: { 
-                                Cell = ArenaPushStrFmt(
-                                    MemPool, 
-                                    "%d", 
-                                    *(i32*) Column->Data
-                                ); 
-                            } break;
-
-                            case FLI_SCALAR_KIND_U64: { 
-                                Cell = ArenaPushStrFmt(
-                                    MemPool, 
-                                    "%llu", 
-                                    *(u64*) Column->Data
-                                ); 
-                            } break;
-
-                            case FLI_SCALAR_KIND_I64: { 
-                                Cell = ArenaPushStrFmt(
-                                    MemPool, 
-                                    "%lld", 
-                                    *(i64*) Column->Data
-                                ); 
-                            } break;
-
-                            case FLI_SCALAR_KIND_F32: { 
-                                Cell = ArenaPushStrFmt(
-                                    MemPool, 
-                                    "%f", 
-                                    *(f32*) Column->Data
-                                ); 
-                            } break;
-
-                            case FLI_SCALAR_KIND_F64: { 
-                                Cell = ArenaPushStrFmt(
-                                    MemPool, 
-                                    "%f", 
-                                    *(f64*) Column->Data
-                                ); 
-                            } break;
+                            if (Column->Kind == FLI_SCALAR_KIND_F64)
+                                Cell = ArenaPushStrFmt(MemPool, "%f", *(f64*) Data);
+                            else
+                                Cell = ArenaPushStrFmt(MemPool, "%lld", *(i64*) Data);
                         }
                     }
  
@@ -716,10 +692,13 @@ FLVRenderItemsPrint(
                         &Result,
                         ArenaPushStrFmt(
                             MemPool,
-                            "      %S: kind %u, width %u, row 0 = %S",
+                            "      %S: kind %u, width %u, %s, row 0 = %S",
                             PRINT_STR(Name),
                             Column->Kind,
                             Column->Width,
+                            (Column->Column != FLV_COLUMN_NONE) 
+                                ? "column ref" 
+                                : "values",
                             PRINT_STR(Cell)
                         )
                     );
