@@ -921,21 +921,17 @@ B2FConvert(Arena* MemPool, B2FConvertParams* Params)
                     Field->Multiplier = Scale;
                     Field->Column = Column;
                     Field->StoredKind = Info.Kind;
-
-                    if (Scale != 1.0 && !B2FScalarKindIsChar(Info.Kind)) {
-                        Field->StoredKind = (Info.Size <= 2) 
-                            ? FLI_SCALAR_KIND_F32 
-                            : FLI_SCALAR_KIND_F64;
-                    }
-
                     Column->MessageType = MessageType;
                     Column->Field = Field;
-                    Column->Kind = Field->StoredKind;
+                    Column->Kind = Info.Kind;
+                    Column->Encoding = FLI_COLUMN_ENCODING_RAW;
+                    Column->Multiplier = Scale;
                     Column->Count = Format->RecordCount;
+                    Column->DataSize = Column->Count * FLI_SCALAR_KIND_SIZE_TABLE[Column->Kind];
                     Column->Data = ArenaPushArray(
-                        MemPool,
-                        u8,
-                        Column->Count * FLI_SCALAR_KIND_SIZE_TABLE[Column->Kind]
+                        MemPool, 
+                        u8, 
+                        Column->DataSize
                     );
                 }
 
@@ -989,12 +985,9 @@ B2FConvert(Arena* MemPool, B2FConvertParams* Params)
             u32 FieldCount = Format->FieldCount;
             FLIBakeColumn* Columns = MessageType->HeadColumn;
             u8* ColumnData[BIN_MAX_FIELD_COUNT] = {};
-            FLIScalarKind LoggedKinds[BIN_MAX_FIELD_COUNT] = {};
-            FLIScalarKind StoredKinds[BIN_MAX_FIELD_COUNT] = {};
-            u8 LoggedSizes[BIN_MAX_FIELD_COUNT] = {};
-            u8 StoredSizes[BIN_MAX_FIELD_COUNT] = {};
+            FLIScalarKind Kinds[BIN_MAX_FIELD_COUNT] = {};
+            u8 Sizes[BIN_MAX_FIELD_COUNT] = {};
             u8 Offsets[BIN_MAX_FIELD_COUNT] = {};
-            b32 IsRaw[BIN_MAX_FIELD_COUNT] = {};
             b32 IsChar[BIN_MAX_FIELD_COUNT] = {};
             f64 Scales[BIN_MAX_FIELD_COUNT] = {};
             f64 Mins[BIN_MAX_FIELD_COUNT] = {};
@@ -1007,17 +1000,11 @@ B2FConvert(Arena* MemPool, B2FConvertParams* Params)
                 FLIBakeField* Field = Columns[Index].Field;
 
                 ColumnData[Index] = (u8*) Columns[Index].Data;
-                LoggedKinds[Index] = Field->LoggedKind;
-                StoredKinds[Index] = Field->StoredKind;
-                LoggedSizes[Index] = Field->LoggedSize;
-                StoredSizes[Index] = (u8) FLI_SCALAR_KIND_SIZE_TABLE[Field->StoredKind];
+                Kinds[Index] = Field->LoggedKind;
+                Sizes[Index] = Field->LoggedSize;
                 Offsets[Index] = Format->FieldOffsets[Index];
                 Scales[Index] = Field->Multiplier;
                 IsChar[Index] = B2FScalarKindIsChar(Field->LoggedKind);
-                IsRaw[Index] = (
-                    Field->LoggedKind == Field->StoredKind && 
-                    Index != TimeField
-                );
                 Mins[Index] = F64_MAX;
                 Maxs[Index] = -F64_MAX;
                 Sums[Index] = 0.0;
@@ -1039,11 +1026,11 @@ B2FConvert(Arena* MemPool, B2FConvertParams* Params)
 
                     for (u32 Index = 0; Index < FieldCount; ++Index) {
                         u8* Src = Body + Offsets[Index];
-                        u8* Dst = ColumnData[Index] + RecordIndex * StoredSizes[Index];
+                        u8* Dst = ColumnData[Index] + RecordIndex * Sizes[Index];
                         f64 Value = 0.0;
 
                         if (IsChar[Index]) {
-                            MemCpy(Dst, Src, StoredSizes[Index]);
+                            MemCpy(Dst, Src, Sizes[Index]);
                             continue;
                         }
 
@@ -1054,15 +1041,12 @@ B2FConvert(Arena* MemPool, B2FConvertParams* Params)
                             TimeUS -= StartTimeUS;
                             MemCpy(Dst, &TimeUS, sizeof(TimeUS));
                             Value = (f64) TimeUS;
-                        } else if (IsRaw[Index]) {
-                            MemCpy(Dst, Src, StoredSizes[Index]);
-                            Value = B2FF64FromScalar(Src, LoggedKinds[Index]);
                         } else {
+                            MemCpy(Dst, Src, Sizes[Index]);
                             Value = B2FF64FromScalar(
                                 Src, 
-                                LoggedKinds[Index]
+                                Kinds[Index]
                             ) * Scales[Index];
-                            B2FScalarFromF64(Dst, StoredKinds[Index], Value);
                         }
 
                         Mins[Index] = MIN(Mins[Index], Value);
@@ -1073,14 +1057,66 @@ B2FConvert(Arena* MemPool, B2FConvertParams* Params)
             }
 
             for (u32 Index = 0; Index < FieldCount; ++Index) {
+                FLIBakeColumn* Column = &Columns[Index];
+
                 if (IsChar[Index] || !RecordIndex) {
-                    Columns[Index].Min = 0.0;
-                    Columns[Index].Max = 0.0;
-                    Columns[Index].Mean = 0.0;
-                } else {
-                    Columns[Index].Min = Mins[Index];
-                    Columns[Index].Max = Maxs[Index];
-                    Columns[Index].Mean = Sums[Index] / (f64) RecordIndex;
+                    Column->Min = 0.0;
+                    Column->Max = 0.0;
+                    Column->Mean = 0.0;
+                    continue;
+                }
+
+                Column->Min = Mins[Index];
+                Column->Max = Maxs[Index];
+                Column->Mean = Sums[Index] / (f64) RecordIndex;
+
+                if (Index != TimeField && Mins[Index] == Maxs[Index]) {
+                    Column->Encoding = FLI_COLUMN_ENCODING_CONSTANT;
+                    Column->DataSize = 0;
+                }
+            }
+
+            if (TimeField < FieldCount && RecordIndex >= 2) {
+                u64* Time = (u64*) ColumnData[TimeField];
+                u64 BlockCount = FLITimeBlockCount(RecordIndex);
+                u64 MaxDelta = 0;
+
+                for (u64 Index = 0; Index < RecordIndex; ++Index) {
+                    u64 Base = Time[Index & ~(FLI_TIME_BLOCK_SAMPLES - 1)];
+
+                    MaxDelta = MAX(MaxDelta, Time[Index] - Base);
+                }
+
+                if (MaxDelta <= U32_MAX) {
+                    TempArena TaskScratch = GetScratch(&MemPool, 1);
+                    u64* Bases = ArenaPushArray(
+                        TaskScratch.MemPool, 
+                        u64, 
+                        BlockCount
+                    );
+                    u32* Deltas = ArenaPushArray(
+                        TaskScratch.MemPool, 
+                        u32, 
+                        RecordIndex
+                    );
+
+                    for (u64 Index = 0; Index < RecordIndex; ++Index) {
+                        u64 Block = Index >> FLI_TIME_BLOCK_SHIFT;
+
+                        if (!(Index & (FLI_TIME_BLOCK_SAMPLES - 1)))
+                            Bases[Block] = Time[Index];
+
+                        Deltas[Index] = (u32) (Time[Index] - Bases[Block]);
+                    }
+
+                    MemCpy(Time, Bases, sizeof(u64) * BlockCount);
+                    MemCpy(Time + BlockCount, Deltas, sizeof(u32) * RecordIndex);
+                    Columns[TimeField].Encoding = FLI_COLUMN_ENCODING_DELTA_TIME;
+                    Columns[TimeField].DataSize = (
+                        sizeof(u64) * BlockCount + 
+                        sizeof(u32) * RecordIndex
+                    );
+                    ReleaseScratch(TaskScratch);
                 }
             }
         }

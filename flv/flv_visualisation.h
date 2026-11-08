@@ -86,10 +86,25 @@ struct FLVRenderItem {
     };
 };
 
+struct FLVColumn {
+    void const*       Data;
+    u32 const*        Deltas;
+    u64               Count;
+    f64               Scale;
+    f64               Constant;
+    FLIScalarKind     Kind;
+    FLIColumnEncoding Encoding;
+    u8                ElementSize;
+    u8                IsMissing;
+    u8                __Padding[4];
+};
+
 // @runtime____________________________________________________________________
 
 
 // @funcions___________________________________________________________________
+b32 FLVColumnInit(Access* Acc, FLIKey Key, FLIParsed* FLI, u32 ColumnIndex, u64 EndTimeUSecs, OUT FLVColumn* Column);
+
 INTERNAL u64
 FLVSeriesWordCount(u64 SampleCount)
 {
@@ -182,88 +197,92 @@ FLVSeriesLastSet(u64 const* Mask, u64 SampleCount)
     return Result;
 }
 
-INTERNAL f64
-FLVColumnF64At(FLIParsed* FLI, u32 Column, u64 Index)
-{
-    FLIColumn* Record = FLIElementFromNameIndex(
-        FLI,
-        Columns,
-        COLUMNS,
-        Column
-    );
-    u64 Count = 0;
-    void* Data = FLIColumnRawDataFromIndex(
-        FLI, 
-        Column, 
-        &Count
-    );
-    f64 Result = NC_NAN;
-
-    if (Data && Index < Count) {
-        switch (Record->Kind) {
-            default: {} break;
-
-            case FLI_SCALAR_KIND_U8: {
-                Result = (f64) ((u8*) Data)[Index];
-            } break;
-
-            case FLI_SCALAR_KIND_I8: {
-                Result = (f64) ((i8*) Data)[Index];
-            } break;
-
-            case FLI_SCALAR_KIND_U16: {
-                Result = (f64) ((u16*) Data)[Index];
-            } break;
-
-            case FLI_SCALAR_KIND_I16: {
-                Result = (f64) ((i16*) Data)[Index];
-            } break;
-
-            case FLI_SCALAR_KIND_U32: {
-                Result = (f64) ((u32*) Data)[Index];
-            } break;
-
-            case FLI_SCALAR_KIND_I32: {
-                Result = (f64) ((i32*) Data)[Index];
-            } break;
-
-            case FLI_SCALAR_KIND_U64: {
-                Result = (f64) ((u64*) Data)[Index];
-            } break;
-
-            case FLI_SCALAR_KIND_I64: {
-                Result = (f64) ((i64*) Data)[Index];
-            } break;
-
-            case FLI_SCALAR_KIND_F32: {
-                Result = (f64) ((f32*) Data)[Index];
-            } break;
-
-            case FLI_SCALAR_KIND_F64: {
-                Result = ((f64*) Data)[Index];
-            } break;
-        }
-    }
-
-    return Result;
-}
-
 INTERNAL u64
-FLVColumnTimeAt(FLIParsed* FLI, u32 Column, u64 Index)
+FLVTimeAt(FLVColumn const* Time, u64 Index)
 {
-    u64 Count = 0;
-    u64* Data = (u64*) FLIColumnRawDataFromIndex(FLI, Column, &Count);
+    u64 const* Data = (u64 const*) Time->Data;
     u64 Result = 0;
 
-    if (Data && Index < Count)
+    if (Time->Encoding == FLI_COLUMN_ENCODING_DELTA_TIME)
+        Result = Data[Index >> FLI_TIME_BLOCK_SHIFT] + Time->Deltas[Index];
+    else
         Result = Data[Index];
 
     return Result;
 }
 
 INTERNAL f64
-FLVCurveValueAt(FLIParsed* FLI, FLVRenderCurve const* Curve, u64 Position)
+FLVColumnF64At(FLVColumn const* Column, u64 Index)
 {
+    f64 Result = NC_NAN;
+
+    if (Index >= Column->Count)
+        return Result;
+
+    if (Column->Encoding == FLI_COLUMN_ENCODING_CONSTANT)
+        return Column->Constant;
+
+    if (Column->IsMissing)
+        return Result;
+
+    if (Column->Encoding == FLI_COLUMN_ENCODING_DELTA_TIME)
+        return (f64) FLVTimeAt(Column, Index);
+
+    void const* Data = Column->Data;
+
+    switch (Column->Kind) {
+        default: {} break;
+
+        case FLI_SCALAR_KIND_U8: {
+            Result = (f64) ((u8*) Data)[Index];
+        } break;
+
+        case FLI_SCALAR_KIND_I8: {
+            Result = (f64) ((i8*) Data)[Index];
+        } break;
+
+        case FLI_SCALAR_KIND_U16: {
+            Result = (f64) ((u16*) Data)[Index];
+        } break;
+
+        case FLI_SCALAR_KIND_I16: {
+            Result = (f64) ((i16*) Data)[Index];
+        } break;
+
+        case FLI_SCALAR_KIND_U32: {
+            Result = (f64) ((u32*) Data)[Index];
+        } break;
+
+        case FLI_SCALAR_KIND_I32: {
+            Result = (f64) ((i32*) Data)[Index];
+        } break;
+
+        case FLI_SCALAR_KIND_U64: {
+            Result = (f64) ((u64*) Data)[Index];
+        } break;
+
+        case FLI_SCALAR_KIND_I64: {
+            Result = (f64) ((i64*) Data)[Index];
+        } break;
+
+        case FLI_SCALAR_KIND_F32: {
+            Result = (f64) ((f32*) Data)[Index];
+        } break;
+
+        case FLI_SCALAR_KIND_F64: {
+            Result = ((f64*) Data)[Index];
+        } break;
+    }
+
+    return Result * Column->Scale;
+}
+
+INTERNAL f64
+FLVCurveValueAt(
+    FLVColumn const* Value, 
+    FLVRenderCurve const* Curve, 
+    u64 Position
+) {
     f64 Result = NC_NAN;
 
     if (Curve->ValueColumn != FLV_COLUMN_NONE) {
@@ -273,7 +292,7 @@ FLVCurveValueAt(FLIParsed* FLI, FLVRenderCurve const* Curve, u64 Position)
             Position
         );
 
-        Result = FLVColumnF64At(FLI, Curve->ValueColumn, Sample);
+        Result = FLVColumnF64At(Value, Sample);
     } else {
         Result = Curve->Values[
             FLVSeriesRank(Curve->Mask, Curve->Rank, Position)

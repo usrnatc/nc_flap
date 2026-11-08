@@ -116,6 +116,21 @@ FLIEntryPoint(CommandLine *CLI)
     ReleaseScratch(Scratch);
 }
 
+INTERNAL Str8
+FLIBakedStr(FLIStringBakeResult const* Strings, u32 Index)
+{
+    Str8 Result = ""_s8;
+
+    if (Index + 1 < Strings->StringOffsetsCount) {
+        u32 Head = Strings->StringOffsets[Index];
+        u32 Tail = Strings->StringOffsets[Index + 1];
+
+        Result = Str(Strings->StringData + Head, Tail - Head);
+    }
+
+    return Result;
+}
+
 void 
 FLIThreadEntryPoint(void* __Params)
 {
@@ -169,14 +184,14 @@ FLIThreadEntryPoint(void* __Params)
             SystemCloseFile(File);
  
             if (FileFormat != FLI_FILE_FORMAT_KIND_NULL) {
-                LogInfo(
-                    "%S recognized as %S",
+                PrintOut(
+                    "%S recognized as %S\n",
                     PRINT_STR(Node->String),
                     PRINT_STR(FLI_FILE_FORMAT_DISPLAY_NAME_TABLE[FileFormat])
                 );
             } else {
-                LogInfo(
-                    "%S was not recognized as a supported format",
+                PrintOut(
+                    "%S was not recognized as a supported format\n",
                     PRINT_STR(Node->String)
                 );
                 ReleaseScratch(Scratch);
@@ -210,8 +225,8 @@ FLIThreadEntryPoint(void* __Params)
                             MapHandle = Map;
                             IsMapped = TRUE;
  
-                            LogInfo(
-                                "memory mapped %S (%llu MB)",
+                            PrintOut(
+                                "memory mapped %S (%llu MB)\n",
                                 PRINT_STR(Node->String),
                                 FileProps.Size / MB(1)
                             );
@@ -290,15 +305,17 @@ FLIThreadEntryPoint(void* __Params)
  
             if (StrMatch(Ext, "fli"_s8, STR_MATCH_ALL_CASES)) {
                 OutputKind = FLI_OUTPUT_KIND_FLI;
-                LogInfo(
-                    "Output path has .fli extension; performing `%S`",
+                PrintOut(
+                    "Output path has .fli extension; performing `%S`\n",
                     PRINT_STR(FLI_OUTPUT_KIND_INFO_TABLE[OutputKind].Title)
                 );
-            } else if (StrMatch(Ext, "dump"_s8, STR_MATCH_ALL_CASES) ||
-                       StrMatch(Ext, "txt"_s8, STR_MATCH_ALL_CASES)) {
+            } else if (
+                StrMatch(Ext, "dump"_s8, STR_MATCH_ALL_CASES) ||
+                StrMatch(Ext, "txt"_s8, STR_MATCH_ALL_CASES)
+            ) {
                 OutputKind = FLI_OUTPUT_KIND_DUMP;
-                LogInfo(
-                    "Output path has .dump or .txt extension; performing `%S`",
+                PrintOut(
+                    "Output path has .dump or .txt extension; performing `%S`\n",
                     PRINT_STR(FLI_OUTPUT_KIND_INFO_TABLE[OutputKind].Title)
                 );
             }
@@ -399,9 +416,8 @@ FLIThreadEntryPoint(void* __Params)
                 FLIFile* BINFile = FileNode->V;
                 TempArena Scratch = GetScratch(&MemPool, 1);
  
-                if (!LaneIndex()) {
-                    LogInfo("converting %S", PRINT_STR(BINFile->Path));
-                }
+                if (!LaneIndex())
+                    PrintOut("converting %S\n", PRINT_STR(BINFile->Path));
  
                 FLIBakeParams BakeParams = {};
                 B2FConvertParams ConvertParams = {};
@@ -455,10 +471,76 @@ FLIThreadEntryPoint(void* __Params)
                         FileBlobs
                     );
  
-                    if (WriteOkay)
-                        LogInfo("output written to %S", PRINT_STR(ThisOutputPath));
-                    else
-                        LogError("failed to write output %S", PRINT_STR(ThisOutputPath));
+                    if (WriteOkay) {
+                        PrintOut(
+                            "output written to %S\n",
+                            PRINT_STR(ThisOutputPath)
+                        );
+                    } else {
+                        PrintErr(
+                            "failed to write output %S\n",
+                            PRINT_STR(ThisOutputPath)
+                        );
+                    }
+
+                    if (CommandLineHasFlag(CLI, "section_stats"_s8)) {
+                        PrintOut(
+                            "\nSECTION_STATS_BEGIN %S\n", 
+                            PRINT_STR(BINFile->Path)
+                        );
+
+                        for (
+                            u64 K = FLI_SECTION_KIND_FILE_INFO; 
+                            K < FLI_SECTION_KIND_COUNT; 
+                            ++K
+                        ) {
+                            FLISerialisedSection* S = &Bundle.Sections[K];
+
+                            PrintOut(
+                                "FIXED,%llu,-,-,-,-,%llu,%llu\n",
+                                K,
+                                S->UnpackedSize,
+                                S->EncodedSize
+                            );
+                        }
+
+                        for (
+                            u64 Index = 1; 
+                            Index < Bundle.ColumnSectionsCount; 
+                            ++Index
+                        ) {
+                            FLISerialisedSection* S = &Bundle.ColumnSections[Index];
+                            FLIColumn* Column = &BakeResults.Columns.Columns[Index];
+                            FLIMessageType* Message = &BakeResults.MessageTypes.MessageTypes[
+                                Column->MessageTypeIndex
+                                ];
+                            FLIField* Field = &BakeResults.Fields.Fields[
+                                Column->FieldIndex
+                                ];
+                            Str8 MessageName = FLIBakedStr(
+                                &BakeResults.Strings, 
+                                Message->NameStringIndex
+                            );
+                            Str8 FieldName = FLIBakedStr(
+                                &BakeResults.Strings, 
+                                Field->NameStringIndex
+                            );
+
+                            PrintOut(
+                                "COL,%S,%S,%c,%u,%u,%llu,%llu,%llu\n",
+                                PRINT_STR(MessageName),
+                                PRINT_STR(FieldName),
+                                Field->FormatChar,
+                                Field->LoggedKind,
+                                Column->Kind,
+                                Column->Count,
+                                S->UnpackedSize,
+                                S->EncodedSize
+                            );
+                        }
+
+                        PrintOut("SECTION_STATS_END\n");
+                    }
                 }
  
                 LaneSync();
@@ -482,7 +564,7 @@ FLIThreadEntryPoint(void* __Params)
                 CLI->Inputs.Count != 0 && 
                 !BINFiles->Count
             ) {
-                LogError(
+                PrintErr(
                     "Could not load log data from the specified inputs. "
                     "Supported formats: BIN."_s8
                 );
@@ -534,15 +616,15 @@ FLIThreadEntryPoint(void* __Params)
                         default: break;
  
                         case FLI_PARSE_STATUS_HEADER_MISMATCH: {
-                            LogError("FLI parse failure: header does not match"_s8);
+                            PrintErr("FLI parse failure: header does not match"_s8);
                         } break;
  
                         case FLI_PARSE_STATUS_VERSION_MISMATCH: {
-                            LogError("FLI parse failure: unsupported version"_s8);
+                            PrintErr("FLI parse failure: unsupported version"_s8);
                         } break;
  
                         case FLI_PARSE_STATUS_DATA_SECTION_LAYOUT_MISMATCH: {
-                            LogError("FLI parse failure: invalid data section layout"_s8);
+                            PrintErr("FLI parse failure: invalid data section layout"_s8);
                         } break;
  
                         case FLI_PARSE_STATUS_SUCCESS: {
@@ -567,9 +649,9 @@ FLIThreadEntryPoint(void* __Params)
                 b32 IsWritten = WriteFileContents(OutputPath, OutputBlobs);
  
                 if (IsWritten)
-                    LogInfo("Results written to %S", PRINT_STR(OutputPath));
+                    PrintOut("Results written to %S\n", PRINT_STR(OutputPath));
                 else
-                    LogError("Failed to write file %S", PRINT_STR(OutputPath));
+                    PrintErr("Failed to write file %S\n", PRINT_STR(OutputPath));
             } else {
                 for (Str8Node* N = OutputBlobs.Head; N; N = N->Next) {
                     for (u64 Off = 0; Off < N->String.Size;) {
@@ -580,7 +662,7 @@ FLIThreadEntryPoint(void* __Params)
                     }
                 }
  
-                LogInfo("Results written to stdout"_s8);
+                PrintOut("Results written to stdout\n"_s8);
             }
         }
     }

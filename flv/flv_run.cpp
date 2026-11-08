@@ -12,16 +12,59 @@
 #include "flv_bind.h"
 #include "flv_token.h"
 
-void
+b32
+FLVColumnInit(
+    Access* Acc,
+    FLIKey Key,
+    FLIParsed* FLI,
+    u32 ColumnIndex,
+    u64 EndTimeUSecs,
+    OUT FLVColumn* Column
+) {
+    FLIColumn* Record = FLIElementFromNameIndex(FLI, Columns, COLUMNS, ColumnIndex);
+    FLISectionData Section = FLIColumnDataFromIndex(
+        Acc,
+        Key,
+        FLI,
+        ColumnIndex,
+        EndTimeUSecs,
+        &Column->Count
+    );
+
+    Column->Data = Section.Data;
+    Column->Deltas = NULL;
+    Column->Scale = Record->Multiplier;
+    Column->Constant = Record->Min;
+    Column->Kind = Record->Kind;
+    Column->Encoding = Record->Encoding;
+    Column->ElementSize = (u8) FLI_SCALAR_KIND_SIZE_TABLE[Record->Kind];
+    Column->IsMissing = (
+        Column->Encoding != FLI_COLUMN_ENCODING_CONSTANT &&
+        !Column->Data
+    );
+
+    if (Column->Encoding == FLI_COLUMN_ENCODING_DELTA_TIME && Column->Data) {
+        Column->Deltas = (u32 const*) (
+            (u64 const*) Column->Data + FLITimeBlockCount(Column->Count)
+        );
+    }
+
+    return Section.IsReady;
+}
+
+b32
 FLVLaneInit(
     FLVLane* Lane,
+    Access* Acc,
     Arena* MemPool,
     Arena* ResultMemPool,
     FLVProgram const* Program,
+    FLIKey Flight,
     FLIParsed* FLI,
     FLVBoundSlot const* Slots,
     u32 SlotsCount,
-    u32 FlightIndex
+    u32 FlightIndex,
+    u64 EndTimeUSecs
 ) {
     u64 InfosCount = 0;
     FLIFileInfo* Infos = FLITableFromName(
@@ -32,6 +75,9 @@ FLVLaneInit(
     );
 
     MemZero(Lane, sizeof(*Lane));
+    Lane->Acc = Acc;
+    Lane->Flight = Flight;
+    Lane->EndTimeUSecs = EndTimeUSecs;
     Lane->Program = Program;
     Lane->Slots = Slots;
     Lane->FLI = FLI;
@@ -41,6 +87,7 @@ FLVLaneInit(
     Lane->ResultMemPool = ResultMemPool;
     Lane->Columns = ArenaPushArrayZero(MemPool, FLVColumn, SlotsCount);
     Lane->InstanceColumns = ArenaPushArrayZero(MemPool, FLVColumn, SlotsCount);
+    Lane->TimeColumns = ArenaPushArrayZero(MemPool, FLVColumn, SlotsCount);
     Lane->Temps = ArenaPushArrayZero(MemPool, void*, Program->TempCount);
     Lane->SelectionBuilds = ArenaPushArrayZero(
         MemPool,
@@ -101,37 +148,48 @@ FLVLaneInit(
         Lane->FlightEndUSecs = Info->EndTimeUSecs - Info->StartTimeUSecs;
     }
 
+    Lane->ChunkTimeDecode = ArenaPushArray(MemPool, u64, FLV_CHUNK_SAMPLES);
+
+    b32 Result = TRUE;
+
     for (u32 Index = 0; Index < SlotsCount; ++Index) {
         FLVBoundSlot const* Slot = &Slots[Index];
-        FLVColumn* Column = &Lane->Columns[Index];
-        FLVColumn* Instance = &Lane->InstanceColumns[Index];
- 
+
         if (Slot->IsMissing)
             continue;
- 
-        if (Slot->InstanceColumn != FLV_COLUMN_NONE) {
-            FLIColumn* Record = FLIElementFromNameIndex(
-                FLI,
-                Columns,
-                COLUMNS,
-                Slot->InstanceColumn
+
+        if (Slot->TimeColumn != FLV_COLUMN_NONE) {
+            Result &= FLVColumnInit(
+                Acc, 
+                Flight, 
+                FLI, 
+                Slot->TimeColumn, 
+                EndTimeUSecs, 
+                &Lane->TimeColumns[Index]
             );
- 
-            Instance->Data = FLIColumnRawDataFromIndex(
-                FLI,
-                Slot->InstanceColumn,
-                &Instance->Count
-            );
-            Instance->Kind = Record->Kind;
-            Instance->ElementSize = (u8) FLI_SCALAR_KIND_SIZE_TABLE[Record->Kind];
         }
- 
-        if (Slot->Column == FLV_COLUMN_NONE)
-            continue;
- 
-        Column->Data = FLIColumnRawDataFromIndex(FLI, Slot->Column, &Column->Count);
-        Column->Kind = Slot->Kind;
-        Column->ElementSize = (u8) FLI_SCALAR_KIND_SIZE_TABLE[Slot->Kind];
+
+        if (Slot->InstanceColumn != FLV_COLUMN_NONE) {
+            Result &= FLVColumnInit(
+                Acc, 
+                Flight, 
+                FLI, 
+                Slot->InstanceColumn, 
+                EndTimeUSecs, 
+                &Lane->InstanceColumns[Index]
+            );
+        }
+
+        if (Slot->Column != FLV_COLUMN_NONE) {
+            Result &= FLVColumnInit(
+                Acc, 
+                Flight, 
+                FLI, 
+                Slot->Column, 
+                EndTimeUSecs, 
+                &Lane->Columns[Index]
+            );
+        }
     }
  
 
@@ -156,40 +214,40 @@ FLVLaneInit(
     for (u32 Index = 0; Index < Program->EmitCount; ++Index) {
         Lane->Items[Index].AnalysisIndex = Program->AnalysisIndex;
         Lane->Items[Index].FlightIndex = FlightIndex;
+        Lane->Items[Index].Flight = Flight;
         Lane->Items[Index].EmitIndex = Index;
     }
+
+    return Result;
 }
 
 INTERNAL FLVColumn const*
-FLVBaseTimeColumn(FLVLane* Lane, u32 BaseSlot, OUT FLVColumn* Storage)
+FLVBaseTimeColumn(FLVLane* Lane, u32 BaseSlot)
 {
     FLVBoundSlot const* Slot = &Lane->Slots[BaseSlot];
     FLVColumn const* Result = NULL;
 
-    if (!Slot->IsMissing && Slot->TimeColumn != FLV_COLUMN_NONE) {
-        Storage->Data = FLIColumnRawDataFromIndex(
-            Lane->FLI,
-            Slot->TimeColumn,
-            &Storage->Count
-        );
-        Storage->Kind = FLI_SCALAR_KIND_U64;
-        Storage->ElementSize = sizeof(u64);
-        Result = Storage;
+    if (
+        !Slot->IsMissing &&
+        Slot->TimeColumn != FLV_COLUMN_NONE &&
+        !Lane->TimeColumns[BaseSlot].IsMissing
+    ) {
+        Result = &Lane->TimeColumns[BaseSlot];
     }
 
     return Result;
 }
 
 INTERNAL u64
-FLVLowerBoundU64(u64 const* V, u64 Count, u64 Key)
+FLVLowerBoundU64(FLVColumn const* Time, u64 Key)
 {
     u64 Low = 0;
-    u64 High = Count;
+    u64 High = Time->Count;
 
     while (Low < High) {
         u64 Mid = Low + (High - Low) / 2;
 
-        if (V[Mid] < Key)
+        if (FLVTimeAt(Time, Mid) < Key)
             Low = Mid + 1;
         else
             High = Mid;
@@ -199,15 +257,15 @@ FLVLowerBoundU64(u64 const* V, u64 Count, u64 Key)
 }
 
 INTERNAL u64
-FLVUpperBoundU64(u64 const* V, u64 Count, u64 Key)
+FLVUpperBoundU64(FLVColumn const* Time, u64 Key)
 {
     u64 Low = 0;
-    u64 High = Count;
+    u64 High = Time->Count;
 
-    while (Low < High) {
+    while (Low <= High) {
         u64 Mid = Low + (High - Low) / 2;
 
-        if (V[Mid] <= Key)
+        if (FLVTimeAt(Time, Mid) < Key)
             Low = Mid + 1;
         else
             High = Mid;
@@ -219,8 +277,8 @@ FLVUpperBoundU64(u64 const* V, u64 Count, u64 Key)
 INTERNAL void
 FLVRegionRanges(FLVLane* Lane, FLVRegion const* Region)
 {
-    u64 const* Time = (u64 const*) Lane->BaseTime->Data;
-    u64 Count = Lane->BaseTime->Count;
+    FLVColumn const* Time = Lane->BaseTime;
+    u64 Count = Time->Count;
 
     Lane->RangesCount = 0;
     Lane->RegionSampleCount = 0;
@@ -240,8 +298,8 @@ FLVRegionRanges(FLVLane* Lane, FLVRegion const* Region)
     Lane->Ranges = ArenaPushArray(Lane->MemPool, r1u64, Sel->Count);
 
     for (u64 Index = 0; Index < Sel->Count; ++Index) {
-        u64 Head = FLVLowerBoundU64(Time, Count, Sel->V[Index].Min);
-        u64 Tail = FLVUpperBoundU64(Time, Count, Sel->V[Index].Max);
+        u64 Head = FLVLowerBoundU64(Time, Sel->V[Index].Min);
+        u64 Tail = FLVUpperBoundU64(Time, Sel->V[Index].Max);
 
         if (Tail <= Head)
             continue;
@@ -268,14 +326,36 @@ FLVRegionMarkMissing(FLVLane* Lane, FLVRegion const* Region)
 }
 
 INTERNAL void
+FLVChunkTimeDecode(FLVLane* Lane)
+{
+    FLVColumn const* Time = Lane->BaseTime;
+    u64 const* Data = (u64 const*) Time->Data;
+    u64 Base = Lane->ChunkBase;
+
+    Lane->ChunkTime = Data + Base;
+
+    if (Time->Encoding == FLI_COLUMN_ENCODING_DELTA_TIME) {
+        u64* Dst = Lane->ChunkTimeDecode;
+
+        for (u64 Index = 0; Index < Lane->ChunkCount; ++Index) {
+            u64 Sample = Base + Index;
+
+            Dst[Index] = Data[Sample >> FLI_TIME_BLOCK_SHIFT] + Time->Deltas[Sample];
+        }
+
+        Lane->ChunkTime = Dst;
+    }
+}
+
+INTERNAL void
 FLVRegionRun(FLVLane* Lane, FLVRegion const* Region)
 {
-    FLVColumn TimeStorage = {};
     FLVProgram const* Program = Lane->Program;
 
     Lane->Region = Region;
-    Lane->BaseTime = FLVBaseTimeColumn(Lane, Region->BaseSlot, &TimeStorage);
+    Lane->BaseTime = FLVBaseTimeColumn(Lane, Region->BaseSlot);
     Lane->Mask = NULL;
+    FLVChunkTimeDecode(Lane);
 
     if (!Lane->BaseTime || FLVTempIsMissing(Lane, Region->RangeSelection)) {
         FLVRegionMarkMissing(Lane, Region);
@@ -394,6 +474,7 @@ FLVRunSetInit(
     FLVSlot const* Slots,
     FLVSlotName const* SlotNames,
     u32 SlotsCount,
+    FLIKey const* Keys,
     FLIParsed** Flights,
     u32 FlightCount
 ) {
@@ -401,6 +482,7 @@ FLVRunSetInit(
  
     Set->Programs = Lowered->Program;
     Set->Flights = Flights;
+    Set->Keys = Keys;
     Set->SlotsCount = SlotsCount;
     Set->ProgramsCount = Lowered->ProgramCount;
     Set->FlightsCount = FlightCount;
@@ -441,28 +523,34 @@ void
 FLVRunSetExecute(FLVRunSet* Set)
 {
     r1u64 Range = LaneRange(Set->ItemsCount);
+    TempArena Scratch = GetScratch(NULL, 0);
  
     for (u64 Index = Range.Min; Index < Range.Max; ++Index) {
-        TempArena Scratch = GetScratch(NULL, 0);
+        Access* Acc = AccessOpen();
         FLVRunItem* Item = &Set->Items[Index];
         u32 Flight = (u32) (Index / Set->ProgramsCount);
         u32 Program = (u32) (Index % Set->ProgramsCount);
         FLVLane Lane = {};
- 
+
         FLVLaneInit(
             &Lane,
+            Acc,
             Scratch.MemPool,
             Item->ResultMemPool,
             &Set->Programs[Program],
+            Set->Keys[Flight],
             Set->Flights[Flight],
             Set->Bound[Flight],
             Set->SlotsCount,
-            Flight
+            Flight,
+            U64_MAX
         );
         FLVLaneRun(&Lane);
         Item->Items = Lane.Items;
-        ReleaseScratch(Scratch);
+        AccessClose(Acc);
     }
+
+    ReleaseScratch(Scratch);
 }
  
 void
@@ -497,6 +585,7 @@ FLVRunSetSummarize(FLVRunSet* Set)
 Str8List
 FLVRenderItemsPrint(
     Arena* MemPool, 
+    Access* Acc,
     FLVProgram const* Program, 
     FLIParsed* FLI,
     FLVRenderItem* Items
@@ -566,6 +655,28 @@ FLVRenderItemsPrint(
                         Curve->RangesCount, 
                         Tail
                     );
+                    FLVColumn Time = {};
+                    FLVColumn Value = {};
+
+                    FLVColumnInit(
+                        Acc, 
+                        Item->Flight, 
+                        FLI, 
+                        Curve->TimeColumn, 
+                        U64_MAX, 
+                        &Time
+                    );
+
+                    if (Curve->ValueColumn != FLV_COLUMN_NONE) {
+                        FLVColumnInit(
+                            Acc, 
+                            Item->Flight, 
+                            FLI, 
+                            Curve->ValueColumn, 
+                            U64_MAX, 
+                            &Value
+                        );
+                    }
 
                     ListPush(
                         MemPool,
@@ -581,18 +692,10 @@ FLVRenderItemsPrint(
                                 ? "column ref" 
                                 : "f32 values",
                             Curve->Axis,
-                            FLVColumnTimeAt(
-                                FLI, 
-                                Curve->TimeColumn, 
-                                HeadSample
-                            ),
-                            FLVCurveValueAt(FLI, Curve, Head),
-                            FLVColumnTimeAt(
-                                FLI, 
-                                Curve->TimeColumn, 
-                                TailSample
-                            ),
-                            FLVCurveValueAt(FLI, Curve, Tail)
+                            FLVTimeAt(&Time, HeadSample),
+                            FLVCurveValueAt(&Value, Curve, Head),
+                            FLVTimeAt(&Time, TailSample),
+                            FLVCurveValueAt(&Value, Curve, Tail)
                         )
                     );
                 } else {
@@ -672,10 +775,13 @@ FLVRenderItemsPrint(
  
                     if (!Column->IsMissing && Table->RowCount) {
                         if (Column->Column != FLV_COLUMN_NONE) {
+                            FLVColumn Ref = {};
+
+                            FLVColumnInit(Acc, Item->Flight, FLI, Column->Column, U64_MAX, &Ref);
                             Cell = ArenaPushStrFmt(
                                 MemPool, 
                                 "%f", 
-                                FLVColumnF64At(FLI, Column->Column, Row0Sample)
+                                FLVColumnF64At(&Ref, Row0Sample)
                             );
                         } else {
                             u8 const* Data = (u8 const*) Column->Values;

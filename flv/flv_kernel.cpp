@@ -364,8 +364,56 @@ FLVLoadChunk(
     u64 Base = Lane->ChunkBase;
     u64 Count = Lane->ChunkCount;
 
-    if (!Column->Data) {
+    if (Column->IsMissing) {
         FLVTempSetMissing(Lane, Dst);
+
+        return;
+    }
+
+    if (Column->Encoding == FLI_COLUMN_ENCODING_CONSTANT) {
+        if (ToF64) {
+            f64* D = (f64*) Result;
+            f64 V = Column->Constant;
+
+            for (u64 Index = 0; Index < Count; ++Index)
+                D[Index] = V;
+        } else {
+            i64* D = (i64*) Result;
+            i64 V = (i64) Column->Constant;
+
+            for (u64 Index = 0; Index < Count; ++Index)
+                D[Index] = V;
+        }
+
+        return;
+    }
+
+    if (Column->Encoding == FLI_COLUMN_ENCODING_DELTA_TIME) {
+        u64 const* Bases = (u64 const*) Column->Data;
+
+        if (ToF64) {
+            f64* D = (f64*) Result;
+
+            for (u64 Index = 0; Index < Count; ++Index) {
+                u64 Sample = Base + Index;
+
+                D[Index] = (f64) (
+                    Bases[Sample >> FLI_TIME_BLOCK_SHIFT] + 
+                    Column->Deltas[Sample]
+                );
+            }
+        } else {
+            i64* D = (i64*) Result;
+
+            for (u64 Index = 0; Index < Count; ++Index) {
+                u64 Sample = Base + Index;
+
+                D[Index] = (i64) (
+                    Bases[Sample >> FLI_TIME_BLOCK_SHIFT] + 
+                    Column->Deltas[Sample]
+                );
+            }
+        }
 
         return;
     }
@@ -374,6 +422,8 @@ FLVLoadChunk(
         switch (Column->Kind) {
             default: {
                 FLVTempSetMissing(Lane, Dst);
+
+                return;
             } break;
 
             case FLI_SCALAR_KIND_U8: {
@@ -416,10 +466,20 @@ FLVLoadChunk(
                 FLV_LOAD_LOOP(f64, f64);
             } break;
         }
+
+        if (Column->Scale != 1.0) {
+            f64* D = (f64*) Result;
+            f64 Scale = Column->Scale;
+
+            for (u64 Index = 0; Index < Count; ++Index)
+                D[Index] *= Scale;
+        }
     } else {
         switch (Column->Kind) {
             default: {
                 FLVTempSetMissing(Lane, Dst);
+
+                return;
             } break;
 
             case FLI_SCALAR_KIND_U8: {
@@ -461,6 +521,14 @@ FLVLoadChunk(
             case FLI_SCALAR_KIND_F64: {
                 FLV_LOAD_LOOP(f64, i64);
             } break;
+        }
+
+        if (Column->Scale != 1.0) {
+            i64* D = (i64*) Result;
+            f64 Scale = Column->Scale;
+
+            for (u64 Index = 0; Index < Count; ++Index)
+                D[Index] = (i64) ((f64) D[Index] * Scale);
         }
     }
 }
@@ -821,7 +889,7 @@ FLV_REDUCE_KERNEL(REDUCE_COUNT, i64, I64, FLV_BODY_NONE)
                                                                           \
     u64 const* Mask = Lane->Mask ? Lane->Mask : Lane->MaskAll;            \
     Type const* A = (Type const*) FLVTempPtr(Lane, Op.LHS);               \
-    u64 const*  T = (u64 const*) Lane->BaseTime->Data + Lane->ChunkBase;  \
+    u64 const*  T = Lane->ChunkTime;                                      \
     u64 Count = Lane->ChunkCount
  
 #define FLV_DIFF_KERNEL(Name, Type, Field, Hole)                          \
@@ -1089,7 +1157,6 @@ FLV_KERNEL_FUNC_SIG(FLVKernelSEL_FROM_MASK)
     }
 
     u64 const* Mask = (u64 const*) FLVTempPtr(Lane, Op.LHS);
-    u64 const* Time = (u64 const*) Lane->BaseTime->Data + Lane->ChunkBase;
 
     for (u64 Index = 0; Index < Lane->ChunkCount; ++Index) {
         b32 Bit = FLVMaskBit(Mask, Index);
@@ -1097,10 +1164,10 @@ FLV_KERNEL_FUNC_SIG(FLVKernelSEL_FROM_MASK)
         if (Bit) {
             if (!Build->IsOpen) {
                 Build->IsOpen = TRUE;
-                Build->OpenStartUSecs = Time[Index];
+                Build->OpenStartUSecs = Lane->ChunkTime[Index];
             }
 
-            Build->OpenEndUSecs = Time[Index];
+            Build->OpenEndUSecs = Lane->ChunkTime[Index];
         } else if (Build->IsOpen) {
             FLVSelectionBuildPush(
                 Lane, 
@@ -1558,7 +1625,7 @@ FLVIsReduction(FLVOp Op)
 INTERNAL u64
 FLVWindowBound(FLVLane* Lane, u64 Width)
 {
-    u64 const* T = (u64 const*) Lane->BaseTime->Data;
+    FLVColumn const* T = Lane->BaseTime;
     u64 Result = 1;
  
     for (u64 RangeIndex = 0; RangeIndex < Lane->RangesCount; ++RangeIndex) {
@@ -1566,7 +1633,9 @@ FLVWindowBound(FLVLane* Lane, u64 Width)
         u64 Front = Range.Min;
  
         for (u64 Index = Range.Min; Index < Range.Max; ++Index) {
-            while (T[Front] + Width <= T[Index])
+            u64 Now = FLVTimeAt(T, Index);
+
+            while (FLVTimeAt(T, Front) + Width <= Now)
                 ++Front;
  
             Result = MAX(Result, Index - Front + 1);
@@ -1672,7 +1741,7 @@ FLVKernelsRegionBegin(FLVLane* Lane, FLVRegion const* Region)
                 Curve->LabelStringIndex = Emit->LabelStringIndex;
                 Curve->Axis = Emit->Axis;
 
-                if (!IsDerived && !Lane->Columns[Build->SourceSlot].Data)
+                if (!IsDerived && Lane->Columns[Build->SourceSlot].IsMissing)
                     Item->IsMissing = TRUE;
             } break;
  
@@ -1735,7 +1804,7 @@ FLVKernelsRegionBegin(FLVLane* Lane, FLVRegion const* Region)
                     Column->Column = Slot->Column;
                     Column->Kind = Source->Kind;
                     Column->Width = Source->ElementSize;
-                    Column->IsMissing = !Source->Data;
+                    Column->IsMissing = Source->IsMissing;
                 } else {
                     Column->Column = FLV_COLUMN_NONE;
                     Column->Kind = (Emit->ElementKind == FLV_ELEMENT_KIND_F64)

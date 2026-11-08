@@ -300,20 +300,14 @@ FSAsyncTick(void)
                     for (FSNode* N = Slot->Head; N; N = N->Next) {
                         FileProperties FileProps = SystemGetFileProperties(N->Path);
 
-                            PrintOut(
-                                "[FS] change %S: modified %llu -> %llu, gen %llu -> %llu\n",
-                                PRINT_STR(N->Path),
-                                N->LastModifiedTimestamp,
-                                FileProps.Modified,
-                                N->Generation,
-                                N->Generation + 1
-                            );
-
                         if (FileProps.Modified != N->LastModifiedTimestamp) {
                             FoundWork = TRUE;
                             N->LastModifiedTimestamp = FileProps.Modified;
                             ++N->Generation;
-                            AtomicIncFetchU64(&FS_SHARED->ChangeGeneration, MEM_ORDER_SEQ_CST);
+                            AtomicIncFetchU64(
+                                &FS_SHARED->ChangeGeneration, 
+                                MEM_ORDER_SEQ_CST
+                            );
                         }
                     }
                 }

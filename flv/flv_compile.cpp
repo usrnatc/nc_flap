@@ -464,28 +464,32 @@ FLVResultObjectCreate(
             Unit->SlotsCount
         );
         FLVLane CompilerLane = {};
- 
-        FLVLaneInit(
+        b32 Ready = FLVLaneInit(
             &CompilerLane,
+            Acc,
             RunMemPool,
             MemPool,
             &Unit->Lowered.Program[Program],
+            Flight,
             FLI,
             Bound,
             Unit->SlotsCount,
+            0,
             0
         );
-        FLVLaneRun(&CompilerLane);
-        ArenaRelease(RunMemPool);
 
-        for (
-            u32 Index = 0; 
-            Index < Unit->Lowered.Program[Program].EmitCount; 
-            ++Index
-        ) {
-            CompilerLane.Items[Index].Flight = Flight;
+        if (!Ready) {
+            *Retry = TRUE;
+            ArenaRelease(RunMemPool);
+            ArenaRelease(MemPool);
+            AccessClose(Acc);
+            ReleaseScratch(Scratch);
+
+            return Result;
         }
 
+        FLVLaneRun(&CompilerLane);
+        ArenaRelease(RunMemPool);
         Result.V[0] = INT_FROM_PTR(MemPool);
         Result.V[1] = INT_FROM_PTR(CompilerLane.Items);
         Result.V[2] = Unit->Lowered.Program[Program].EmitCount;

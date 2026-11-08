@@ -51,6 +51,14 @@ u64 FLI_SCALAR_KIND_SIZE_TABLE[FLI_SCALAR_KIND_COUNT] = {
     64
 };
 
+u64
+FLITimeBlockCount(u64 Count)
+{
+    u64 Result = (Count + FLI_TIME_BLOCK_SAMPLES - 1) >> FLI_TIME_BLOCK_SHIFT;
+
+    return Result;
+}
+
 INTERNAL Str8
 FLIStringFromNameMapKind(FLINameMapKind MapKind)
 {
@@ -1168,35 +1176,36 @@ FLIAsyncTick(void)
 
         UNUSED(ParseStatus);
 
-        Arena* FLIParsedMemPool = NULL;
+        // Arena* FLIParsedMemPool = NULL;
+        // FLIParsed Parsed = FLIParsedMaybeCompressed;
+        // u64 DecompressedSize = FLIDecompressedSizeFromParsed(
+        //     &FLIParsedMaybeCompressed
+        // );
+
+        // if (DecompressedSize > FileProps.Size) {
+        //     FLIParsedMemPool = ArenaAlloc();
+
+        //     u8* DecompressedData = ArenaPushArray(
+        //         FLIParsedMemPool, 
+        //         u8, 
+        //         DecompressedSize
+        //     );
+
+        //     FLIDecompressParsed(
+        //         DecompressedData, 
+        //         DecompressedSize, 
+        //         &FLIParsedMaybeCompressed
+        //     );
+        //     ParseStatus = FLIParse(
+        //         DecompressedData, 
+        //         DecompressedSize, 
+        //         &Parsed
+        //     );
+
+        //     UNUSED(ParseStatus);
+        // }
+
         FLIParsed Parsed = FLIParsedMaybeCompressed;
-        u64 DecompressedSize = FLIDecompressedSizeFromParsed(
-            &FLIParsedMaybeCompressed
-        );
-
-        if (DecompressedSize > FileProps.Size) {
-            FLIParsedMemPool = ArenaAlloc();
-
-            u8* DecompressedData = ArenaPushArray(
-                FLIParsedMemPool, 
-                u8, 
-                DecompressedSize
-            );
-
-            FLIDecompressParsed(
-                DecompressedData, 
-                DecompressedSize, 
-                &FLIParsedMaybeCompressed
-            );
-            ParseStatus = FLIParse(
-                DecompressedData, 
-                DecompressedSize, 
-                &Parsed
-            );
-
-            UNUSED(ParseStatus);
-        }
-
         u64 KeyHash = Hash(Str8Struct(&Key));
         u64 SlotIndex = KeyHash % FLI_SHARED->SlotsCount;
         FLISlot* Slot = &FLI_SHARED->Slots[SlotIndex];
@@ -1217,7 +1226,7 @@ FLIAsyncTick(void)
                 Node->FileMap = FileMap;
                 Node->FileProps = FileProps;
                 Node->FileBase = FileBase;
-                Node->MemPool = FLIParsedMemPool;
+                Node->MemPool = NULL; // FLIParsedMemPool;
                 MemCpy(&Node->FLI, &Parsed, sizeof(Node->FLI));
                 ++Node->CompletionCount;
                 --Node->WorkingCount;
@@ -1231,8 +1240,8 @@ FLIAsyncTick(void)
 
                 AtomicIncFetchU64(&FLI_SHARED->LoadCount, MEM_ORDER_SEQ_CST);
             } else {
-                if (FLIParsedMemPool)
-                    ArenaRelease(FLIParsedMemPool);
+                // if (FLIParsedMemPool)
+                //     ArenaRelease(FLIParsedMemPool);
 
                 SystemCloseFileMapView(
                     FileMap, 
@@ -1912,6 +1921,116 @@ FLIMatchFromStr(
     return Result;
 }
 
+OCObject
+FLISectionObjectCreate(
+    Str8 Key,
+    b32* CancelSignal,
+    OUT b32* Retry,
+    OUT u64* Generation
+) {
+    OCObject Result = {};
+    Access* Acc = AccessOpen();
+    FLIKey FLIIKey = {};
+    u32 SectionIndex = 0;
+    u64 Offset = 0;
+
+    UNUSED(CancelSignal);
+    *Generation = 0;
+    Offset += SerialPopStruct(Key, Offset, &FLIIKey);
+    Offset += SerialPopStruct(Key, Offset, &SectionIndex);
+
+    FLIParsed* FLI = FLIParsedFromKey(Acc, FLIIKey, FALSE, 0);
+
+    if (FLI == EMPTY_FLI_PARSED_VALUE) {
+        *Retry = TRUE;
+    } else if (SectionIndex < FLI->SectionsCount) {
+        FLISection* Section = &FLI->Sections[SectionIndex];
+
+        if (
+            Section->Encoding == FLI_SECTION_ENCODING_LZB &&
+            Section->Offset + Section->EncodedSize <= FLI->RawDataSize
+        ) {
+            Arena* MemPool = ArenaAlloc();
+            u8* Data = ArenaPushArray(MemPool, u8, Section->UnpackedSize);
+
+            rr_lzb_simple_decode(
+                FLI->RawData + Section->Offset,
+                Section->EncodedSize,
+                Data,
+                Section->UnpackedSize
+            );
+            Result.V[0] = INT_FROM_PTR(MemPool);
+            Result.V[1] = INT_FROM_PTR(Data);
+            Result.V[2] = Section->UnpackedSize;
+        }
+    }
+
+    AccessClose(Acc);
+
+    return Result;
+}
+
+void
+FLISectionObjectDestroy(OCObject Object)
+{
+    if (Object.V[0])
+        ArenaRelease((Arena*) PTR_FROM_INT(Object.V[0]));
+}
+
+FLISectionData
+FLISectionDataFromIndex(
+    Access* Acc,
+    FLIKey Key,
+    FLIParsed* FLI,
+    u32 SectionIndex,
+    u64 EndTimeUSecs
+) {
+    FLISectionData Result = {};
+
+    Result.IsReady = TRUE;
+
+    if (SectionIndex >= FLI->SectionsCount)
+        return Result;
+
+    FLISection* Section = &FLI->Sections[SectionIndex];
+
+    if (!Section->EncodedSize)
+        return Result;
+
+    if (Section->Encoding == FLI_SECTION_ENCODING_UNPACKED) {
+        if (Section->Offset + Section->EncodedSize <= FLI->RawDataSize) {
+            Result.Data = FLI->RawData + Section->Offset;
+            Result.Size = Section->EncodedSize;
+        }
+
+        return Result;
+    }
+
+    TempArena Scratch = GetScratch(NULL, 0);
+    Str8List Parts = {};
+
+    ListPush(Scratch.MemPool, &Parts, Str8Struct(&Key));
+    ListPush(Scratch.MemPool, &Parts, Str8Struct(&SectionIndex));
+
+    Str8 ObjectKey = StrListJoin(Scratch.MemPool, &Parts, NULL);
+    OCObject Object = OCObjectFromKey(
+        Acc,
+        ObjectKey,
+        FLISectionObjectCreate,
+        FLISectionObjectDestroy,
+        EndTimeUSecs,
+        __Params.Generation = 0,
+        __Params.EvictionThresholdUSecs = SECONDS(10)
+    );
+
+    Result.Data = PTR_FROM_INT(Object.V[1]);
+    Result.Size = Object.V[2];
+    Result.IsReady = (Result.Data != NULL);
+    ReleaseScratch(Scratch);
+
+    return Result;
+}
+
 u64 
 Hash(u8* Ptr, u64 Size)
 {
@@ -2160,25 +2279,31 @@ FLISectionRawTableFromKind(
     return Result;
 }
 
-void*
-FLIColumnRawDataFromIndex(
-    FLIParsed* FLI, 
-    u32 ColumnIndex, 
+FLISectionData
+FLIColumnDataFromIndex(
+    Access* Acc,
+    FLIKey Key,
+    FLIParsed* FLI,
+    u32 ColumnIndex,
+    u64 EndTimeUSecs,
     OUT u64* ElementCount
 ) {
     FLIColumn* Column = FLIElementFromNameIndex(
-        FLI, 
-        Columns, 
-        COLUMNS, 
+        FLI,
+        Columns,
+        COLUMNS,
         ColumnIndex
     );
-    void* Result = FLISectionRawTableFromKind(
-        FLI,
-        (FLISectionKind) Column->SectionIndex,
-        ElementCount
-    );
 
-    return Result;
+    *ElementCount = Column->Count;
+
+    return FLISectionDataFromIndex(
+        Acc,
+        Key,
+        FLI,
+        Column->SectionIndex,
+        EndTimeUSecs
+    );
 }
 
 u32
@@ -4109,7 +4234,9 @@ FLIBake(Arena* MemPool, FLIBakeParams* Params)
             FLI_BAKE_SHARED->BakeStrings.SlotsCount
         );
         FLI_BAKE_SHARED->BakeStrings.SlotsBaseIndices = BakeBase.SlotsBaseIndices;
-        FLI_BAKE_SHARED->BakeStrings.TotalCount = BakeBase.SlotsBaseIndices[FLI_BAKE_SHARED->BakeStrings.SlotsCount];
+        FLI_BAKE_SHARED->BakeStrings.TotalCount = BakeBase.SlotsBaseIndices[
+            FLI_BAKE_SHARED->BakeStrings.SlotsCount
+        ];
     }
 
     LaneSync();
@@ -4202,7 +4329,10 @@ FLIBake(Arena* MemPool, FLIBakeParams* Params)
 
             FLIBakeNameMapTopology* Top = &BakeNameMapsTopologies[K];
 
-            LaneMaps[K][LaneIndex()] = FLIBakeNameMapAlloc(Scratch.MemPool, Top);
+            LaneMaps[K][LaneIndex()] = FLIBakeNameMapAlloc(
+                Scratch.MemPool, 
+                Top
+            );
 
             FLIBakeNameMap* Map = LaneMaps[K][LaneIndex()];
 
@@ -4218,7 +4348,11 @@ FLIBake(Arena* MemPool, FLIBakeParams* Params)
                     ) {
                         r1u64 Range = LaneRange(Node->Count);
 
-                        for (u64 Index = Range.Min; Index < Range.Max; ++Index) {
+                        for (
+                            u64 Index = Range.Min; 
+                            Index < Range.Max; 
+                            ++Index
+                        ) {
                             FLIBakeMessageType* MessageType = &Node->V[Index];
 
                             FLIBakeNameMapInsert(
@@ -4644,7 +4778,12 @@ FLIBake(Arena* MemPool, FLIBakeParams* Params)
                 ) {
                     for (u64 NodeIndex = 0; NodeIndex < Node->Count; ++NodeIndex) {
                         FLIBakeStr* Src = &Node->V[NodeIndex];
-                        u64 DstIndex = BakeStrings->SlotsBaseIndices[SlotIndex] + Node->BaseIndex + NodeIndex + 1;
+                        u64 DstIndex = (
+                            BakeStrings->SlotsBaseIndices[SlotIndex] + 
+                            Node->BaseIndex + 
+                            NodeIndex + 
+                            1
+                        );
 
                         ASSERT(OffsetCursor < U32_MAX);
 
@@ -4654,7 +4793,9 @@ FLIBake(Arena* MemPool, FLIBakeParams* Params)
                 }
             }
 
-            FLI_BAKE_SHARED->BakedStrings.StringOffsets[BakeStrings->TotalCount + 1] = SafeTruncateU64(OffsetCursor);
+            FLI_BAKE_SHARED->BakedStrings.StringOffsets[BakeStrings->TotalCount + 1] = SafeTruncateU64(
+                OffsetCursor
+            );
             FLI_BAKE_SHARED->BakedStrings.StringDataSize = OffsetCursor;
             FLI_BAKE_SHARED->BakedStrings.StringData = ArenaPushArrayZero(
                 MemPool,
@@ -4679,7 +4820,12 @@ FLIBake(Arena* MemPool, FLIBakeParams* Params)
             ) {
                 for (u64 NodeIndex = 0; NodeIndex < Node->Count; ++NodeIndex) {
                     FLIBakeStr* Src = &Node->V[NodeIndex];
-                    u64 DstIndex = BakeStrings->SlotsBaseIndices[SlotIndex] + Node->BaseIndex + NodeIndex + 1;
+                    u64 DstIndex = (
+                        BakeStrings->SlotsBaseIndices[SlotIndex] + 
+                        Node->BaseIndex + 
+                        NodeIndex + 
+                        1
+                    );
                     u64 DstOffset = FLI_BAKE_SHARED->BakedStrings.StringOffsets[DstIndex];
 
                     MemCpy(
@@ -4696,7 +4842,9 @@ FLIBake(Arena* MemPool, FLIBakeParams* Params)
 
     {
         if (!LaneIndex()) {
-            FLI_BAKE_SHARED->BakedIndexRuns.IndexRunsCount = BakeIndexRuns->SlotsBaseIndices[BakeIndexRuns->SlotsCount];
+            FLI_BAKE_SHARED->BakedIndexRuns.IndexRunsCount = BakeIndexRuns->SlotsBaseIndices[
+                BakeIndexRuns->SlotsCount
+            ];
             FLI_BAKE_SHARED->BakedIndexRuns.IndexRuns = ArenaPushArrayZero(
                 MemPool,
                 u32,
@@ -5168,13 +5316,15 @@ FLIBake(Arena* MemPool, FLIBakeParams* Params)
                     FLI_SECTION_KIND_COUNT + DstIndex
                 );
                 Dst->Kind = Src->Kind;
+                Dst->Encoding = Src->Encoding;
                 Dst->Count = Src->Count;
                 Dst->Min = Src->Min;
                 Dst->Max = Src->Max;
                 Dst->Mean = Src->Mean;
+                Dst->Multiplier = Src->Multiplier;
                 *DstData = FLISerialisedSectionMakeUnpacked(
                     Src->Data,
-                    Src->Count * FLI_SCALAR_KIND_SIZE_TABLE[Src->Kind]
+                    Src->DataSize
                 );
             }
         }
@@ -5424,6 +5574,9 @@ FLICompress(Arena* MemPool, IN FLISerialisedSectionBundle* Bundle)
 
         MemCpy(Dst, Src, sizeof(*Dst));
 
+        if (Index < FLI_SECTION_KIND_COUNT)
+            continue;
+
         if (Src->EncodedSize) {
             MemSet(Ctx.m_hashTable, 0, sizeof(u16) * 1 << Ctx.m_tableSizeBits);
             Dst->Data = ArenaPushArray(MemPool, u8, Src->EncodedSize);
@@ -5435,6 +5588,11 @@ FLICompress(Arena* MemPool, IN FLISerialisedSectionBundle* Bundle)
             );
             Dst->UnpackedSize = Src->EncodedSize;
             Dst->Encoding = FLI_SECTION_ENCODING_LZB;
+
+            if (Dst->EncodedSize == Src->EncodedSize) {
+                Dst->Data = Src->Data;
+                Dst->Encoding = FLI_SECTION_ENCODING_UNPACKED;
+            }
         }
     }
 

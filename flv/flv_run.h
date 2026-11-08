@@ -25,14 +25,6 @@ struct FLVSelection {
     u64    Count;
 };
 
-struct FLVColumn {
-    void*         Data;
-    u64           Count;
-    FLIScalarKind Kind;
-    u8            ElementSize;
-    u8            __Padding[6];
-};
-
 struct FLVTableRef {
     u32 Head;
     u32 Count;
@@ -56,6 +48,7 @@ struct FLVRunItem {
 struct FLVRunSet {
     FLVProgram const* Programs;
     FLIParsed**       Flights;
+    FLIKey const*     Keys;
     FLVBoundSlot**    Bound;
     u32*              EmitBase;
     FLVRunItem*       Items;
@@ -67,12 +60,16 @@ struct FLVRunSet {
 };
 
 struct FLVLane {
+    Access*             Acc;
     FLVProgram const*   Program;
     FLVBoundSlot const* Slots;
     FLIParsed*          FLI;
+    FLIKey              Flight;
     u32                 SlotsCount;
     u32                 FlightIndex;
     u64                 FlightEndUSecs;
+    u64                 EndTimeUSecs;
+    FLVColumn*          TimeColumns;
     Arena*              MemPool;
     Arena*              ResultMemPool;
     FLVColumn*          Columns;
@@ -92,6 +89,8 @@ struct FLVLane {
     r1u64*              Ranges;
     u64                 RangesCount;
     u64                 RegionSampleCount;
+    u64 const*          ChunkTime;
+    u64*                ChunkTimeDecode;
     u64                 ChunkBase;
     u64                 ChunkCount;
     u64                 ChunkPosition;
@@ -101,10 +100,10 @@ struct FLVLane {
 
 
 // @functions__________________________________________________________________
-void FLVLaneInit(FLVLane* Lane, Arena* MemPool, Arena* ResultMemPool, FLVProgram const* Program, FLIParsed* FLI, FLVBoundSlot const* Slots, u32 SlotsCount, u32 FlightIndex);
+b32 FLVLaneInit(FLVLane* Lane, Access* Acc, Arena* MemPool, Arena* ResultMemPool, FLVProgram const* Program, FLIKey Flight, FLIParsed* FLI, FLVBoundSlot const* Slots, u32 SlotsCount, u32 FlightIndex, u64 EndTimeUSecs);
 void FLVLaneRun(FLVLane* Lane);
 Str8List FLVRenderItemsPrint(Arena* MemPool, FLVProgram const* Program, FLIParsed* FLI, FLVRunItem* Items);
-FLVRunSet* FLVRunSetInit(Arena* MemPool, FLVLowered const* Lowered, FLVSlot const* Slots, FLVSlotName const* SlotNames, u32 SlotsCount, FLIParsed** Flights, u32 FlightsCount);
+FLVRunSet* FLVRunSetInit(Arena* MemPool, FLVLowered const* Lowered, FLVSlot const* Slots, FLVSlotName const* SlotNames, u32 SlotsCount, FLIKey const* Keys, FLIParsed** Flights, u32 FlightsCount);
 void FLVRunSetExecute(FLVRunSet* Set);
 void FLVRunSetSummarise(FLVRunSet* Set);
 

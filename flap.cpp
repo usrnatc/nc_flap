@@ -16,9 +16,12 @@
 #include "flv_bind.h"
 #include "flv_lower.h"
 #include "flv_compiler.h"
+#include "flv_run.h"
+#include "flv_visualisation.h"
 #include "flv_compile.h"
 #include "flv_kernel.h"
-#include "flv_run.h"
+
+#include "flap_views.h"
 
 #include "fli.cpp"
 #include "fli_bin.cpp"
@@ -40,7 +43,714 @@
 #include "flv_kernel.cpp"
 #include "flv_run.cpp"
 
-internal void
+#include "flap_views.cpp"
+
+#define FLAP_MAX_LANE_COUNT 256
+
+struct FLAPListViewState {
+    v2i64 Cursor;
+    v2i64 Mark;
+};
+
+void
+AppFileRecorded(Str8 Path)
+{
+    Str8 Ext = StrSkipLastDot(Path);
+    b32 IsLog = (
+        StrMatch(Ext, "fli"_s8, STR_MATCH_ALL_CASES) ||
+        StrMatch(Ext, "bin"_s8, STR_MATCH_ALL_CASES)
+    );
+
+    if (IsLog) {
+        FLIKey PathKey = FLIKeyFromPathTimeStamp(Path, 0);
+
+        FLIOpen(PathKey);
+    }
+}
+
+void
+AppViewUI(r2f32 Rect)
+{
+    ConfigNode* View = ConfigNodeFromID(Registers()->View);
+    AppViewState* VS = AppViewStateFromConfig(View);
+    Str8 ViewName = View->String;
+    ConfigNode* QueryRoot = ConfigNodeChildFromStr(View, "query"_s8);
+    ConfigNode* InputRoot = ConfigNodeChildFromStr(QueryRoot, "input"_s8);
+    ConfigNode* CmdRoot = ConfigNodeChildFromStr(QueryRoot, "cmd"_s8);
+    Str8 CurrentInput = InputRoot->Head->String;
+    UISignal QueryEditSig = {};
+ 
+    if (VS->QueryIsOpen) {
+        Str8 CommandName = CmdRoot->Head->String;
+        AppCommandKindInfo* CommandInfo = AppCommandKindInfoFromStr(CommandName);
+ 
+        VS->QueryStringSize = MIN(sizeof(VS->QueryBuffer), CurrentInput.Size);
+        MemCpy(
+            VS->QueryBuffer,
+            CurrentInput.Str,
+            VS->QueryStringSize
+        );
+ 
+        if (!VS->QueryCursor.Column) {
+            VS->QueryMark = TxtPt(1, 1);
+            VS->QueryCursor = TxtPt(1, VS->QueryStringSize + 1);
+        }
+ 
+        Rect.Y0 += 1.0f;
+
+        b32 QueryIsFocused = !VS->ContentsAreFocused;
+        UIBox* SearchRow = EMPTY_UI_BOX_VALUE;
+ 
+        UITag("menu_bar"_s8) {
+            UISetNextFocusHot(
+                QueryIsFocused ? UI_FOCUS_KIND_ON : UI_FOCUS_KIND_NULL
+            );
+            UISetNextFocusActive(
+                QueryIsFocused ? UI_FOCUS_KIND_ON : UI_FOCUS_KIND_NULL
+            );
+            UISetNextChildLayoutAxis(AXIS_2D_X);
+            SearchRow = UIBuildBoxFromStr(
+                UI_BOX_KIND_DRAW_BACKGROUND,
+                "###search"_s8
+            );
+            SearchRow->DefaultNavFocusActiveKey = QueryIsFocused
+                ? UIKeyFromStr(SearchRow->Key, "###search_edit"_s8)
+                : EMPTY_UI_KEY_VALUE;
+            SearchRow->DefaultNavFocusNextActiveKey = SearchRow->DefaultNavFocusActiveKey;
+
+            if (
+                SearchRow->Kind & UI_BOX_KIND_FOCUS_ACTIVE &&
+                !(SearchRow->Kind & UI_BOX_KIND_FOCUS_ACTIVE_DISABLED)
+            ) {
+                APP_STATE->TextEditMode = TRUE;
+            }
+ 
+            UIParent(SearchRow) {
+                UIPreferredWidth(UI_TEXT_DIM(2.0f, 1.0f)) {
+                    UITag("weak"_s8) {
+                        if (CommandInfo->IconKind != APP_ICON_KIND_NULL)
+                            UILabel(APP_ICON_KIND_TEXT_TABLE[CommandInfo->IconKind]);
+
+                        if (CommandName.Size)
+                        UIPreferredWidth(UI_TEXT_DIM(2.0f, 1.0f)) {
+                            UILabel(CommandInfo->DisplayName);
+                        }
+                    }
+                }
+ 
+                UIPreferredWidth(UI_PERCENT(1.0f, 0.0f)) {
+                    UITag("alt"_s8) {
+                        QueryEditSig = UILineEdit(
+                            &VS->QueryCursor,
+                            &VS->QueryMark,
+                            VS->QueryBuffer,
+                            sizeof(VS->QueryBuffer),
+                            &VS->QueryStringSize,
+                            CurrentInput,
+                            "###search_edit"_s8
+                        );
+                    }
+                }
+
+                if (UI_PRESSED(QueryEditSig)) {
+                    VS->ContentsAreFocused = FALSE;
+                    AppCmd(APP_COMMAND_KIND_FOCUS_PANEL);
+                }
+
+                UIPreferredWidth(UI_PX(3.0f, 1.0f)) {
+                    UITextAlignment(UI_TEXT_ALIGN_CENTRE) {
+                        UISignal CloseSig = UIButton(
+                            "%S###search_close",
+                            PRINT_STR(APP_ICON_KIND_TEXT_TABLE[APP_ICON_KIND_X])
+                        );
+
+                        if (UI_CLICKED(CloseSig))
+                            VS->QueryIsOpen = FALSE;
+                    }
+                }
+            }
+        }
+ 
+        if (InputRoot == EMPTY_CFG_NODE_VALUE) {
+            InputRoot = ConfigNodeChildFromStrOrAlloc(
+                APP_STATE->Config,
+                QueryRoot,
+                "input"_s8
+            );
+        }
+ 
+        ConfigNodeNewReplace(
+            APP_STATE->Config,
+            InputRoot,
+            Str(VS->QueryBuffer, VS->QueryStringSize)
+        );
+    }
+ 
+    for (
+        UIEvent* Evt = NULL;
+        UINextEvent(&Evt);
+    ) {
+        if (
+            Evt->Kind == UI_EVENT_KIND_PRESS &&
+            Evt->Input == INPUT_KIND_LEFT_MOUSE_BTN &&
+            InRange(Rect, Evt->Position)
+        ) {
+            VS->ContentsAreFocused = TRUE;
+            break;
+        }
+    }
+ 
+    UIBox* ViewContainer = EMPTY_UI_BOX_VALUE;
+ 
+    UIWidthFill() {
+        UIHeightFill() {
+            UISetNextChildLayoutAxis(AXIS_2D_Y);
+            ViewContainer = UIBuildBoxFromKey(0, EMPTY_UI_KEY_VALUE);
+        }
+    }
+ 
+    UIParent(ViewContainer) {
+        UIFocus(
+            VS->QueryIsOpen && 
+            !VS->ContentsAreFocused 
+                ? UI_FOCUS_KIND_OFF 
+                : UI_FOCUS_KIND_NULL
+        ) {
+            if (StrMatch(ViewName, "files"_s8, 0)) {
+                TempArena Scratch = GetScratch(NULL, 0);
+                FLAPListViewState* State = GetAppViewState(
+                    FLAPListViewState
+                );
+                ConfigNodePtrList FileList = ConfigNodeTopLevelListFromStr(
+                    Scratch.MemPool,
+                    "file"_s8
+                );
+                ConfigNodePtrArray AllFiles = ConfigNodePtrArrayFromList(
+                    Scratch.MemPool,
+                    &FileList
+                );
+                ConfigNodePtrArray Files = {};
+                UIScrollPoint2D ScrollPosition = AppViewScrollPosition();
+                Str8 OpenCommandName = APP_COMMAND_KIND_INFO_TABLE[
+                    APP_COMMAND_KIND_OPEN
+                ].String;
+                Str8 Filter = {};
+
+                if (
+                    VS->QueryIsOpen &&
+                    StrMatch(
+                        CmdRoot->Head->String,
+                        APP_COMMAND_KIND_INFO_TABLE[APP_COMMAND_KIND_FILTER].String,
+                        0
+                    )
+                ) {
+                    Filter = Str(VS->QueryBuffer, VS->QueryStringSize);
+                }
+
+                Files.V = ArenaPushArrayZero(
+                    Scratch.MemPool,
+                    ConfigNode*,
+                    AllFiles.Count
+                );
+
+                for (u64 Index = 0; Index < AllFiles.Count; ++Index) {
+                    FMRangeList Matches = FuzzyFind(
+                        Scratch.MemPool,
+                        Filter,
+                        AllFiles.V[Index]->Head->String
+                    );
+
+                    if (Matches.Count == Matches.StrPartCount)
+                        Files.V[Files.Count++] = AllFiles.V[Index];
+                }
+ 
+                State->Cursor.Y = MIN(State->Cursor.Y, (i64) Files.Count);
+                State->Mark = State->Cursor;
+
+                UITag("menu_bar"_s8) {
+                    UISetNextFlags(UI_BOX_KIND_DRAW_BACKGROUND);
+
+                    UINamedRow("###files_toolbar"_s8) {
+                        UITag("pop"_s8) {
+                            UIPreferredWidth(UI_PX(26.0f, 1.0f)) {
+                                UISignal AddSig = AppIconButton(
+                                    APP_ICON_KIND_ADD,
+                                    NULL,
+                                    "Add File or Folder###add_file"_s8
+                                );
+
+                                if (UI_CLICKED(AddSig)) {
+                                    AppCmd(
+                                        APP_COMMAND_KIND_RUN_COMMAND,
+                                        __Registers.CommandName = OpenCommandName
+                                    );
+                                }
+                            }
+                        }
+
+                        AppCommandBindingButtons(OpenCommandName, ""_s8, 1, 0);
+                    }
+                }
+
+                Rect.Y0 += 1.0f;
+ 
+                if (!Files.Count) {
+                    UISpacer(UI_PERCENT(1.0f, 0.0f));
+
+                    UIWidthFill() {
+                        UITextAlignment(UI_TEXT_ALIGN_CENTRE) {
+                            UITag("weak"_s8) {
+                                UILabel(
+                                    AllFiles.Count
+                                        ? "No file agrees with the filter."_s8
+                                        : "There are no files in the list."_s8
+                                );
+                            }
+                        }
+                    }
+
+                    if (!AllFiles.Count) {
+                        UIRow() {
+                            UISpacer(UI_PERCENT(1.0f, 0.0f));
+
+                            UITag("pop"_s8) {
+                                UIPreferredWidth(UI_PX(26.0f, 1.0f)) {
+                                    UISignal AddSig = AppIconButton(
+                                        APP_ICON_KIND_ADD,
+                                        NULL,
+                                        "Add File or Folder###add_file_centre"_s8
+                                    );
+
+                                    if (UI_CLICKED(AddSig)) {
+                                        AppCmd(
+                                            APP_COMMAND_KIND_RUN_COMMAND,
+                                            __Registers.CommandName = OpenCommandName
+                                        );
+                                    }
+                                }
+                            }
+
+                            AppCommandBindingButtons(OpenCommandName, ""_s8, 1, 0);
+                            UISpacer(UI_PERCENT(1.0f, 0.0f));
+                        }
+                    }
+
+                    UISpacer(UI_PERCENT(1.0f, 0.0f));
+                } else {
+                    UIScrollListParameters Params = {};
+                    UIScrollListSignal ListSig = {};
+                    r1i64 Visible = {};
+                    Str8 AcceptedPath = {};
+ 
+                    Params.Kind = UI_SCROLL_LIST_KIND_ALL;
+                    Params.DimensionsPX = Length(Rect);
+                    Params.RowHeightPX = 1.0f;
+                    Params.CursorRange.Max.Y = (i64) Files.Count;
+                    Params.ItemRange = Rng((i64) 0, (i64) Files.Count);
+                    Params.CursorMinIsEmptySelection[AXIS_2D_Y] = TRUE;
+ 
+                    UIFocus(UI_FOCUS_KIND_ON) {
+                        UIScrollList(
+                            &Params,
+                            &ScrollPosition.Y,
+                            &State->Cursor,
+                            &State->Mark,
+                            &Visible,
+                            &ListSig
+                        ) {
+                            for (
+                                i64 Row = Visible.Min;
+                                Row <= Visible.Max && Row < (i64) Files.Count;
+                                ++Row
+                            ) {
+                                Str8 Path = StrSkipLastSlash(
+                                    Files.V[Row]->Head->String
+                                );
+                                b32 IsCursor = (State->Cursor.Y == Row + 1);
+ 
+                                UITag(IsCursor ? "pop"_s8 : ""_s8) {
+                                    UISetNextChildLayoutAxis(AXIS_2D_X);
+ 
+                                    UIBox* RowBox = UIBuildBoxFromStrFmt(
+                                        (
+                                            UI_BOX_KIND_MOUSE_CLICKABLE |
+                                            UI_BOX_KIND_DRAW_BACKGROUND |
+                                            UI_BOX_KIND_DRAW_HOT_EFFECTS
+                                        ),
+                                        "###file_row_%p",
+                                        Files.V[Row]
+                                    );
+ 
+                                    UIParent(RowBox) {
+                                        UIWidthFill() {
+                                            UIBox* LabelBox = UILabel(Path).Box;
+
+                                            if (Filter.Size) {
+                                                FMRangeList Matches = FuzzyFind(
+                                                    Scratch.MemPool,
+                                                    Filter,
+                                                    Path
+                                                );
+
+                                                UIBoxEquipFuzzyMatchRanges(
+                                                    LabelBox,
+                                                    &Matches
+                                                );
+                                            }
+                                        }
+                                    }
+ 
+                                    UISignal RowSig = UISignalFromBox(RowBox);
+ 
+                                    if (UI_PRESSED(RowSig)) {
+                                        State->Cursor.Y = Row + 1;
+                                        State->Mark = State->Cursor;
+                                    }
+ 
+                                    if (UI_DOUBLE_CLICKED(RowSig))
+                                        AcceptedPath = Files.V[Row]->Head->String;
+                                }
+                            }
+                        }
+ 
+                        if (
+                            UIIsFocusActive() &&
+                            State->Cursor.Y > 0 &&
+                            UISlotPress(UI_EVENT_ACTION_SLOT_ACCEPT)
+                        ) {
+                            AcceptedPath = Files.V[State->Cursor.Y - 1]->Head->String;
+                        }
+                    }
+ 
+                    if (State->Cursor.Y > 0) {
+                        Str8 Selected = Files.V[
+                            State->Cursor.Y - 1
+                        ]->Head->String;
+                        ConfigNode* Transient = ConfigNodeChildFromStr(
+                            ConfigNodeRoot(),
+                            "transient"_s8
+                        );
+                        ConfigNode* Flight = ConfigNodeChildFromStrOrAlloc(
+                            APP_STATE->Config,
+                            Transient,
+                            "flight"_s8
+                        );
+
+                        if (!StrMatch(Flight->Head->String, Selected, 0)) {
+                            ConfigNodeNewReplace(
+                                APP_STATE->Config,
+                                Flight,
+                                Selected
+                            );
+                        }
+
+                        Registers()->FilePath = ArenaPushStrCpy(
+                            AppFrameMemPool(),
+                            Selected
+                        );
+                        Registers()->FlightIndex = (u32) (State->Cursor.Y - 1);
+                    }
+                }
+ 
+                ScrollPosition.Y.Offset = 0.0f;
+                AppStoreViewScrollPosition(ScrollPosition);
+                ReleaseScratch(Scratch);
+            } else if (StrMatch(ViewName, "views"_s8, 0)) {
+                TempArena Scratch = GetScratch(NULL, 0);
+                FLAPListViewState* State = GetAppViewState(
+                    FLAPListViewState
+                );
+                ConfigNodePtrList ViewList = ConfigNodeTopLevelListFromStr(
+                    Scratch.MemPool,
+                    "view"_s8
+                );
+                ConfigNodePtrArray AllFiles = ConfigNodePtrArrayFromList(
+                    Scratch.MemPool,
+                    &ViewList
+                );
+                ConfigNodePtrArray Files = {};
+                UIScrollPoint2D ScrollPosition = AppViewScrollPosition();
+                Str8 OpenCommandName = APP_COMMAND_KIND_INFO_TABLE[APP_COMMAND_KIND_OPEN].String;
+                Str8 Filter = {};
+
+                if (
+                    VS->QueryIsOpen &&
+                    StrMatch(
+                        CmdRoot->Head->String,
+                        APP_COMMAND_KIND_INFO_TABLE[APP_COMMAND_KIND_FILTER].String,
+                        0
+                    )
+                ) {
+                    Filter = Str(VS->QueryBuffer, VS->QueryStringSize);
+                }
+
+                Files.V = ArenaPushArrayZero(
+                    Scratch.MemPool,
+                    ConfigNode*,
+                    AllFiles.Count
+                );
+
+                for (u64 Index = 0; Index < AllFiles.Count; ++Index) {
+                    FMRangeList Matches = FuzzyFind(
+                        Scratch.MemPool,
+                        Filter,
+                        AllFiles.V[Index]->Head->String
+                    );
+
+                    if (Matches.Count == Matches.StrPartCount)
+                        Files.V[Files.Count++] = AllFiles.V[Index];
+                }
+ 
+                State->Cursor.Y = MIN(State->Cursor.Y, (i64) Files.Count);
+                State->Mark = State->Cursor;
+
+                UITag("menu_bar"_s8) {
+                    UISetNextFlags(UI_BOX_KIND_DRAW_BACKGROUND);
+
+                    UINamedRow("###views_toolbar"_s8) {
+                        UITag("pop"_s8) {
+                            UIPreferredWidth(UI_PX(26.0f, 1.0f)) {
+                                UISignal AddSig = AppIconButton(
+                                    APP_ICON_KIND_ADD,
+                                    NULL,
+                                    "Add View###add_view"_s8
+                                );
+
+                                if (UI_CLICKED(AddSig)) {
+                                    AppCmd(
+                                        APP_COMMAND_KIND_RUN_COMMAND,
+                                        __Registers.CommandName = OpenCommandName
+                                    );
+                                }
+                            }
+                        }
+
+                        AppCommandBindingButtons(OpenCommandName, ""_s8, 1, 0);
+                    }
+                }
+
+                Rect.Y0 += 1.0f;
+ 
+                if (!Files.Count) {
+                    UISpacer(UI_PERCENT(1.0f, 0.0f));
+
+                    UIWidthFill() {
+                        UITextAlignment(UI_TEXT_ALIGN_CENTRE) {
+                            UITag("weak"_s8) {
+                                UILabel(
+                                    AllFiles.Count
+                                        ? "No view agrees with the filter."_s8
+                                        : "There are no views in the list."_s8
+                                );
+                            }
+                        }
+                    }
+
+                    if (!AllFiles.Count) {
+                        UIRow() {
+                            UISpacer(UI_PERCENT(1.0f, 0.0f));
+
+                            UITag("pop"_s8) {
+                                UIPreferredWidth(UI_PX(26.0f, 1.0f)) {
+                                    UISignal AddSig = AppIconButton(
+                                        APP_ICON_KIND_ADD,
+                                        NULL,
+                                        "Add View###add_view_centre"_s8
+                                    );
+
+                                    if (UI_CLICKED(AddSig)) {
+                                        AppCmd(
+                                            APP_COMMAND_KIND_RUN_COMMAND,
+                                            __Registers.CommandName = OpenCommandName
+                                        );
+                                    }
+                                }
+                            }
+
+                            AppCommandBindingButtons(OpenCommandName, ""_s8, 1, 0);
+                            UISpacer(UI_PERCENT(1.0f, 0.0f));
+                        }
+                    }
+
+                    UISpacer(UI_PERCENT(1.0f, 0.0f));
+                } else {
+                    UIScrollListParameters Params = {};
+                    UIScrollListSignal ListSig = {};
+                    r1i64 Visible = {};
+                    Str8 AcceptedPath = {};
+ 
+                    Params.Kind = UI_SCROLL_LIST_KIND_ALL;
+                    Params.DimensionsPX = Length(Rect);
+                    Params.RowHeightPX = 1.0f;
+                    Params.CursorRange.Max.Y = (i64) Files.Count;
+                    Params.ItemRange = Rng((i64) 0, (i64) Files.Count);
+                    Params.CursorMinIsEmptySelection[AXIS_2D_Y] = TRUE;
+ 
+                    UIFocus(UI_FOCUS_KIND_ON) {
+                        UIScrollList(
+                            &Params,
+                            &ScrollPosition.Y,
+                            &State->Cursor,
+                            &State->Mark,
+                            &Visible,
+                            &ListSig
+                        ) {
+                            for (
+                                i64 Row = Visible.Min;
+                                Row <= Visible.Max && Row < (i64) Files.Count;
+                                ++Row
+                            ) {
+                                Str8 Path = StrSkipLastSlash(
+                                    Files.V[Row]->Head->String
+                                );
+                                b32 IsCursor = (State->Cursor.Y == Row + 1);
+ 
+                                UITag(IsCursor ? "pop"_s8 : ""_s8) {
+                                    UISetNextChildLayoutAxis(AXIS_2D_X);
+ 
+                                    UIBox* RowBox = UIBuildBoxFromStrFmt(
+                                        (
+                                            UI_BOX_KIND_MOUSE_CLICKABLE |
+                                            UI_BOX_KIND_DRAW_BACKGROUND |
+                                            UI_BOX_KIND_DRAW_HOT_EFFECTS
+                                        ),
+                                        "###view_row_%p",
+                                        Files.V[Row]
+                                    );
+ 
+                                    UIParent(RowBox) {
+                                        b32 IsOpen = FALSE;
+
+                                        for (
+                                            Str8Node* N = APP_STATE->TabFilePaths.Head;
+                                            N && !IsOpen;
+                                            N = N->Next
+                                        ) {
+                                            IsOpen = PathMatchNormalised(
+                                                N->String,
+                                                Files.V[Row]->Head->String
+                                            );
+                                        }
+
+                                        UIPreferredWidth(UI_PX(2.0f, 1.0f)) {
+                                            UILabel(
+                                                IsOpen
+                                                    ? APP_ICON_KIND_TEXT_TABLE[APP_ICON_KIND_DOT]
+                                                    : ""_s8
+                                            );
+                                        }
+
+                                        UIWidthFill() {
+                                            UIBox* LabelBox = UILabel(Path).Box;
+
+                                            if (Filter.Size) {
+                                                FMRangeList Matches = FuzzyFind(
+                                                    Scratch.MemPool,
+                                                    Filter,
+                                                    Path
+                                                );
+
+                                                UIBoxEquipFuzzyMatchRanges(
+                                                    LabelBox,
+                                                    &Matches
+                                                );
+                                            }
+                                        }
+                                    }
+ 
+                                    UISignal RowSig = UISignalFromBox(RowBox);
+ 
+                                    if (UI_PRESSED(RowSig)) {
+                                        State->Cursor.Y = Row + 1;
+                                        State->Mark = State->Cursor;
+                                    }
+ 
+                                    if (UI_DOUBLE_CLICKED(RowSig))
+                                        AcceptedPath = Files.V[Row]->Head->String;
+                                }
+                            }
+                        }
+ 
+                        if (
+                            UIIsFocusActive() &&
+                            State->Cursor.Y > 0 &&
+                            UISlotPress(UI_EVENT_ACTION_SLOT_ACCEPT)
+                        ) {
+                            AcceptedPath = Files.V[State->Cursor.Y - 1]->Head->String;
+                        }
+                    }
+ 
+                    if (State->Cursor.Y > 0) {
+                        Registers()->FilePath = ArenaPushStrCpy(
+                            AppFrameMemPool(),
+                            Files.V[State->Cursor.Y - 1]->Head->String
+                        );
+                    }
+
+                    if (AcceptedPath.Size) {
+                        AppCmd(
+                            APP_COMMAND_KIND_BUILD_TAB,
+                            __Registers.String = "view"_s8,
+                            __Registers.FilePath = AcceptedPath
+                        );
+                    }
+                }
+ 
+                ScrollPosition.Y.Offset = 0.0f;
+                AppStoreViewScrollPosition(ScrollPosition);
+                ReleaseScratch(Scratch);
+            } else {
+                FLAPViewTabUI(Rect);
+            }
+        }
+    }
+ 
+    if (VS->QueryIsOpen) {
+        UIFocus(UI_FOCUS_KIND_ON) {
+            if (UIIsFocusActive() && UISlotPress(UI_EVENT_ACTION_SLOT_CANCEL)) {
+                VS->QueryIsOpen = FALSE;
+                VS->QueryStringSize = 0;
+            }
+ 
+            if (
+                UI_COMMITTED(QueryEditSig) ||
+                (
+                    UIIsFocusActive() &&
+                    UISlotPress(UI_EVENT_ACTION_SLOT_ACCEPT)
+                )
+            ) {
+                Str8 CommandName = AppViewQueryCommand();
+                Str8 Input = Str(VS->QueryBuffer, VS->QueryStringSize);
+                AppCommandKindInfo* CommandKindInfo = AppCommandKindInfoFromStr(
+                    CommandName
+                );
+ 
+                AppRegistersScope() {
+                    AppRegistersFillSlotFromStr(
+                        CommandKindInfo->Query.Slot,
+                        ""_s8,
+                        Input
+                    );
+                    AppCmd(APP_COMMAND_KIND_COMPLETE_QUERY);
+                }
+
+                if (
+                    StrMatch(
+                        CommandName,
+                        APP_COMMAND_KIND_INFO_TABLE[APP_COMMAND_KIND_FILTER].String,
+                        0
+                    )
+                ) {
+                    VS->ContentsAreFocused = TRUE;
+                }
+            }
+        }
+    }
+ 
+    VS->LastFrameIndexBuilt = APP_STATE->FrameIndex;
+}
+
+INTERNAL void
 AsyncThreadEntryPoint(void* Params)
 {
     LaneContext LaneCtx = *(LaneContext*) Params;
@@ -96,224 +806,48 @@ AsyncThreadEntryPoint(void* Params)
     }
 }
 
-struct FLVTestView {
-    Str8   Path;
-    Arena* MemPool;
-    u64    Hash;
-    b32*   Printed;
-    u32    Count;
-    b32    HasError;
-    u128   RootHash;
-    b32    Ready;
-};
-
-INTERNAL void
-FLVTest(
-    FLIKey const* Keys,
-    u64 KeysCount,
-    char const** ViewPaths,
-    u32 ViewCount,
-    u64 IdleUSecs
-) {
-    TempArena Scratch = GetScratch(NULL, 0);
-    FLVTestView* Views = ArenaPushArrayZero(
-        Scratch.MemPool, 
-        FLVTestView, 
-        ViewCount
-    );
-    u64 LastChangeUSecs = TimeNow();
- 
-    for (u32 Index = 0; Index < ViewCount; ++Index) {
-        Views[Index].Path = Str((char*) ViewPaths[Index]);
-        Views[Index].MemPool = ArenaAlloc();
-    }
- 
-    for (;;) {
-        Access* Acc = AccessOpen();
-        b32 Changed = FALSE;
- 
-        for (u32 ViewIndex = 0; ViewIndex < ViewCount; ++ViewIndex) {
-            FLVTestView* View = &Views[ViewIndex];
-            u128 RootHash = FSHashFromPathRange(View->Path, Rng((u64) 0, U64_MAX), 0);
-
-            if (RootHash != View->RootHash) {
-                PrintOut(
-                    "[TEST] %S: root hash %016llx%016llx -> %016llx%016llx (tick %llu)\n",
-                    PRINT_STR(StrSkipLastSlash(View->Path)),
-                    View->RootHash.U64[0],
-                    View->RootHash.U64[1],
-                    RootHash.U64[0],
-                    RootHash.U64[1],
-                    UpdateTickIndex()
-                );
-                View->RootHash = RootHash;
-            }
-
-            FLVUnit* Unit = FLVUnitFromPath(
-                Acc, 
-                View->Path, 
-                Keys, 
-                KeysCount, 
-                0
-            );
- 
-            if (!!Unit != View->Ready) {
-                View->Ready = !!Unit;
-                PrintOut(
-                    "[TEST] %S: unit %s (tick %llu)\n",
-                    PRINT_STR(StrSkipLastSlash(View->Path)),
-                    Unit ? "READY" : "NOT READY",
-                    UpdateTickIndex()
-                );
-            }
-
-            if (!Unit)
-                continue;
- 
-            if (Unit->Hash != View->Hash) {
-                ArenaClear(View->MemPool);
-                View->Hash = Unit->Hash;
-                View->Count = Unit->Lowered.ProgramCount * (u32) KeysCount;
-                View->Printed = ArenaPushArrayZero(
-                    View->MemPool, 
-                    b32, 
-                    View->Count
-                );
-                View->HasError = Unit->HasError;
-                Changed = TRUE;
- 
-                PrintOut(
-                    "\n=== %S === hash %016llx, %u slots, %u analyses, %u layout nodes, errors: %s\n",
-                    PRINT_STR(View->Path),
-                    Unit->Hash,
-                    Unit->SlotsCount,
-                    Unit->Lowered.ProgramCount,
-                    Unit->Lowered.LayoutCount,
-                    Unit->HasError ? "YES" : "NO"
-                );
- 
-                for (
-                    u32 Program = 0; 
-                    Program < Unit->Lowered.ProgramCount; 
-                    ++Program
-                ) {
-                    Str8List Lines = FLVProgramPrint(
-                        View->MemPool,
-                        &Unit->Lowered.Program[Program],
-                        Unit->Slots,
-                        Unit->SlotNames
-                    );
- 
-                    for (Str8Node* Node = Lines.Head; Node; Node = Node->Next)
-                        PrintOut("%S\n", PRINT_STR(Node->String));
-                }
-            }
- 
-            if (View->HasError)
-                continue;
- 
-            for (
-                u32 Program = 0; 
-                Program < Unit->Lowered.ProgramCount; 
-                ++Program
-            ) {
-                for (u64 Flight = 0; Flight < KeysCount; ++Flight) {
-                    u32 Slot = Program * (u32) KeysCount + (u32) Flight;
- 
-                    if (View->Printed[Slot])
-                        continue;
- 
-                    FLVRenderItem* Items = FLVResultFromUnit(
-                        Acc,
-                        Unit,
-                        Keys,
-                        KeysCount,
-                        Keys[Flight],
-                        Program,
-                        0
-                    );
- 
-                    if (!Items)
-                        continue;
- 
-                    View->Printed[Slot] = TRUE;
-                    Changed = TRUE;
- 
-                    PrintOut(
-                        "[%S] analysis %u on flight %llu:\n",
-                        PRINT_STR(StrSkipLastSlash(View->Path)),
-                        Program,
-                        Flight
-                    );
- 
-                    FLIParsed* FLI = FLIParsedFromKey(
-                        Acc, 
-                        Keys[Flight], 
-                        FALSE, 
-                        0
-                    );
-                    Str8List Lines = FLVRenderItemsPrint(
-                        View->MemPool,
-                        &Unit->Lowered.Program[Program],
-                        FLI,
-                        Items
-                    );
- 
-                    for (Str8Node* Node = Lines.Head; Node; Node = Node->Next)
-                        PrintOut("%S\n", PRINT_STR(Node->String));
-                }
-            }
-        }
- 
-        AccessClose(Acc);
- 
-        if (Changed)
-            LastChangeUSecs = TimeNow();
-        else if (TimeNow() - LastChangeUSecs > IdleUSecs)
-            break;
- 
-        AsyncWaitTick(MILLISECONDS(50));
-    }
- 
-    for (u32 Index = 0; Index < ViewCount; ++Index)
-        ArenaRelease(Views[Index].MemPool);
- 
-    ReleaseScratch(Scratch);
-}
-
-void 
-EntryPoint(CommandLine* CLI)
+internal void
+FLAPInteractive(CommandLine* CLI)
 {
-#if defined(NC_FLI)
-    FLIEntryPoint(CLI);
-#else
     TempArena Scratch = GetScratch(NULL, 0);
+ 
+    MDInit();
+    ConfigInit();
+    FLVCompilerInit();
+    TerminalInit();
+    RendInit(CLI);
+    DrawInit();
+    UIInit();
+ 
+    Handle* AsyncThreads = NULL;
     u64 LaneBroadcastValue = 0;
-    u64 AsyncThreadsCount = GetSystemProperties()->LogicalProcessorCount - 1;
+    u64 MainThreadCount = 1;
+    u64 AsyncThreadsCount = GetSystemProperties()->LogicalProcessorCount;
+    u64 MainThreadCountClamped = MIN(AsyncThreadsCount, MainThreadCount);
+ 
+    AsyncThreadsCount -= MainThreadCountClamped;
+ 
     Str8 AsyncThreadsCountString = CommandLineString(CLI, "threads"_s8);
-
+ 
     if (AsyncThreadsCountString.Size)
         AsyncThreadsCount = U64FromStr(AsyncThreadsCountString);
-
-    AsyncThreadsCount = MAX(1, AsyncThreadsCount);
-
+ 
+    AsyncThreadsCount = CLAMP(1, AsyncThreadsCount, FLAP_MAX_LANE_COUNT);
+ 
     Handle Barrier = BarrierAlloc(AsyncThreadsCount);
     LaneContext* LaneCtxs = ArenaPushArrayZero(
         Scratch.MemPool,
         LaneContext,
         AsyncThreadsCount
     );
-
+ 
     ASYNC_THREADS_COUNT = AsyncThreadsCount;
-
-    Handle* AsyncThreads = ArenaPushArrayZero(
-        Scratch.MemPool,
-        Handle,
+    AsyncThreads = ArenaPushArrayZero(
+        Scratch.MemPool, 
+        Handle, 
         ASYNC_THREADS_COUNT
     );
-
-    FLVCompilerInit();
-
+ 
     for (u64 Index = 0; Index < ASYNC_THREADS_COUNT; ++Index) {
         LaneCtxs[Index].Index = Index;
         LaneCtxs[Index].Count = ASYNC_THREADS_COUNT;
@@ -324,50 +858,30 @@ EntryPoint(CommandLine* CLI)
             &LaneCtxs[Index]
         );
     }
-
-    local char* FLIPaths[] = {
-        "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000010.BIN",
-        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000034.BIN",
-        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000038.BIN",
-        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000047.BIN",
-        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000048.BIN",
-        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000050.BIN",
-        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000058.BIN",
-        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000061.BIN",
-        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\logs\\00000064.BIN"
-    };
-    FLIKey Keys[ARRAY_COUNT(FLIPaths)] = {};
-
-    for (u64 Index = 0; Index < ARRAY_COUNT(FLIPaths); ++Index) {
-        Str8 Path = Str(FLIPaths[Index]);
-
-        Keys[Index] = FLIKeyFromPathTimeStamp(Path, 0);
-        FLIOpen(Keys[Index]);
-    }
-
-    local char const* ViewPaths[] = {
-        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\flv_examples\\power.flv",
-        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\flv_examples\\vibration.flv",
-        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\flv_examples\\ekf.flv",
-        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\flv_examples\\tuning.flv",
-        // "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\flv_examples\\overview.flv",
-        "C:\\Users\\NathanCorcoran\\Documents\\sandbox\\nc_flap\\tools\\flv_examples\\tester.flv"
-    };
  
-    FLVTest(
-        Keys,
-        ARRAY_COUNT(FLIPaths),
-        ViewPaths,
-        ARRAY_COUNT(ViewPaths),
-        SECONDS(60)
-    );
-    AtomicExchangeU32(&GLOBAL_ASYNC_EXIT, TRUE, MEM_ORDER_SEQ_CST);
+    AppInit(CLI);
+ 
+    for (; !APP_STATE->ShouldQuit; )
+        AppFrame();
+ 
+    AtomicIncFetchU32(&GLOBAL_ASYNC_EXIT, MEM_ORDER_SEQ_CST);
     AsyncWake(FALSE);
-
-    for (u64 Index = 0; Index < ASYNC_THREADS_COUNT; ++Index)
+ 
+    for (u32 Index = 0; Index < ASYNC_THREADS_COUNT; ++Index)
         ThreadJoin(AsyncThreads[Index], U64_MAX);
-
+ 
     BarrierRelease(Barrier);
+    RendRelease();
+    TerminalRelease();
     ReleaseScratch(Scratch);
+}
+
+void 
+EntryPoint(CommandLine* CLI)
+{
+#if defined(NC_FLI)
+    FLIEntryPoint(CLI);
+#else
+    FLAPInteractive(CLI);
 #endif
 }

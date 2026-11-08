@@ -106,7 +106,10 @@ ArenaPushSize(Arena* MemPool, u64 Size, u64 Align, b32 Zero)
 
         NewCommittedAligned -= NewCommittedAligned % Current->CommitSize;
 
-        u64 NewCommittedClamped = CLAMP_TOP(NewCommittedAligned, Current->Reserved);
+        u64 NewCommittedClamped = CLAMP_TOP(
+            NewCommittedAligned, 
+            Current->Reserved
+        );
         u64 NewCommitSize = NewCommittedClamped - Current->Committed;
         u8* CommittedPtr = (u8*) Current + Current->Committed;
 

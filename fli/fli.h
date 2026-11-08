@@ -10,7 +10,10 @@
 
 // @defines____________________________________________________________________
 #define FLI_MAGIC_NUMBER     0x494C462E
-#define FLI_ENCODING_VERSION 1
+#define FLI_ENCODING_VERSION 2
+
+#define FLI_TIME_BLOCK_SHIFT   12
+#define FLI_TIME_BLOCK_SAMPLES (1ULL << FLI_TIME_BLOCK_SHIFT)
 
 #if !defined(FLI_DISABLE_TABLE_INDEX_TYPECHECKING)
     #define FLI_DISABLE_TABLE_INDEX_TYPECHECKING FALSE
@@ -83,6 +86,13 @@ enum : u8 {
     FLI_SCALAR_KIND_CHAR16,
     FLI_SCALAR_KIND_CHAR64,
     FLI_SCALAR_KIND_COUNT
+};
+
+typedef u8 FLIColumnEncoding;
+enum : u8 {
+    FLI_COLUMN_ENCODING_RAW,
+    FLI_COLUMN_ENCODING_CONSTANT,
+    FLI_COLUMN_ENCODING_DELTA_TIME
 };
 
 enum FLIParseStatus {
@@ -164,16 +174,18 @@ enum FLIParseStatus {
     X(f64,           Multiplier)      \
  
 
-#define FLI_COLUMN_XLIST               \
-    X(u32,           MessageTypeIndex) \
-    X(u32,           FieldIndex)       \
-    X(u32,           SectionIndex)     \
-    X(FLIScalarKind, Kind)             \
-    X(u8,            __Padding[3])     \
-    X(u64,           Count)            \
-    X(f64,           Min)              \
-    X(f64,           Max)              \
-    X(f64,           Mean)             \
+#define FLI_COLUMN_XLIST                   \
+    X(u32,               MessageTypeIndex) \
+    X(u32,               FieldIndex)       \
+    X(u32,               SectionIndex)     \
+    X(FLIScalarKind,     Kind)             \
+    X(FLIColumnEncoding, Encoding)         \
+    X(u8,                __Padding[2])     \
+    X(u64,               Count)            \
+    X(f64,               Min)              \
+    X(f64,               Max)              \
+    X(f64,               Mean)             \
+    X(f64,               Multiplier)       \
  
 
 #define FLI_PARAM_XLIST      \
@@ -565,15 +577,17 @@ struct FLIField {
 };
  
 struct FLIColumn {
-    u32           MessageTypeIndex;
-    u32           FieldIndex;
-    u32           SectionIndex;
-    FLIScalarKind Kind;
-    u8            __Padding[3];
-    u64           Count;
-    f64           Min;
-    f64           Max;
-    f64           Mean;
+    u32               MessageTypeIndex;
+    u32               FieldIndex;
+    u32               SectionIndex;
+    FLIScalarKind     Kind;
+    FLIColumnEncoding Encoding;
+    u8                __Padding[2];
+    u64               Count;
+    f64               Min;
+    f64               Max;
+    f64               Mean;
+    f64               Multiplier;
 };
  
 struct FLIParam {
@@ -735,11 +749,14 @@ struct FLIBakeColumn {
     FLIBakeMessageType*     MessageType;
     FLIBakeField*           Field;
     FLIScalarKind           Kind;
+    FLIColumnEncoding       Encoding;
     void*                   Data;
+    u64                     DataSize;
     u64                     Count;
     f64                     Min;
     f64                     Max;
     f64                     Mean;
+    f64                     Multiplier;
 };
  
 struct FLIBakeParamChunkNode;
@@ -1056,6 +1073,12 @@ struct FLIBakeShared {
     FLIErrorBakeResult       BakedErrors;
 };
 
+struct FLISectionData {
+    void* Data;
+    u64   Size;
+    b32   IsReady;
+};
+
 // @runtime____________________________________________________________________
 extern FLIShared* FLI_SHARED;
 extern FLIParsed* const EMPTY_FLI_PARSED_VALUE;
@@ -1090,7 +1113,10 @@ void FLIDecompressParsed(u8* OutBuffer, u64 OutSize, FLIParsed* Parsed);
 void* FLISectionRawTableFromKind(FLIParsed* FLI, FLISectionKind Kind, OUT u64* ElementCount);
 void* FLISectionRawDataFromKind(FLIParsed* FLI, FLISectionKind Kind, OUT FLISectionEncoding* Encoding, OUT u64* Size);
 void* FLISectionRawElementFromKindIndex(FLIParsed* FLI, FLISectionKind Kind, u64 Index);
-void* FLIColumnRawDataFromIndex(FLIParsed* FLI, u32 ColumnIndex, OUT u64* ElementCount);
+OCObject FLISectionObjectCreate(Str8 Key, b32* CancelSignal, OUT b32* Retry, OUT u64* Generation);
+void FLISectionObjectDestroy(OCObject Object);
+FLISectionData FLISectionDataFromIndex(Access* Acc, FLIKey Key, FLIParsed* FLI, u32 SectionIndex, u64 EndTimeUSecs);
+FLISectionData FLIColumnDataFromIndex(Access* Acc, FLIKey Key, FLIParsed* FLI, u32 ColumnIndex, u64 EndTimeUSecs, OUT u64* ElementCount);
 u32 FLIColumnIndexFromNames(FLIParsed* FLI, Str8 MessageTypeName, Str8 FieldName);
 void FLIParsedFromNameMap(FLIParsed* FLI, FLINameMap* Map, FLIParsedNameMap* OutParsedMap);
 FLINameMapNode* FLINameMapLookup(FLIParsed* FLI, FLIParsedNameMap* Map, u8* NameStr, u64 NameLen);
@@ -1150,6 +1176,7 @@ FLISerialisedSectionBundle FLISerialisedSectionBundleFromBakeResults(Arena* MemP
 Str8List FLIFileBlobsFromSectionBundle(Arena* MemPool, FLISerialisedSectionBundle* Bundle);
 FLIBakeResults FLIBake(Arena* MemPool, FLIBakeParams* Params);
 FLISerialisedSectionBundle FLICompress(Arena* MemPool, IN FLISerialisedSectionBundle* Bundle);
+u64 FLITimeBlockCount(u64 Count);
  
 #if defined(NC_LANG_CPP)
     b32 operator==(FLIKey KeyA, FLIKey KeyB);
