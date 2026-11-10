@@ -5,10 +5,10 @@
 #include "nc_string.h"
 #include "nc_tls.h"
 
-// #include "flv_lower.h"
+#include "flv_lower.h"
 #include "flv_kernel.h"
 #include "flv_ast.h"
-// #include "flv_type.h"
+#include "flv_type.h"
 #include "flv_token.h"
 #include "flv_symbol_table.h"
 #include "flv_parser.h"
@@ -18,26 +18,26 @@
 #include "flv_intern.h"
 #include "flv_type_check.h"
 
-INTERNAL ASTNodeExprAccel*
+internal ASTNodeExprAccel*
 ExprAt(LowerState* State, ExprIndex Index)
 {
     return ExprAt(State->Tree, Index);
 }
 
-INTERNAL ExprIndex
+internal ExprIndex
 ImplicitChild(LowerState* State, void* Node, u32 NodeSize)
 {
     return ImplicitChild(State->Tree, Node, NodeSize);
 }
 
-INTERNAL TypeIndex
+internal TypeIndex
 TypeOf(LowerState* State, ExprIndex Index)
 {
     return TypeOf(State->Tree, Index);
 }
 
 
-INTERNAL FLVOperand
+internal FLVOperand
 TempAlloc(LowerState* State, u8 Kind)
 {
     ASSERT_ALWAYS(State->TempCount < FLV_TEMP_MAX);
@@ -52,7 +52,7 @@ TempAlloc(LowerState* State, u8 Kind)
     return Result;
 }
 
-INTERNAL u32
+internal u32
 Hash(LowerState* State, FLVOperand Op)
 {
     u32 Result = (u32) Op * 2654435761U;
@@ -84,7 +84,7 @@ Hash(LowerState* State, FLVOperand Op)
     return Result;
 }
 
-INTERNAL FLVOperand
+internal FLVOperand
 ConstAdd(LowerState* State, FLVConst Const)
 {
     FLVOperand Result = FLV_OPERAND_NONE;
@@ -109,7 +109,7 @@ ConstAdd(LowerState* State, FLVConst Const)
     return Result;
 }
 
-INTERNAL FLVOperand
+internal FLVOperand
 ConstI64(LowerState* State, i64 Value)
 {
     FLVConst Const = {};
@@ -122,7 +122,7 @@ ConstI64(LowerState* State, i64 Value)
     return Result;
 }
 
-INTERNAL FLVOperand
+internal FLVOperand
 ConstF64(LowerState* State, f64 Value)
 {
     FLVConst Const = {};
@@ -135,7 +135,7 @@ ConstF64(LowerState* State, f64 Value)
     return Result;
 }
 
-INTERNAL FLVOperand
+internal FLVOperand
 ConstTime(LowerState* State, u64 TimeUSecs)
 {
     FLVConst Const = {};
@@ -148,7 +148,7 @@ ConstTime(LowerState* State, u64 TimeUSecs)
     return Result;
 }
 
-INTERNAL u32
+internal u32
 StringAdd(LowerState* State, Str8 String)
 {
     ASSERT_ALWAYS(State->StringCount < FLV_PROGRAM_STRING_MAX);
@@ -161,7 +161,7 @@ StringAdd(LowerState* State, Str8 String)
     return State->StringCount++;
 }
 
-INTERNAL u32
+internal u32
 EmitAdd(
     LowerState* State, 
     u8 DisplayKind, 
@@ -182,7 +182,7 @@ EmitAdd(
     return State->EmitCount++;
 }
 
-INTERNAL Str8
+internal Str8
 ArgLabel(LowerState* State, ASTDisplayArg const* Arg)
 {
     ParsedFile const* File = &State->Tree->Files[
@@ -197,7 +197,7 @@ ArgLabel(LowerState* State, ASTDisplayArg const* Arg)
     return Result;
 }
 
-INTERNAL FLVRegion*
+internal FLVRegion*
 RegionPush(LowerState* State, u8 Kind)
 {
     ASSERT_ALWAYS(State->RegionCount < FLV_PROGRAM_REGION_MAX);
@@ -216,7 +216,7 @@ RegionPush(LowerState* State, u8 Kind)
     return Result;
 }
 
-INTERNAL FLVOperand
+internal FLVOperand
 EmitOp(LowerState* State, u16 Kernel, FLVOperand LHS, FLVOperand RHS)
 {
     FLVKernelInfo const* Info = &FLV_KERNEL_INFO_TABLE[Kernel];
@@ -267,7 +267,7 @@ EmitOp(LowerState* State, u16 Kernel, FLVOperand LHS, FLVOperand RHS)
     return Result;
 }
 
-INTERNAL u32
+internal u32
 SlotForBase(LowerState* State, TypeIndex Base)
 {
     NameIndex Name = {
@@ -297,7 +297,7 @@ SlotForBase(LowerState* State, TypeIndex Base)
     return Fallback;
 }
 
-INTERNAL void
+internal void
 RegionAddRanges(LowerState* State, LowerRegion* Region, FLVOperand Selection)
 {
     if (Region->RangeSelection == FLV_OPERAND_NONE) {
@@ -312,7 +312,7 @@ RegionAddRanges(LowerState* State, LowerRegion* Region, FLVOperand Selection)
     }
 }
 
-INTERNAL void
+internal void
 RegionAddMask(LowerState* State, LowerRegion* Region, FLVOperand Mask)
 {
     if (Region->Mask == FLV_OPERAND_NONE) {
@@ -327,7 +327,7 @@ RegionAddMask(LowerState* State, LowerRegion* Region, FLVOperand Mask)
     }
 }
 
-INTERNAL LowerRegion*
+internal LowerRegion*
 RegionOpen(LowerState* State, TypeIndex Base)
 {
     LowerRegion* Result = ArenaPushStruct(State->Scratch, LowerRegion);
@@ -363,7 +363,7 @@ RegionOpen(LowerState* State, TypeIndex Base)
     return Result;
 }
 
-INTERNAL void
+internal void
 RegionClose(LowerState* State)
 {
     LowerRegion* Region = State->Region;
@@ -384,10 +384,10 @@ RegionClose(LowerState* State)
     State->Region = Region->Prev;
 }
 
-INTERNAL LowerValue LowerExpr(LowerState* State, ExprIndex Expr);
-INTERNAL FLVOperand LowerSelection(LowerState* State, ExprIndex Expr);
+internal LowerValue LowerExpr(LowerState* State, ExprIndex Expr);
+internal FLVOperand LowerSelection(LowerState* State, ExprIndex Expr);
 
-INTERNAL LowerValue
+internal LowerValue
 ValueAlloc(FLVOperand Op, u8 Kind, TypeIndex Type)
 {
     LowerValue Result = {};
@@ -399,7 +399,7 @@ ValueAlloc(FLVOperand Op, u8 Kind, TypeIndex Type)
     return Result;
 }
 
-INTERNAL LowerValue
+internal LowerValue
 ValueMissing(void)
 {
     TypeIndex Void = {
@@ -414,7 +414,7 @@ ValueMissing(void)
     return Result;
 }
 
-INTERNAL b32
+internal b32
 IsChunk(LowerValue Value)
 {
     b32 Result = (
@@ -425,7 +425,7 @@ IsChunk(LowerValue Value)
     return Result;
 }
 
-INTERNAL b32
+internal b32
 IsF64Value(LowerValue Value)
 {
     b32 Result = (
@@ -436,7 +436,7 @@ IsF64Value(LowerValue Value)
     return Result;
 }
 
-INTERNAL LowerValue
+internal LowerValue
 ToF64(LowerState* State, LowerValue Value)
 {
     if (IsF64Value(Value))
@@ -481,7 +481,7 @@ ToF64(LowerState* State, LowerValue Value)
     );
 }
 
-INTERNAL u8
+internal u8
 ElemKindOf(TypeIndex T)
 {
     u8 Result = FLV_ELEMENT_KIND_I64;
@@ -492,7 +492,7 @@ ElemKindOf(TypeIndex T)
     return Result;
 }
 
-INTERNAL b32
+internal b32
 IsF64Elem(TypeIndex T)
 {
     return ElemKindOf(T) == FLV_ELEMENT_KIND_F64;
@@ -576,7 +576,7 @@ LowerFieldLoad(
     );
 }
 
-INTERNAL u32
+internal u32
 DeclDepthOf(LowerState* State, BindIndex Bind)
 {
     u32 Result = 0;
@@ -591,7 +591,7 @@ DeclDepthOf(LowerState* State, BindIndex Bind)
     return Result;
 }
 
-INTERNAL ExprIndex
+internal ExprIndex
 VarInitExpr(LowerState* State, Binding const* Bind)
 {
     AST* Tree = State->Tree;
@@ -606,7 +606,7 @@ VarInitExpr(LowerState* State, Binding const* Bind)
     return Init->Val;
 }
 
-INTERNAL LowerValue
+internal LowerValue
 LowerVarUse(LowerState* State, ASTNodeExprIdent* Ident)
 {
     Binding const* Bind = &GetTLS()->SYMBOL_TABLE->Bindings[Ident->Bind.V];
@@ -710,7 +710,7 @@ LowerIdent(LowerState* State, ASTNodeExprIdent* Ident)
     return Result;
 }
 
-INTERNAL u16
+internal u16
 ArithmeticKernel(u8 Op, b32 IsF64, u32 Form)
 {
     u16 Result = FLV_KERNEL_NONE;
@@ -744,7 +744,7 @@ ArithmeticKernel(u8 Op, b32 IsF64, u32 Form)
     return Result;
 }
 
-INTERNAL u16
+internal u16
 ScalarArithKernel(u8 Op, b32 IsF64)
 {
     u16 Result = FLV_KERNEL_NONE;
@@ -788,7 +788,7 @@ ScalarArithKernel(u8 Op, b32 IsF64)
     return Result;
 }
 
-INTERNAL u32
+internal u32
 CmpOrdinal(u8 Op)
 {
     u32 Result = 0;
@@ -826,7 +826,7 @@ CmpOrdinal(u8 Op)
     return Result;
 }
 
-INTERNAL u32
+internal u32
 CmpOrdinalFlipped(u32 Ordinal)
 {
     u32 Result = Ordinal;
@@ -837,7 +837,7 @@ CmpOrdinalFlipped(u32 Ordinal)
     return Result;
 }
 
-INTERNAL b32
+internal b32
 IsCompare(u8 Op)
 {
     b32 Result = (
@@ -852,7 +852,7 @@ IsCompare(u8 Op)
     return Result;
 }
 
-INTERNAL b32
+internal b32
 IsLogical(u8 Op)
 {
     b32 Result = (
@@ -865,7 +865,7 @@ IsLogical(u8 Op)
     return Result;
 }
 
-INTERNAL b32
+internal b32
 IsAnd(u8 Op)
 {
     b32 Result = (
@@ -876,7 +876,7 @@ IsAnd(u8 Op)
     return Result;
 }
 
-INTERNAL LowerValue
+internal LowerValue
 LowerBinarySeries(
     LowerState* State, 
     ASTNodeBinary* Binary, 
@@ -978,7 +978,7 @@ LowerBinarySeries(
     );
 }
 
-INTERNAL LowerValue
+internal LowerValue
 LowerBinaryScalar(
     LowerState* State, 
     ASTNodeBinary* Binary, 
@@ -1040,7 +1040,7 @@ LowerBinaryScalar(
     );
 }
 
-INTERNAL LowerValue
+internal LowerValue
 LowerBinarySelection(
     LowerState* State, 
     ASTNodeBinary* Binary, 
@@ -1220,7 +1220,7 @@ LowerUnary(LowerState* State, ASTNodeUnary* Unary)
     return ValueMissing();
 }
 
-INTERNAL FLVOperand
+internal FLVOperand
 LowerSelectionFromBool(LowerState* State, ExprIndex Expr)
 {
     RegionOpen(State, BaseOf(TypeOf(State, Expr)));
@@ -1242,7 +1242,7 @@ LowerSelectionFromBool(LowerState* State, ExprIndex Expr)
     return Result;
 }
 
-INTERNAL FLVOperand
+internal FLVOperand
 LowerSelection(LowerState* State, ExprIndex Expr)
 {
     if (IsKind(TypeOf(State, Expr), TYPE_KIND_SERIES))
@@ -1332,7 +1332,7 @@ LowerIndex(LowerState* State, ASTNodeBinary* Index)
     return Result;
 }
 
-INTERNAL u16
+internal u16
 ReductionKernel(u16 ID, b32 IsF64)
 {
     u16 Result = FLV_KERNEL_NONE;
@@ -1392,7 +1392,7 @@ ReductionKernel(u16 ID, b32 IsF64)
     return Result;
 }
 
-INTERNAL u16
+internal u16
 WindowKernel(u16 ID, b32 IsF64)
 {
     u16 Result = FLV_KERNEL_NONE;
@@ -1707,7 +1707,7 @@ LowerExpr(LowerState* State, ExprIndex Expr)
     return Result;
 }
 
-INTERNAL b32
+internal b32
 IsPlainField(LowerState* State, ExprIndex Expr, OUT u32* Slot)
 {
     ASTNodeExprAccel* Node = ExprAt(State, Expr);
@@ -1730,7 +1730,7 @@ IsPlainField(LowerState* State, ExprIndex Expr, OUT u32* Slot)
     return Result != U32_MAX;
 }
 
-INTERNAL void
+internal void
 EmitMissing(LowerState* State, u8 DisplayKind, Str8 Label)
 {
     EmitOp(
@@ -1747,7 +1747,7 @@ EmitMissing(LowerState* State, u8 DisplayKind, Str8 Label)
     );
 }
 
-INTERNAL void
+internal void
 LowerGraph(LowerState* State, ASTNodeDisplay* Display)
 {
     for (u32 Index = 0; Index < Display->Header.Count; ++Index) {
@@ -1784,7 +1784,7 @@ LowerGraph(LowerState* State, ASTNodeDisplay* Display)
     }
 }
 
-INTERNAL u32
+internal u32
 FieldSlotFind(
     LowerState* State, 
     NameIndex Message, 
@@ -1810,7 +1810,7 @@ FieldSlotFind(
     return Result;
 }
 
-INTERNAL void
+internal void
 EmitTableColumnFromSlot(
     LowerState* State, 
     u32 Slot, 
@@ -1936,7 +1936,7 @@ LowerTable(LowerState* State, ASTNodeDisplay* Display)
     RegionClose(State);
 }
 
-INTERNAL void
+internal void
 LowerFlag(LowerState* State, ASTNodeDisplay* Display)
 {
     ASTDisplayArg* Cond = &Display->Arg[0];
@@ -2010,7 +2010,7 @@ LowerFlag(LowerState* State, ASTNodeDisplay* Display)
     );
 }
 
-INTERNAL void
+internal void
 LowerDisplay(LowerState* State, ASTNodeDisplay* Display)
 {
     switch (Display->Header.Variant) {
@@ -2032,7 +2032,7 @@ LowerDisplay(LowerState* State, ASTNodeDisplay* Display)
     }
 }
 
-INTERNAL void
+internal void
 CtxPush(LowerState* State, u32 Depth, ExprIndex Cond)
 {
     FLVOperand Prev = State->CtxSel[Depth - 1];
@@ -2060,7 +2060,7 @@ CtxPush(LowerState* State, u32 Depth, ExprIndex Cond)
     State->CtxDepth = Depth;
 }
 
-INTERNAL void
+internal void
 FilterPush(LowerState* State, ExprIndex Cond)
 {
     ASSERT_ALWAYS(State->FilterDepth < FLV_FILTER_DEPTH_MAX);
@@ -2071,7 +2071,7 @@ FilterPush(LowerState* State, ExprIndex Cond)
         CtxPush(State, State->FilterDepth, Cond);
 }
 
-INTERNAL void
+internal void
 FilterPop(LowerState* State)
 {
     u32 Depth = State->FilterDepth--;
@@ -2085,7 +2085,7 @@ FilterPop(LowerState* State)
     State->CtxDepth = State->FilterDepth;
 }
 
-INTERNAL void
+internal void
 ProgramBegin(LowerState* State)
 {
     State->Ops = ArenaPushArray(
@@ -2132,7 +2132,7 @@ ProgramBegin(LowerState* State)
     State->CtxDepth = State->FilterDepth;
 }
 
-INTERNAL u32
+internal u32
 ProgramEnd(LowerState* State)
 {
     ASSERT_ALWAYS(State->ProgramCount < FLV_PROGRAM_MAX);
@@ -2166,9 +2166,9 @@ ProgramEnd(LowerState* State)
     return State->ProgramCount++;
 }
 
-INTERNAL u32 LowerStmt(LowerState* State, u32 Offset, u32 LayoutNode);
+internal u32 LowerStmt(LowerState* State, u32 Offset, u32 LayoutNode);
 
-INTERNAL void
+internal void
 LowerBranch(
     LowerState* State, 
     ASTNodeIf* If, 
@@ -2220,7 +2220,7 @@ LowerBranch(
     }
 }
 
-INTERNAL u32
+internal u32
 LayoutAdd(LowerState* State, u32 Parent, ASTNodeScope* Scope, u32 Ordinal)
 {
     u32 Index = (Parent == U32_MAX) 
@@ -2242,7 +2242,7 @@ LayoutAdd(LowerState* State, u32 Parent, ASTNodeScope* Scope, u32 Ordinal)
     return Index;
 }
 
-INTERNAL u32
+internal u32
 LowerScope(LowerState* State, ASTNodeScope* Scope, u32 Offset, u32 Parent)
 {
     if (Scope->Header.Variant & SCOPE_FLAG_IS_IMPORTED)
@@ -2268,7 +2268,7 @@ LowerScope(LowerState* State, ASTNodeScope* Scope, u32 Offset, u32 Parent)
     return Next;
 }
 
-INTERNAL u32
+internal u32
 LowerStmt(LowerState* State, u32 Offset, u32 LayoutNode)
 {
     AST* Tree = State->Tree;
@@ -2423,7 +2423,7 @@ FLVLower(
     return Result;
 }
 
-INTERNAL Str8
+internal Str8
 OperandStr(
     Arena* MemPool, 
     FLVProgram const* Program, 

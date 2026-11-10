@@ -43,8 +43,6 @@
 //             : LinearFromSRGB
 //             : LinearFromSRGBA
 
-// TODO(nathan): Add some string utilities
-
 // TODO(nathan): Some of these operations could do with manual ASM 
 //             : optimisations as they may not produce optimal code in DEBUG
 //             : nor in RELEASE
@@ -4157,90 +4155,66 @@
     INTERNAL v256f
     operator==(zv2f32 VecA, zv2f32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_ps_mask(VecA.X, VecB.X, _CMP_EQ_OQ);
-        __mmask8 MaskY = _mm256_cmp_ps_mask(VecA.Y, VecB.Y, _CMP_EQ_OQ);
-        __mmask8 ResultMask = _kand_mask8(MaskX, MaskY);
-        v256f Result = _mm256_mask_mov_ps(
-            _mm256_setzero_ps(),
-            ResultMask,
-            _mm256_set1_ps(1.0f)
-        );
-
+        v256f MaskX = _mm256_cmp_ps(VecA.X, VecB.X, _CMP_EQ_OQ);
+        v256f MaskY = _mm256_cmp_ps(VecA.Y, VecB.Y, _CMP_EQ_OQ);
+        v256f Mask = _mm256_and_ps(MaskX, MaskY);
+        v256f Result = _mm256_and_ps(Mask, _mm256_set1_ps(1.0f));
+ 
         return Result;
     }
 
     INTERNAL v256f 
     operator!=(zv2f32 VecA, zv2f32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_ps_mask(VecA.X, VecB.X, _CMP_NEQ_OQ);
-        __mmask8 MaskY = _mm256_cmp_ps_mask(VecA.Y, VecB.Y, _CMP_NEQ_OQ);
-        __mmask8 ResultMask = _kand_mask8(MaskX, MaskY);
-        v256f Result = _mm256_mask_mov_ps(
-            _mm256_setzero_ps(),
-            ResultMask,
-            _mm256_set1_ps(1.0f)
-        );
-
+        v256f MaskX = _mm256_cmp_ps(VecA.X, VecB.X, _CMP_NEQ_OQ);
+        v256f MaskY = _mm256_cmp_ps(VecA.Y, VecB.Y, _CMP_NEQ_OQ);
+        v256f Mask = _mm256_and_ps(MaskX, MaskY);
+        v256f Result = _mm256_and_ps(Mask, _mm256_set1_ps(1.0f));
+ 
         return Result;
     }
 
     INTERNAL v256f
     operator<(zv2f32 VecA, zv2f32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_ps_mask(VecA.X, VecB.X, _CMP_LT_OQ);
-        __mmask8 MaskY = _mm256_cmp_ps_mask(VecA.Y, VecB.Y, _CMP_LT_OQ);
-        __mmask8 ResultMask = _kand_mask8(MaskX, MaskY);
-        v256f Result = _mm256_mask_mov_ps(
-            _mm256_setzero_ps(),
-            ResultMask,
-            _mm256_set1_ps(1.0f)
-        );
-
+        v256f MaskX = _mm256_cmp_ps(VecA.X, VecB.X, _CMP_LT_OQ);
+        v256f MaskY = _mm256_cmp_ps(VecA.Y, VecB.Y, _CMP_LT_OQ);
+        v256f Mask = _mm256_and_ps(MaskX, MaskY);
+        v256f Result = _mm256_and_ps(Mask, _mm256_set1_ps(1.0f));
+ 
         return Result;
     }
 
     INTERNAL v256f
     operator>(zv2f32 VecA, zv2f32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_ps_mask(VecA.X, VecB.X, _CMP_GT_OQ);
-        __mmask8 MaskY = _mm256_cmp_ps_mask(VecA.Y, VecB.Y, _CMP_GT_OQ);
-        __mmask8 ResultMask = _kand_mask8(MaskX, MaskY);
-        v256f Result = _mm256_mask_mov_ps(
-            _mm256_setzero_ps(),
-            ResultMask,
-            _mm256_set1_ps(1.0f)
-        );
-
+        v256f MaskX = _mm256_cmp_ps(VecA.X, VecB.X, _CMP_GT_OQ);
+        v256f MaskY = _mm256_cmp_ps(VecA.Y, VecB.Y, _CMP_GT_OQ);
+        v256f Mask = _mm256_and_ps(MaskX, MaskY);
+        v256f Result = _mm256_and_ps(Mask, _mm256_set1_ps(1.0f));
+ 
         return Result;
     }
 
     INTERNAL v256f
     operator<=(zv2f32 VecA, zv2f32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_ps_mask(VecA.X, VecB.X, _CMP_LE_OQ);
-        __mmask8 MaskY = _mm256_cmp_ps_mask(VecA.Y, VecB.Y, _CMP_LE_OQ);
-        __mmask8 ResultMask = _kand_mask8(MaskX, MaskY);
-        v256f Result = _mm256_mask_mov_ps(
-            _mm256_setzero_ps(),
-            ResultMask,
-            _mm256_set1_ps(1.0f)
-        );
-
+        v256f MaskX = _mm256_cmp_ps(VecA.X, VecB.X, _CMP_LE_OQ);
+        v256f MaskY = _mm256_cmp_ps(VecA.Y, VecB.Y, _CMP_LE_OQ);
+        v256f Mask = _mm256_and_ps(MaskX, MaskY);
+        v256f Result = _mm256_and_ps(Mask, _mm256_set1_ps(1.0f));
+ 
         return Result;
     }
 
     INTERNAL v256f
     operator>=(zv2f32 VecA, zv2f32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_ps_mask(VecA.X, VecB.X, _CMP_GE_OQ);
-        __mmask8 MaskY = _mm256_cmp_ps_mask(VecA.Y, VecB.Y, _CMP_GE_OQ);
-        __mmask8 ResultMask = _kand_mask8(MaskX, MaskY);
-        v256f Result = _mm256_mask_mov_ps(
-            _mm256_set1_ps(0.0f),
-            ResultMask,
-            _mm256_set1_ps(1.0f)
-        );
-
+        v256f MaskX = _mm256_cmp_ps(VecA.X, VecB.X, _CMP_GE_OQ);
+        v256f MaskY = _mm256_cmp_ps(VecA.Y, VecB.Y, _CMP_GE_OQ);
+        v256f Mask = _mm256_and_ps(MaskX, MaskY);
+        v256f Result = _mm256_and_ps(Mask, _mm256_set1_ps(1.0f));
+ 
         return Result;
     }
 
@@ -4436,14 +4410,9 @@
     INTERNAL v256
     operator==(zv2i32 VecA, zv2i32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_epi32_mask(VecA.X, VecB.X, _MM_CMPINT_EQ);
-        __mmask8 MaskY = _mm256_cmp_epi32_mask(VecA.Y, VecB.Y, _MM_CMPINT_EQ);
-        __mmask8 ResultMask = _kand_mask8(MaskX, MaskY);
-        v256 Result = _mm256_mask_mov_epi32(
-            _mm256_setzero_si256(),
-            ResultMask,
-            _mm256_set1_epi32(~0)
-        );
+        v256 EqX = _mm256_cmpeq_epi32(VecA.X, VecB.X);
+        v256 EqY = _mm256_cmpeq_epi32(VecA.Y, VecB.Y);
+        v256 Result = _mm256_and_si256(EqX, EqY);
 
         return Result;
     }
@@ -4451,12 +4420,10 @@
     INTERNAL v256
     operator!=(zv2i32 VecA, zv2i32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_epi32_mask(VecA.X, VecB.X, _MM_CMPINT_NE);
-        __mmask8 MaskY = _mm256_cmp_epi32_mask(VecA.Y, VecB.Y, _MM_CMPINT_NE);
-        __mmask8 ResultMask = _kand_mask8(MaskX, MaskY);
-        v256 Result = _mm256_mask_mov_epi32(
-            _mm256_setzero_si256(),
-            ResultMask,
+        v256 EqX = _mm256_cmpeq_epi32(VecA.X, VecB.X);
+        v256 EqY = _mm256_cmpeq_epi32(VecA.Y, VecB.Y);
+        v256 Result = _mm256_andnot_si256(
+            _mm256_or_si256(EqX, EqY),
             _mm256_set1_epi32(~0)
         );
 
@@ -4466,14 +4433,9 @@
     INTERNAL v256
     operator<(zv2i32 VecA, zv2i32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_epi32_mask(VecA.X, VecB.X, _MM_CMPINT_LT);
-        __mmask8 MaskY = _mm256_cmp_epi32_mask(VecA.Y, VecB.Y, _MM_CMPINT_LT);
-        __mmask8 ResultMask = _kand_mask8(MaskX, MaskY);
-        v256 Result = _mm256_mask_mov_epi32(
-            _mm256_setzero_si256(),
-            ResultMask,
-            _mm256_set1_epi32(~0)
-        );
+        v256 LtX = _mm256_cmpgt_epi32(VecB.X, VecA.X);
+        v256 LtY = _mm256_cmpgt_epi32(VecB.Y, VecA.Y);
+        v256 Result = _mm256_and_si256(LtX, LtY);
 
         return Result;
     }
@@ -4481,14 +4443,9 @@
     INTERNAL v256
     operator>(zv2i32 VecA, zv2i32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_epi32_mask(VecA.X, VecB.X, _MM_CMPINT_GT);
-        __mmask8 MaskY = _mm256_cmp_epi32_mask(VecA.Y, VecB.Y, _MM_CMPINT_GT);
-        __mmask8 ResultMask = _kand_mask8(MaskX, MaskY);
-        v256 Result = _mm256_mask_mov_epi32(
-            _mm256_setzero_si256(),
-            ResultMask,
-            _mm256_set1_epi32(~0)
-        );
+        v256 GtX = _mm256_cmpgt_epi32(VecA.X, VecB.X);
+        v256 GtY = _mm256_cmpgt_epi32(VecA.Y, VecB.Y);
+        v256 Result = _mm256_and_si256(GtX, GtY);
 
         return Result;
     }
@@ -4496,12 +4453,10 @@
     INTERNAL v256
     operator<=(zv2i32 VecA, zv2i32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_epi32_mask(VecA.X, VecB.X, _MM_CMPINT_LE);
-        __mmask8 MaskY = _mm256_cmp_epi32_mask(VecA.Y, VecB.Y, _MM_CMPINT_LE);
-        __mmask8 ResultMask = _kand_mask8(MaskX, MaskY);
-        v256 Result = _mm256_mask_mov_epi32(
-            _mm256_setzero_si256(),
-            ResultMask,
+        v256 GtX = _mm256_cmpgt_epi32(VecA.X, VecB.X);
+        v256 GtY = _mm256_cmpgt_epi32(VecA.Y, VecB.Y);
+        v256 Result = _mm256_andnot_si256(
+            _mm256_or_si256(GtX, GtY),
             _mm256_set1_epi32(~0)
         );
 
@@ -4511,12 +4466,10 @@
     INTERNAL v256
     operator>=(zv2i32 VecA, zv2i32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_epi32_mask(VecA.X, VecB.X, _MM_CMPINT_GE);
-        __mmask8 MaskY = _mm256_cmp_epi32_mask(VecA.Y, VecB.Y, _MM_CMPINT_GE);
-        __mmask8 ResultMask = _kand_mask8(MaskX, MaskY);
-        v256 Result = _mm256_mask_mov_epi32(
-            _mm256_setzero_si256(),
-            ResultMask,
+        v256 LtX = _mm256_cmpgt_epi32(VecB.X, VecA.X);
+        v256 LtY = _mm256_cmpgt_epi32(VecB.Y, VecA.Y);
+        v256 Result = _mm256_andnot_si256(
+            _mm256_or_si256(LtX, LtY),
             _mm256_set1_epi32(~0)
         );
 
@@ -4740,14 +4693,10 @@
     INTERNAL v256d
     operator==(zv2f64 VecA, zv2f64 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_pd_mask(VecA.X, VecB.X, _CMP_EQ_OQ);
-        __mmask8 MaskY = _mm256_cmp_pd_mask(VecA.Y, VecB.Y, _CMP_EQ_OQ);
-        __mmask8 ResultMask = _kand_mask8(MaskX, MaskY);
-        v256d Result = _mm256_mask_mov_pd(
-            _mm256_setzero_pd(),
-            ResultMask,
-            _mm256_set1_pd(1.0)
-        );
+        v256d MaskX = _mm256_cmp_pd(VecA.X, VecB.X, _CMP_EQ_OQ);
+        v256d MaskY = _mm256_cmp_pd(VecA.Y, VecB.Y, _CMP_EQ_OQ);
+        v256d Mask = _mm256_and_pd(MaskX, MaskY);
+        v256d Result = _mm256_and_pd(Mask, _mm256_set1_pd(1.0));
 
         return Result;
     }
@@ -4755,14 +4704,10 @@
     INTERNAL v256d
     operator!=(zv2f64 VecA, zv2f64 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_pd_mask(VecA.X, VecB.X, _CMP_NEQ_OQ);
-        __mmask8 MaskY = _mm256_cmp_pd_mask(VecA.Y, VecB.Y, _CMP_NEQ_OQ);
-        __mmask8 ResultMask = _kand_mask8(MaskX, MaskY);
-        v256d Result = _mm256_mask_mov_pd(
-            _mm256_setzero_pd(),
-            ResultMask,
-            _mm256_set1_pd(1.0)
-        );
+        v256d MaskX = _mm256_cmp_pd(VecA.X, VecB.X, _CMP_NEQ_OQ);
+        v256d MaskY = _mm256_cmp_pd(VecA.Y, VecB.Y, _CMP_NEQ_OQ);
+        v256d Mask = _mm256_and_pd(MaskX, MaskY);
+        v256d Result = _mm256_and_pd(Mask, _mm256_set1_pd(1.0));
 
         return Result;
     }
@@ -4770,14 +4715,10 @@
     INTERNAL v256d
     operator<(zv2f64 VecA, zv2f64 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_pd_mask(VecA.X, VecB.X, _CMP_LT_OQ);
-        __mmask8 MaskY = _mm256_cmp_pd_mask(VecA.Y, VecB.Y, _CMP_LT_OQ);
-        __mmask8 ResultMask = _kand_mask8(MaskX, MaskY);
-        v256d Result = _mm256_mask_mov_pd(
-            _mm256_setzero_pd(),
-            ResultMask,
-            _mm256_set1_pd(1.0)
-        );
+        v256d MaskX = _mm256_cmp_pd(VecA.X, VecB.X, _CMP_LT_OQ);
+        v256d MaskY = _mm256_cmp_pd(VecA.Y, VecB.Y, _CMP_LT_OQ);
+        v256d Mask = _mm256_and_pd(MaskX, MaskY);
+        v256d Result = _mm256_and_pd(Mask, _mm256_set1_pd(1.0));
 
         return Result;
     }
@@ -4785,14 +4726,10 @@
     INTERNAL v256d
     operator>(zv2f64 VecA, zv2f64 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_pd_mask(VecA.X, VecB.X, _CMP_GT_OQ);
-        __mmask8 MaskY = _mm256_cmp_pd_mask(VecA.Y, VecB.Y, _CMP_GT_OQ);
-        __mmask8 ResultMask = _kand_mask8(MaskX, MaskY);
-        v256d Result = _mm256_mask_mov_pd(
-            _mm256_setzero_pd(),
-            ResultMask,
-            _mm256_set1_pd(1.0)
-        );
+        v256d MaskX = _mm256_cmp_pd(VecA.X, VecB.X, _CMP_GT_OQ);
+        v256d MaskY = _mm256_cmp_pd(VecA.Y, VecB.Y, _CMP_GT_OQ);
+        v256d Mask = _mm256_and_pd(MaskX, MaskY);
+        v256d Result = _mm256_and_pd(Mask, _mm256_set1_pd(1.0));
 
         return Result;
     }
@@ -4800,14 +4737,10 @@
     INTERNAL v256d
     operator<=(zv2f64 VecA, zv2f64 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_pd_mask(VecA.X, VecB.X, _CMP_LE_OQ);
-        __mmask8 MaskY = _mm256_cmp_pd_mask(VecA.Y, VecB.Y, _CMP_LE_OQ);
-        __mmask8 ResultMask = _kand_mask8(MaskX, MaskY);
-        v256d Result = _mm256_mask_mov_pd(
-            _mm256_setzero_pd(),
-            ResultMask,
-            _mm256_set1_pd(1.0)
-        );
+        v256d MaskX = _mm256_cmp_pd(VecA.X, VecB.X, _CMP_LE_OQ);
+        v256d MaskY = _mm256_cmp_pd(VecA.Y, VecB.Y, _CMP_LE_OQ);
+        v256d Mask = _mm256_and_pd(MaskX, MaskY);
+        v256d Result = _mm256_and_pd(Mask, _mm256_set1_pd(1.0));
 
         return Result;
     }
@@ -4815,14 +4748,10 @@
     INTERNAL v256d
     operator>=(zv2f64 VecA, zv2f64 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_pd_mask(VecA.X, VecB.X, _CMP_GE_OQ);
-        __mmask8 MaskY = _mm256_cmp_pd_mask(VecA.Y, VecB.Y, _CMP_GE_OQ);
-        __mmask8 ResultMask = _kand_mask8(MaskX, MaskY);
-        v256d Result = _mm256_mask_mov_pd(
-            _mm256_setzero_pd(),
-            ResultMask,
-            _mm256_set1_pd(1.0)
-        );
+        v256d MaskX = _mm256_cmp_pd(VecA.X, VecB.X, _CMP_GE_OQ);
+        v256d MaskY = _mm256_cmp_pd(VecA.Y, VecB.Y, _CMP_GE_OQ);
+        v256d Mask = _mm256_and_pd(MaskX, MaskY);
+        v256d Result = _mm256_and_pd(Mask, _mm256_set1_pd(1.0));
 
         return Result;
     }
@@ -5032,15 +4961,11 @@
     INTERNAL v256f
     operator==(zv3f32 VecA, zv3f32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_ps_mask(VecA.X, VecB.X, _CMP_EQ_OQ);
-        __mmask8 MaskY = _mm256_cmp_ps_mask(VecA.Y, VecB.Y, _CMP_EQ_OQ);
-        __mmask8 MaskZ = _mm256_cmp_ps_mask(VecA.Z, VecB.Z, _CMP_EQ_OQ);
-        __mmask8 ResultMask = _kand_mask8(_kand_mask8(MaskX, MaskY), MaskZ);
-        v256f Result = _mm256_mask_mov_ps(
-            _mm256_setzero_ps(),
-            ResultMask,
-            _mm256_set1_ps(1.0f)
-        );
+        v256f MaskX = _mm256_cmp_ps(VecA.X, VecB.X, _CMP_EQ_OQ);
+        v256f MaskY = _mm256_cmp_ps(VecA.Y, VecB.Y, _CMP_EQ_OQ);
+        v256f MaskZ = _mm256_cmp_ps(VecA.Z, VecB.Z, _CMP_EQ_OQ);
+        v256f Mask = _mm256_and_ps(_mm256_and_ps(MaskX, MaskY), MaskZ);
+        v256f Result = _mm256_and_ps(Mask, _mm256_set1_ps(1.0f));
 
         return Result;
     }
@@ -5048,80 +4973,60 @@
     INTERNAL v256f 
     operator!=(zv3f32 VecA, zv3f32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_ps_mask(VecA.X, VecB.X, _CMP_NEQ_OQ);
-        __mmask8 MaskY = _mm256_cmp_ps_mask(VecA.Y, VecB.Y, _CMP_NEQ_OQ);
-        __mmask8 MaskZ = _mm256_cmp_ps_mask(VecA.Z, VecB.Z, _CMP_NEQ_OQ);
-        __mmask8 ResultMask = _kand_mask8(_kand_mask8(MaskX, MaskY), MaskZ);
-        v256f Result = _mm256_mask_mov_ps(
-            _mm256_setzero_ps(),
-            ResultMask,
-            _mm256_set1_ps(1.0f)
-        );
-
+        v256f MaskX = _mm256_cmp_ps(VecA.X, VecB.X, _CMP_NEQ_OQ);
+        v256f MaskY = _mm256_cmp_ps(VecA.Y, VecB.Y, _CMP_NEQ_OQ);
+        v256f MaskZ = _mm256_cmp_ps(VecA.Z, VecB.Z, _CMP_NEQ_OQ);
+        v256f Mask = _mm256_and_ps(_mm256_and_ps(MaskX, MaskY), MaskZ);
+        v256f Result = _mm256_and_ps(Mask, _mm256_set1_ps(1.0f));
+ 
         return Result;
     }
 
     INTERNAL v256f 
     operator<(zv3f32 VecA, zv3f32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_ps_mask(VecA.X, VecB.X, _CMP_LT_OQ);
-        __mmask8 MaskY = _mm256_cmp_ps_mask(VecA.Y, VecB.Y, _CMP_LT_OQ);
-        __mmask8 MaskZ = _mm256_cmp_ps_mask(VecA.Z, VecB.Z, _CMP_LT_OQ);
-        __mmask8 ResultMask = _kand_mask8(_kand_mask8(MaskX, MaskY), MaskZ);
-        v256f Result = _mm256_mask_mov_ps(
-            _mm256_setzero_ps(),
-            ResultMask,
-            _mm256_set1_ps(1.0f)
-        );
-
+        v256f MaskX = _mm256_cmp_ps(VecA.X, VecB.X, _CMP_LT_OQ);
+        v256f MaskY = _mm256_cmp_ps(VecA.Y, VecB.Y, _CMP_LT_OQ);
+        v256f MaskZ = _mm256_cmp_ps(VecA.Z, VecB.Z, _CMP_LT_OQ);
+        v256f Mask = _mm256_and_ps(_mm256_and_ps(MaskX, MaskY), MaskZ);
+        v256f Result = _mm256_and_ps(Mask, _mm256_set1_ps(1.0f));
+ 
         return Result;
     }
 
     INTERNAL v256f 
     operator>(zv3f32 VecA, zv3f32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_ps_mask(VecA.X, VecB.X, _CMP_GT_OQ);
-        __mmask8 MaskY = _mm256_cmp_ps_mask(VecA.Y, VecB.Y, _CMP_GT_OQ);
-        __mmask8 MaskZ = _mm256_cmp_ps_mask(VecA.Z, VecB.Z, _CMP_GT_OQ);
-        __mmask8 ResultMask = _kand_mask8(_kand_mask8(MaskX, MaskY), MaskZ);
-        v256f Result = _mm256_mask_mov_ps(
-            _mm256_setzero_ps(),
-            ResultMask,
-            _mm256_set1_ps(1.0f)
-        );
-
+        v256f MaskX = _mm256_cmp_ps(VecA.X, VecB.X, _CMP_GT_OQ);
+        v256f MaskY = _mm256_cmp_ps(VecA.Y, VecB.Y, _CMP_GT_OQ);
+        v256f MaskZ = _mm256_cmp_ps(VecA.Z, VecB.Z, _CMP_GT_OQ);
+        v256f Mask = _mm256_and_ps(_mm256_and_ps(MaskX, MaskY), MaskZ);
+        v256f Result = _mm256_and_ps(Mask, _mm256_set1_ps(1.0f));
+ 
         return Result;
     }
 
     INTERNAL v256f 
     operator<=(zv3f32 VecA, zv3f32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_ps_mask(VecA.X, VecB.X, _CMP_LE_OQ);
-        __mmask8 MaskY = _mm256_cmp_ps_mask(VecA.Y, VecB.Y, _CMP_LE_OQ);
-        __mmask8 MaskZ = _mm256_cmp_ps_mask(VecA.Z, VecB.Z, _CMP_LE_OQ);
-        __mmask8 ResultMask = _kand_mask8(_kand_mask8(MaskX, MaskY), MaskZ);
-        v256f Result = _mm256_mask_mov_ps(
-            _mm256_setzero_ps(),
-            ResultMask,
-            _mm256_set1_ps(1.0f)
-        );
-
+        v256f MaskX = _mm256_cmp_ps(VecA.X, VecB.X, _CMP_LE_OQ);
+        v256f MaskY = _mm256_cmp_ps(VecA.Y, VecB.Y, _CMP_LE_OQ);
+        v256f MaskZ = _mm256_cmp_ps(VecA.Z, VecB.Z, _CMP_LE_OQ);
+        v256f Mask = _mm256_and_ps(_mm256_and_ps(MaskX, MaskY), MaskZ);
+        v256f Result = _mm256_and_ps(Mask, _mm256_set1_ps(1.0f));
+ 
         return Result;
     }
 
     INTERNAL v256f 
     operator>=(zv3f32 VecA, zv3f32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_ps_mask(VecA.X, VecB.X, _CMP_GE_OQ);
-        __mmask8 MaskY = _mm256_cmp_ps_mask(VecA.Y, VecB.Y, _CMP_GE_OQ);
-        __mmask8 MaskZ = _mm256_cmp_ps_mask(VecA.Z, VecB.Z, _CMP_GE_OQ);
-        __mmask8 ResultMask = _kand_mask8(_kand_mask8(MaskX, MaskY), MaskZ);
-        v256f Result = _mm256_mask_mov_ps(
-            _mm256_setzero_ps(),
-            ResultMask,
-            _mm256_set1_ps(1.0f)
-        );
-
+        v256f MaskX = _mm256_cmp_ps(VecA.X, VecB.X, _CMP_GE_OQ);
+        v256f MaskY = _mm256_cmp_ps(VecA.Y, VecB.Y, _CMP_GE_OQ);
+        v256f MaskZ = _mm256_cmp_ps(VecA.Z, VecB.Z, _CMP_GE_OQ);
+        v256f Mask = _mm256_and_ps(_mm256_and_ps(MaskX, MaskY), MaskZ);
+        v256f Result = _mm256_and_ps(Mask, _mm256_set1_ps(1.0f));
+ 
         return Result;
     }
 
@@ -5353,96 +5258,69 @@
     INTERNAL v256
     operator==(zv3i32 VecA, zv3i32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_epi32_mask(VecA.X, VecB.X, _MM_CMPINT_EQ);
-        __mmask8 MaskY = _mm256_cmp_epi32_mask(VecA.Y, VecB.Y, _MM_CMPINT_EQ);
-        __mmask8 MaskZ = _mm256_cmp_epi32_mask(VecA.Z, VecB.Z, _MM_CMPINT_EQ);
-        __mmask8 ResultMask = _kand_mask8(_kand_mask8(MaskX, MaskY), MaskZ);
-        v256 Result = _mm256_mask_mov_epi32(
-            _mm256_setzero_si256(),
-            ResultMask,
-            _mm256_set1_epi32(~0)
-        );
-
+        v256 EqX = _mm256_cmpeq_epi32(VecA.X, VecB.X);
+        v256 EqY = _mm256_cmpeq_epi32(VecA.Y, VecB.Y);
+        v256 EqZ = _mm256_cmpeq_epi32(VecA.Z, VecB.Z);
+        v256 Result = _mm256_and_si256(_mm256_and_si256(EqX, EqY), EqZ);
+ 
         return Result;
     }
 
     INTERNAL v256
     operator!=(zv3i32 VecA, zv3i32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_epi32_mask(VecA.X, VecB.X, _MM_CMPINT_NE);
-        __mmask8 MaskY = _mm256_cmp_epi32_mask(VecA.Y, VecB.Y, _MM_CMPINT_NE);
-        __mmask8 MaskZ = _mm256_cmp_epi32_mask(VecA.Z, VecB.Z, _MM_CMPINT_NE);
-        __mmask8 ResultMask = _kand_mask8(_kand_mask8(MaskX, MaskY), MaskZ);
-        v256 Result = _mm256_mask_mov_epi32(
-            _mm256_setzero_si256(),
-            ResultMask,
-            _mm256_set1_epi32(~0)
-        );
-
+        v256 EqX = _mm256_cmpeq_epi32(VecA.X, VecB.X);
+        v256 EqY = _mm256_cmpeq_epi32(VecA.Y, VecB.Y);
+        v256 EqZ = _mm256_cmpeq_epi32(VecA.Z, VecB.Z);
+        v256 Any = _mm256_or_si256(_mm256_or_si256(EqX, EqY), EqZ);
+        v256 Result = _mm256_andnot_si256(Any, _mm256_set1_epi32(~0));
+ 
         return Result;
     }
 
     INTERNAL v256
     operator<(zv3i32 VecA, zv3i32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_epi32_mask(VecA.X, VecB.X, _MM_CMPINT_LT);
-        __mmask8 MaskY = _mm256_cmp_epi32_mask(VecA.Y, VecB.Y, _MM_CMPINT_LT);
-        __mmask8 MaskZ = _mm256_cmp_epi32_mask(VecA.Z, VecB.Z, _MM_CMPINT_LT);
-        __mmask8 ResultMask = _kand_mask8(_kand_mask8(MaskX, MaskY), MaskZ);
-        v256 Result = _mm256_mask_mov_epi32(
-            _mm256_setzero_si256(),
-            ResultMask,
-            _mm256_set1_epi32(~0)
-        );
-
+        v256 LtX = _mm256_cmpgt_epi32(VecB.X, VecA.X);
+        v256 LtY = _mm256_cmpgt_epi32(VecB.Y, VecA.Y);
+        v256 LtZ = _mm256_cmpgt_epi32(VecB.Z, VecA.Z);
+        v256 Result = _mm256_and_si256(_mm256_and_si256(LtX, LtY), LtZ);
+ 
         return Result;
     }
 
     INTERNAL v256
     operator>(zv3i32 VecA, zv3i32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_epi32_mask(VecA.X, VecB.X, _MM_CMPINT_GT);
-        __mmask8 MaskY = _mm256_cmp_epi32_mask(VecA.Y, VecB.Y, _MM_CMPINT_GT);
-        __mmask8 MaskZ = _mm256_cmp_epi32_mask(VecA.Z, VecB.Z, _MM_CMPINT_GT);
-        __mmask8 ResultMask = _kand_mask8(_kand_mask8(MaskX, MaskY), MaskZ);
-        v256 Result = _mm256_mask_mov_epi32(
-            _mm256_setzero_si256(),
-            ResultMask,
-            _mm256_set1_epi32(~0)
-        );
-
+        v256 GtX = _mm256_cmpgt_epi32(VecA.X, VecB.X);
+        v256 GtY = _mm256_cmpgt_epi32(VecA.Y, VecB.Y);
+        v256 GtZ = _mm256_cmpgt_epi32(VecA.Z, VecB.Z);
+        v256 Result = _mm256_and_si256(_mm256_and_si256(GtX, GtY), GtZ);
+ 
         return Result;
     }
 
     INTERNAL v256
     operator<=(zv3i32 VecA, zv3i32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_epi32_mask(VecA.X, VecB.X, _MM_CMPINT_LE);
-        __mmask8 MaskY = _mm256_cmp_epi32_mask(VecA.Y, VecB.Y, _MM_CMPINT_LE);
-        __mmask8 MaskZ = _mm256_cmp_epi32_mask(VecA.Z, VecB.Z, _MM_CMPINT_LE);
-        __mmask8 ResultMask = _kand_mask8(_kand_mask8(MaskX, MaskY), MaskZ);
-        v256 Result = _mm256_mask_mov_epi32(
-            _mm256_setzero_si256(),
-            ResultMask,
-            _mm256_set1_epi32(~0)
-        );
-
+        v256 GtX = _mm256_cmpgt_epi32(VecA.X, VecB.X);
+        v256 GtY = _mm256_cmpgt_epi32(VecA.Y, VecB.Y);
+        v256 GtZ = _mm256_cmpgt_epi32(VecA.Z, VecB.Z);
+        v256 Any = _mm256_or_si256(_mm256_or_si256(GtX, GtY), GtZ);
+        v256 Result = _mm256_andnot_si256(Any, _mm256_set1_epi32(~0));
+ 
         return Result;
     }
 
     INTERNAL v256
     operator>=(zv3i32 VecA, zv3i32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_epi32_mask(VecA.X, VecB.X, _MM_CMPINT_GE);
-        __mmask8 MaskY = _mm256_cmp_epi32_mask(VecA.Y, VecB.Y, _MM_CMPINT_GE);
-        __mmask8 MaskZ = _mm256_cmp_epi32_mask(VecA.Z, VecB.Z, _MM_CMPINT_GE);
-        __mmask8 ResultMask = _kand_mask8(_kand_mask8(MaskX, MaskY), MaskZ);
-        v256 Result = _mm256_mask_mov_epi32(
-            _mm256_setzero_si256(),
-            ResultMask,
-            _mm256_set1_epi32(~0)
-        );
-
+        v256 LtX = _mm256_cmpgt_epi32(VecB.X, VecA.X);
+        v256 LtY = _mm256_cmpgt_epi32(VecB.Y, VecA.Y);
+        v256 LtZ = _mm256_cmpgt_epi32(VecB.Z, VecA.Z);
+        v256 Any = _mm256_or_si256(_mm256_or_si256(LtX, LtY), LtZ);
+        v256 Result = _mm256_andnot_si256(Any, _mm256_set1_epi32(~0));
+ 
         return Result;
     }
 
@@ -5718,96 +5596,72 @@
     INTERNAL v256d
     operator==(zv3f64 VecA, zv3f64 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_pd_mask(VecA.X, VecB.X, _CMP_EQ_OQ);
-        __mmask8 MaskY = _mm256_cmp_pd_mask(VecA.Y, VecB.Y, _CMP_EQ_OQ);
-        __mmask8 MaskZ = _mm256_cmp_pd_mask(VecA.Z, VecB.Z, _CMP_EQ_OQ);
-        __mmask8 ResultMask = _kand_mask8(_kand_mask8(MaskX, MaskY), MaskZ);
-        v256d Result = _mm256_mask_mov_pd(
-            _mm256_setzero_pd(),
-            ResultMask,
-            _mm256_set1_pd(1.0)
-        );
-
+        v256d MaskX = _mm256_cmp_pd(VecA.X, VecB.X, _CMP_EQ_OQ);
+        v256d MaskY = _mm256_cmp_pd(VecA.Y, VecB.Y, _CMP_EQ_OQ);
+        v256d MaskZ = _mm256_cmp_pd(VecA.Z, VecB.Z, _CMP_EQ_OQ);
+        v256d Mask = _mm256_and_pd(_mm256_and_pd(MaskX, MaskY), MaskZ);
+        v256d Result = _mm256_and_pd(Mask, _mm256_set1_pd(1.0));
+ 
         return Result;
     }
 
     INTERNAL v256d
     operator!=(zv3f64 VecA, zv3f64 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_pd_mask(VecA.X, VecB.X, _CMP_NEQ_OQ);
-        __mmask8 MaskY = _mm256_cmp_pd_mask(VecA.Y, VecB.Y, _CMP_NEQ_OQ);
-        __mmask8 MaskZ = _mm256_cmp_pd_mask(VecA.Z, VecB.Z, _CMP_NEQ_OQ);
-        __mmask8 ResultMask = _kand_mask8(_kand_mask8(MaskX, MaskY), MaskZ);
-        v256d Result = _mm256_mask_mov_pd(
-            _mm256_setzero_pd(),
-            ResultMask,
-            _mm256_set1_pd(1.0)
-        );
-
+        v256d MaskX = _mm256_cmp_pd(VecA.X, VecB.X, _CMP_NEQ_OQ);
+        v256d MaskY = _mm256_cmp_pd(VecA.Y, VecB.Y, _CMP_NEQ_OQ);
+        v256d MaskZ = _mm256_cmp_pd(VecA.Z, VecB.Z, _CMP_NEQ_OQ);
+        v256d Mask = _mm256_and_pd(_mm256_and_pd(MaskX, MaskY), MaskZ);
+        v256d Result = _mm256_and_pd(Mask, _mm256_set1_pd(1.0));
+ 
         return Result;
     }
 
     INTERNAL v256d
     operator<(zv3f64 VecA, zv3f64 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_pd_mask(VecA.X, VecB.X, _CMP_LT_OQ);
-        __mmask8 MaskY = _mm256_cmp_pd_mask(VecA.Y, VecB.Y, _CMP_LT_OQ);
-        __mmask8 MaskZ = _mm256_cmp_pd_mask(VecA.Z, VecB.Z, _CMP_LT_OQ);
-        __mmask8 ResultMask = _kand_mask8(_kand_mask8(MaskX, MaskY), MaskZ);
-        v256d Result = _mm256_mask_mov_pd(
-            _mm256_setzero_pd(),
-            ResultMask,
-            _mm256_set1_pd(1.0)
-        );
-
+        v256d MaskX = _mm256_cmp_pd(VecA.X, VecB.X, _CMP_LT_OQ);
+        v256d MaskY = _mm256_cmp_pd(VecA.Y, VecB.Y, _CMP_LT_OQ);
+        v256d MaskZ = _mm256_cmp_pd(VecA.Z, VecB.Z, _CMP_LT_OQ);
+        v256d Mask = _mm256_and_pd(_mm256_and_pd(MaskX, MaskY), MaskZ);
+        v256d Result = _mm256_and_pd(Mask, _mm256_set1_pd(1.0));
+ 
         return Result;
     }
 
     INTERNAL v256d
     operator>(zv3f64 VecA, zv3f64 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_pd_mask(VecA.X, VecB.X, _CMP_GT_OQ);
-        __mmask8 MaskY = _mm256_cmp_pd_mask(VecA.Y, VecB.Y, _CMP_GT_OQ);
-        __mmask8 MaskZ = _mm256_cmp_pd_mask(VecA.Z, VecB.Z, _CMP_GT_OQ);
-        __mmask8 ResultMask = _kand_mask8(_kand_mask8(MaskX, MaskY), MaskZ);
-        v256d Result = _mm256_mask_mov_pd(
-            _mm256_setzero_pd(),
-            ResultMask,
-            _mm256_set1_pd(1.0)
-        );
-
+        v256d MaskX = _mm256_cmp_pd(VecA.X, VecB.X, _CMP_GT_OQ);
+        v256d MaskY = _mm256_cmp_pd(VecA.Y, VecB.Y, _CMP_GT_OQ);
+        v256d MaskZ = _mm256_cmp_pd(VecA.Z, VecB.Z, _CMP_GT_OQ);
+        v256d Mask = _mm256_and_pd(_mm256_and_pd(MaskX, MaskY), MaskZ);
+        v256d Result = _mm256_and_pd(Mask, _mm256_set1_pd(1.0));
+ 
         return Result;
     }
 
     INTERNAL v256d
     operator<=(zv3f64 VecA, zv3f64 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_pd_mask(VecA.X, VecB.X, _CMP_LE_OQ);
-        __mmask8 MaskY = _mm256_cmp_pd_mask(VecA.Y, VecB.Y, _CMP_LE_OQ);
-        __mmask8 MaskZ = _mm256_cmp_pd_mask(VecA.Z, VecB.Z, _CMP_LE_OQ);
-        __mmask8 ResultMask = _kand_mask8(_kand_mask8(MaskX, MaskY), MaskZ);
-        v256d Result = _mm256_mask_mov_pd(
-            _mm256_setzero_pd(),
-            ResultMask,
-            _mm256_set1_pd(1.0)
-        );
-
+        v256d MaskX = _mm256_cmp_pd(VecA.X, VecB.X, _CMP_LE_OQ);
+        v256d MaskY = _mm256_cmp_pd(VecA.Y, VecB.Y, _CMP_LE_OQ);
+        v256d MaskZ = _mm256_cmp_pd(VecA.Z, VecB.Z, _CMP_LE_OQ);
+        v256d Mask = _mm256_and_pd(_mm256_and_pd(MaskX, MaskY), MaskZ);
+        v256d Result = _mm256_and_pd(Mask, _mm256_set1_pd(1.0));
+ 
         return Result;
     }
 
     INTERNAL v256d
     operator>=(zv3f64 VecA, zv3f64 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_pd_mask(VecA.X, VecB.X, _CMP_GE_OQ);
-        __mmask8 MaskY = _mm256_cmp_pd_mask(VecA.Y, VecB.Y, _CMP_GE_OQ);
-        __mmask8 MaskZ = _mm256_cmp_pd_mask(VecA.Z, VecB.Z, _CMP_GE_OQ);
-        __mmask8 ResultMask = _kand_mask8(_kand_mask8(MaskX, MaskY), MaskZ);
-        v256d Result = _mm256_mask_mov_pd(
-            _mm256_setzero_pd(),
-            ResultMask,
-            _mm256_set1_pd(1.0)
-        );
-
+        v256d MaskX = _mm256_cmp_pd(VecA.X, VecB.X, _CMP_GE_OQ);
+        v256d MaskY = _mm256_cmp_pd(VecA.Y, VecB.Y, _CMP_GE_OQ);
+        v256d MaskZ = _mm256_cmp_pd(VecA.Z, VecB.Z, _CMP_GE_OQ);
+        v256d Mask = _mm256_and_pd(_mm256_and_pd(MaskX, MaskY), MaskZ);
+        v256d Result = _mm256_and_pd(Mask, _mm256_set1_pd(1.0));
+ 
         return Result;
     }
 
@@ -6020,120 +5874,96 @@
     INTERNAL v256f
     operator==(zv4f32 VecA, zv4f32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_ps_mask(VecA.X, VecB.X, _CMP_EQ_OQ);
-        __mmask8 MaskY = _mm256_cmp_ps_mask(VecA.Y, VecB.Y, _CMP_EQ_OQ);
-        __mmask8 MaskZ = _mm256_cmp_ps_mask(VecA.Z, VecB.Z, _CMP_EQ_OQ);
-        __mmask8 MaskW = _mm256_cmp_ps_mask(VecA.W, VecB.W, _CMP_EQ_OQ);
-        __mmask8 ResultMask = _kand_mask8(
-            _kand_mask8(MaskX, MaskY), 
-            _kand_mask8(MaskZ, MaskW)
+        v256f MaskX = _mm256_cmp_ps(VecA.X, VecB.X, _CMP_EQ_OQ);
+        v256f MaskY = _mm256_cmp_ps(VecA.Y, VecB.Y, _CMP_EQ_OQ);
+        v256f MaskZ = _mm256_cmp_ps(VecA.Z, VecB.Z, _CMP_EQ_OQ);
+        v256f MaskW = _mm256_cmp_ps(VecA.W, VecB.W, _CMP_EQ_OQ);
+        v256f Mask = _mm256_and_ps(
+            _mm256_and_ps(MaskX, MaskY),
+            _mm256_and_ps(MaskZ, MaskW)
         );
-        v256f Result = _mm256_mask_mov_ps(
-            _mm256_setzero_ps(),
-            ResultMask,
-            _mm256_set1_ps(1.0f)
-        );
-
+        v256f Result = _mm256_and_ps(Mask, _mm256_set1_ps(1.0f));
+ 
         return Result;
     }
 
     INTERNAL v256f
     operator!=(zv4f32 VecA, zv4f32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_ps_mask(VecA.X, VecB.X, _CMP_NEQ_OQ);
-        __mmask8 MaskY = _mm256_cmp_ps_mask(VecA.Y, VecB.Y, _CMP_NEQ_OQ);
-        __mmask8 MaskZ = _mm256_cmp_ps_mask(VecA.Z, VecB.Z, _CMP_NEQ_OQ);
-        __mmask8 MaskW = _mm256_cmp_ps_mask(VecA.W, VecB.W, _CMP_NEQ_OQ);
-        __mmask8 ResultMask = _kand_mask8(
-            _kand_mask8(MaskX, MaskY), 
-            _kand_mask8(MaskZ, MaskW)
+        v256f MaskX = _mm256_cmp_ps(VecA.X, VecB.X, _CMP_NEQ_OQ);
+        v256f MaskY = _mm256_cmp_ps(VecA.Y, VecB.Y, _CMP_NEQ_OQ);
+        v256f MaskZ = _mm256_cmp_ps(VecA.Z, VecB.Z, _CMP_NEQ_OQ);
+        v256f MaskW = _mm256_cmp_ps(VecA.W, VecB.W, _CMP_NEQ_OQ);
+        v256f Mask = _mm256_and_ps(
+            _mm256_and_ps(MaskX, MaskY),
+            _mm256_and_ps(MaskZ, MaskW)
         );
-        v256f Result = _mm256_mask_mov_ps(
-            _mm256_setzero_ps(),
-            ResultMask,
-            _mm256_set1_ps(1.0f)
-        );
-
+        v256f Result = _mm256_and_ps(Mask, _mm256_set1_ps(1.0f));
+ 
         return Result;
     }
 
     INTERNAL v256f
     operator<(zv4f32 VecA, zv4f32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_ps_mask(VecA.X, VecB.X, _CMP_LT_OQ);
-        __mmask8 MaskY = _mm256_cmp_ps_mask(VecA.Y, VecB.Y, _CMP_LT_OQ);
-        __mmask8 MaskZ = _mm256_cmp_ps_mask(VecA.Z, VecB.Z, _CMP_LT_OQ);
-        __mmask8 MaskW = _mm256_cmp_ps_mask(VecA.W, VecB.W, _CMP_LT_OQ);
-        __mmask8 ResultMask = _kand_mask8(
-            _kand_mask8(MaskX, MaskY), 
-            _kand_mask8(MaskZ, MaskW)
+        v256f MaskX = _mm256_cmp_ps(VecA.X, VecB.X, _CMP_LT_OQ);
+        v256f MaskY = _mm256_cmp_ps(VecA.Y, VecB.Y, _CMP_LT_OQ);
+        v256f MaskZ = _mm256_cmp_ps(VecA.Z, VecB.Z, _CMP_LT_OQ);
+        v256f MaskW = _mm256_cmp_ps(VecA.W, VecB.W, _CMP_LT_OQ);
+        v256f Mask = _mm256_and_ps(
+            _mm256_and_ps(MaskX, MaskY),
+            _mm256_and_ps(MaskZ, MaskW)
         );
-        v256f Result = _mm256_mask_mov_ps(
-            _mm256_setzero_ps(),
-            ResultMask,
-            _mm256_set1_ps(1.0f)
-        );
-
+        v256f Result = _mm256_and_ps(Mask, _mm256_set1_ps(1.0f));
+ 
         return Result;
     }
 
     INTERNAL v256f
     operator>(zv4f32 VecA, zv4f32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_ps_mask(VecA.X, VecB.X, _CMP_GT_OQ);
-        __mmask8 MaskY = _mm256_cmp_ps_mask(VecA.Y, VecB.Y, _CMP_GT_OQ);
-        __mmask8 MaskZ = _mm256_cmp_ps_mask(VecA.Z, VecB.Z, _CMP_GT_OQ);
-        __mmask8 MaskW = _mm256_cmp_ps_mask(VecA.W, VecB.W, _CMP_GT_OQ);
-        __mmask8 ResultMask = _kand_mask8(
-            _kand_mask8(MaskX, MaskY), 
-            _kand_mask8(MaskZ, MaskW)
+        v256f MaskX = _mm256_cmp_ps(VecA.X, VecB.X, _CMP_GT_OQ);
+        v256f MaskY = _mm256_cmp_ps(VecA.Y, VecB.Y, _CMP_GT_OQ);
+        v256f MaskZ = _mm256_cmp_ps(VecA.Z, VecB.Z, _CMP_GT_OQ);
+        v256f MaskW = _mm256_cmp_ps(VecA.W, VecB.W, _CMP_GT_OQ);
+        v256f Mask = _mm256_and_ps(
+            _mm256_and_ps(MaskX, MaskY),
+            _mm256_and_ps(MaskZ, MaskW)
         );
-        v256f Result = _mm256_mask_mov_ps(
-            _mm256_setzero_ps(),
-            ResultMask,
-            _mm256_set1_ps(1.0f)
-        );
-
+        v256f Result = _mm256_and_ps(Mask, _mm256_set1_ps(1.0f));
+ 
         return Result;
     }
 
     INTERNAL v256f
     operator<=(zv4f32 VecA, zv4f32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_ps_mask(VecA.X, VecB.X, _CMP_LE_OQ);
-        __mmask8 MaskY = _mm256_cmp_ps_mask(VecA.Y, VecB.Y, _CMP_LE_OQ);
-        __mmask8 MaskZ = _mm256_cmp_ps_mask(VecA.Z, VecB.Z, _CMP_LE_OQ);
-        __mmask8 MaskW = _mm256_cmp_ps_mask(VecA.W, VecB.W, _CMP_LE_OQ);
-        __mmask8 ResultMask = _kand_mask8(
-            _kand_mask8(MaskX, MaskY), 
-            _kand_mask8(MaskZ, MaskW)
+        v256f MaskX = _mm256_cmp_ps(VecA.X, VecB.X, _CMP_LE_OQ);
+        v256f MaskY = _mm256_cmp_ps(VecA.Y, VecB.Y, _CMP_LE_OQ);
+        v256f MaskZ = _mm256_cmp_ps(VecA.Z, VecB.Z, _CMP_LE_OQ);
+        v256f MaskW = _mm256_cmp_ps(VecA.W, VecB.W, _CMP_LE_OQ);
+        v256f Mask = _mm256_and_ps(
+            _mm256_and_ps(MaskX, MaskY),
+            _mm256_and_ps(MaskZ, MaskW)
         );
-        v256f Result = _mm256_mask_mov_ps(
-            _mm256_setzero_ps(),
-            ResultMask,
-            _mm256_set1_ps(1.0f)
-        );
-
+        v256f Result = _mm256_and_ps(Mask, _mm256_set1_ps(1.0f));
+ 
         return Result;
     }
 
     INTERNAL v256f
     operator>=(zv4f32 VecA, zv4f32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_ps_mask(VecA.X, VecB.X, _CMP_GE_OQ);
-        __mmask8 MaskY = _mm256_cmp_ps_mask(VecA.Y, VecB.Y, _CMP_GE_OQ);
-        __mmask8 MaskZ = _mm256_cmp_ps_mask(VecA.Z, VecB.Z, _CMP_GE_OQ);
-        __mmask8 MaskW = _mm256_cmp_ps_mask(VecA.W, VecB.W, _CMP_GE_OQ);
-        __mmask8 ResultMask = _kand_mask8(
-            _kand_mask8(MaskX, MaskY), 
-            _kand_mask8(MaskZ, MaskW)
+        v256f MaskX = _mm256_cmp_ps(VecA.X, VecB.X, _CMP_GE_OQ);
+        v256f MaskY = _mm256_cmp_ps(VecA.Y, VecB.Y, _CMP_GE_OQ);
+        v256f MaskZ = _mm256_cmp_ps(VecA.Z, VecB.Z, _CMP_GE_OQ);
+        v256f MaskW = _mm256_cmp_ps(VecA.W, VecB.W, _CMP_GE_OQ);
+        v256f Mask = _mm256_and_ps(
+            _mm256_and_ps(MaskX, MaskY),
+            _mm256_and_ps(MaskZ, MaskW)
         );
-        v256f Result = _mm256_mask_mov_ps(
-            _mm256_setzero_ps(),
-            ResultMask,
-            _mm256_set1_ps(1.0f)
-        );
-
+        v256f Result = _mm256_and_ps(Mask, _mm256_set1_ps(1.0f));
+ 
         return Result;
     }
 
@@ -6184,10 +6014,42 @@
     {
         zv4f32 Result = {};
 
-        Result.X = _mm256_fmadd_ps(T, VecB.X, _mm256_fnmadd_ps(T, VecA.X, VecA.X));
-        Result.Y = _mm256_fmadd_ps(T, VecB.Y, _mm256_fnmadd_ps(T, VecA.Y, VecA.Y));
-        Result.Z = _mm256_fmadd_ps(T, VecB.Z, _mm256_fnmadd_ps(T, VecA.Z, VecA.Z));
-        Result.W = _mm256_fmadd_ps(T, VecB.W, _mm256_fnmadd_ps(T, VecA.W, VecA.W));
+        Result.X = _mm256_fmadd_ps(
+            T, 
+            VecB.X, 
+            _mm256_fnmadd_ps(
+                T, 
+                VecA.X, 
+                VecA.X
+            )
+        );
+        Result.Y = _mm256_fmadd_ps(
+            T, 
+            VecB.Y, 
+            _mm256_fnmadd_ps(
+                T, 
+                VecA.Y, 
+                VecA.Y
+            )
+        );
+        Result.Z = _mm256_fmadd_ps(
+            T, 
+            VecB.Z, 
+            _mm256_fnmadd_ps(
+                T, 
+                VecA.Z, 
+                VecA.Z
+            )
+        );
+        Result.W = _mm256_fmadd_ps(
+            T, 
+            VecB.W, 
+            _mm256_fnmadd_ps(
+                T, 
+                VecA.W, 
+                VecA.W
+            )
+        );
 
         return Result;
     }
@@ -6327,120 +6189,93 @@
     INTERNAL v256 
     operator==(zv4i32 VecA, zv4i32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_epi32_mask(VecA.X, VecB.X, _MM_CMPINT_EQ);
-        __mmask8 MaskY = _mm256_cmp_epi32_mask(VecA.Y, VecB.Y, _MM_CMPINT_EQ);
-        __mmask8 MaskZ = _mm256_cmp_epi32_mask(VecA.Z, VecB.Z, _MM_CMPINT_EQ);
-        __mmask8 MaskW = _mm256_cmp_epi32_mask(VecA.W, VecB.W, _MM_CMPINT_EQ);
-        __mmask8 ResultMask = _kand_mask8(
-            _kand_mask8(MaskX, MaskY), 
-            _kand_mask8(MaskZ, MaskW)
+        v256 EqX = _mm256_cmpeq_epi32(VecA.X, VecB.X);
+        v256 EqY = _mm256_cmpeq_epi32(VecA.Y, VecB.Y);
+        v256 EqZ = _mm256_cmpeq_epi32(VecA.Z, VecB.Z);
+        v256 EqW = _mm256_cmpeq_epi32(VecA.W, VecB.W);
+        v256 Result = _mm256_and_si256(
+            _mm256_and_si256(EqX, EqY),
+            _mm256_and_si256(EqZ, EqW)
         );
-        v256 Result = _mm256_mask_mov_epi32(
-            _mm256_setzero_si256(),
-            ResultMask,
-            _mm256_set1_epi32(~0)
-        );
-
+ 
         return Result;
     }
 
     INTERNAL v256 
     operator!=(zv4i32 VecA, zv4i32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_epi32_mask(VecA.X, VecB.X, _MM_CMPINT_NE);
-        __mmask8 MaskY = _mm256_cmp_epi32_mask(VecA.Y, VecB.Y, _MM_CMPINT_NE);
-        __mmask8 MaskZ = _mm256_cmp_epi32_mask(VecA.Z, VecB.Z, _MM_CMPINT_NE);
-        __mmask8 MaskW = _mm256_cmp_epi32_mask(VecA.W, VecB.W, _MM_CMPINT_NE);
-        __mmask8 ResultMask = _kand_mask8(
-            _kand_mask8(MaskX, MaskY), 
-            _kand_mask8(MaskZ, MaskW)
+        v256 EqX = _mm256_cmpeq_epi32(VecA.X, VecB.X);
+        v256 EqY = _mm256_cmpeq_epi32(VecA.Y, VecB.Y);
+        v256 EqZ = _mm256_cmpeq_epi32(VecA.Z, VecB.Z);
+        v256 EqW = _mm256_cmpeq_epi32(VecA.W, VecB.W);
+        v256 Any = _mm256_or_si256(
+            _mm256_or_si256(EqX, EqY),
+            _mm256_or_si256(EqZ, EqW)
         );
-        v256 Result = _mm256_mask_mov_epi32(
-            _mm256_setzero_si256(),
-            ResultMask,
-            _mm256_set1_epi32(~0)
-        );
-
+        v256 Result = _mm256_andnot_si256(Any, _mm256_set1_epi32(~0));
+ 
         return Result;
     }
 
     INTERNAL v256 
     operator<(zv4i32 VecA, zv4i32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_epi32_mask(VecA.X, VecB.X, _MM_CMPINT_LT);
-        __mmask8 MaskY = _mm256_cmp_epi32_mask(VecA.Y, VecB.Y, _MM_CMPINT_LT);
-        __mmask8 MaskZ = _mm256_cmp_epi32_mask(VecA.Z, VecB.Z, _MM_CMPINT_LT);
-        __mmask8 MaskW = _mm256_cmp_epi32_mask(VecA.W, VecB.W, _MM_CMPINT_LT);
-        __mmask8 ResultMask = _kand_mask8(
-            _kand_mask8(MaskX, MaskY), 
-            _kand_mask8(MaskZ, MaskW)
+        v256 LtX = _mm256_cmpgt_epi32(VecB.X, VecA.X);
+        v256 LtY = _mm256_cmpgt_epi32(VecB.Y, VecA.Y);
+        v256 LtZ = _mm256_cmpgt_epi32(VecB.Z, VecA.Z);
+        v256 LtW = _mm256_cmpgt_epi32(VecB.W, VecA.W);
+        v256 Result = _mm256_and_si256(
+            _mm256_and_si256(LtX, LtY),
+            _mm256_and_si256(LtZ, LtW)
         );
-        v256 Result = _mm256_mask_mov_epi32(
-            _mm256_setzero_si256(),
-            ResultMask,
-            _mm256_set1_epi32(~0)
-        );
-
+ 
         return Result;
     }
 
     INTERNAL v256 
     operator>(zv4i32 VecA, zv4i32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_epi32_mask(VecA.X, VecB.X, _MM_CMPINT_GT);
-        __mmask8 MaskY = _mm256_cmp_epi32_mask(VecA.Y, VecB.Y, _MM_CMPINT_GT);
-        __mmask8 MaskZ = _mm256_cmp_epi32_mask(VecA.Z, VecB.Z, _MM_CMPINT_GT);
-        __mmask8 MaskW = _mm256_cmp_epi32_mask(VecA.W, VecB.W, _MM_CMPINT_GT);
-        __mmask8 ResultMask = _kand_mask8(
-            _kand_mask8(MaskX, MaskY), 
-            _kand_mask8(MaskZ, MaskW)
+        v256 GtX = _mm256_cmpgt_epi32(VecA.X, VecB.X);
+        v256 GtY = _mm256_cmpgt_epi32(VecA.Y, VecB.Y);
+        v256 GtZ = _mm256_cmpgt_epi32(VecA.Z, VecB.Z);
+        v256 GtW = _mm256_cmpgt_epi32(VecA.W, VecB.W);
+        v256 Result = _mm256_and_si256(
+            _mm256_and_si256(GtX, GtY),
+            _mm256_and_si256(GtZ, GtW)
         );
-        v256 Result = _mm256_mask_mov_epi32(
-            _mm256_setzero_si256(),
-            ResultMask,
-            _mm256_set1_epi32(~0)
-        );
-
+ 
         return Result;
     }
 
     INTERNAL v256 
     operator<=(zv4i32 VecA, zv4i32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_epi32_mask(VecA.X, VecB.X, _MM_CMPINT_LE);
-        __mmask8 MaskY = _mm256_cmp_epi32_mask(VecA.Y, VecB.Y, _MM_CMPINT_LE);
-        __mmask8 MaskZ = _mm256_cmp_epi32_mask(VecA.Z, VecB.Z, _MM_CMPINT_LE);
-        __mmask8 MaskW = _mm256_cmp_epi32_mask(VecA.W, VecB.W, _MM_CMPINT_LE);
-        __mmask8 ResultMask = _kand_mask8(
-            _kand_mask8(MaskX, MaskY), 
-            _kand_mask8(MaskZ, MaskW)
+        v256 GtX = _mm256_cmpgt_epi32(VecA.X, VecB.X);
+        v256 GtY = _mm256_cmpgt_epi32(VecA.Y, VecB.Y);
+        v256 GtZ = _mm256_cmpgt_epi32(VecA.Z, VecB.Z);
+        v256 GtW = _mm256_cmpgt_epi32(VecA.W, VecB.W);
+        v256 Any = _mm256_or_si256(
+            _mm256_or_si256(GtX, GtY),
+            _mm256_or_si256(GtZ, GtW)
         );
-        v256 Result = _mm256_mask_mov_epi32(
-            _mm256_setzero_si256(),
-            ResultMask,
-            _mm256_set1_epi32(~0)
-        );
-
+        v256 Result = _mm256_andnot_si256(Any, _mm256_set1_epi32(~0));
+ 
         return Result;
     }
 
     INTERNAL v256 
     operator>=(zv4i32 VecA, zv4i32 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_epi32_mask(VecA.X, VecB.X, _MM_CMPINT_GE);
-        __mmask8 MaskY = _mm256_cmp_epi32_mask(VecA.Y, VecB.Y, _MM_CMPINT_GE);
-        __mmask8 MaskZ = _mm256_cmp_epi32_mask(VecA.Z, VecB.Z, _MM_CMPINT_GE);
-        __mmask8 MaskW = _mm256_cmp_epi32_mask(VecA.W, VecB.W, _MM_CMPINT_GE);
-        __mmask8 ResultMask = _kand_mask8(
-            _kand_mask8(MaskX, MaskY), 
-            _kand_mask8(MaskZ, MaskW)
+        v256 LtX = _mm256_cmpgt_epi32(VecB.X, VecA.X);
+        v256 LtY = _mm256_cmpgt_epi32(VecB.Y, VecA.Y);
+        v256 LtZ = _mm256_cmpgt_epi32(VecB.Z, VecA.Z);
+        v256 LtW = _mm256_cmpgt_epi32(VecB.W, VecA.W);
+        v256 Any = _mm256_or_si256(
+            _mm256_or_si256(LtX, LtY),
+            _mm256_or_si256(LtZ, LtW)
         );
-        v256 Result = _mm256_mask_mov_epi32(
-            _mm256_setzero_si256(),
-            ResultMask,
-            _mm256_set1_epi32(~0)
-        );
-
+        v256 Result = _mm256_andnot_si256(Any, _mm256_set1_epi32(~0));
+ 
         return Result;
     }
 
@@ -6674,120 +6509,96 @@
     INTERNAL v256d 
     operator==(zv4f64 VecA, zv4f64 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_pd_mask(VecA.X, VecB.X, _CMP_EQ_OQ);
-        __mmask8 MaskY = _mm256_cmp_pd_mask(VecA.Y, VecB.Y, _CMP_EQ_OQ);
-        __mmask8 MaskZ = _mm256_cmp_pd_mask(VecA.Z, VecB.Z, _CMP_EQ_OQ);
-        __mmask8 MaskW = _mm256_cmp_pd_mask(VecA.W, VecB.W, _CMP_EQ_OQ);
-        __mmask8 ResultMask = _kand_mask8(
-            _kand_mask8(MaskX, MaskY), 
-            _kand_mask8(MaskZ, MaskW)
+        v256d MaskX = _mm256_cmp_pd(VecA.X, VecB.X, _CMP_EQ_OQ);
+        v256d MaskY = _mm256_cmp_pd(VecA.Y, VecB.Y, _CMP_EQ_OQ);
+        v256d MaskZ = _mm256_cmp_pd(VecA.Z, VecB.Z, _CMP_EQ_OQ);
+        v256d MaskW = _mm256_cmp_pd(VecA.W, VecB.W, _CMP_EQ_OQ);
+        v256d Mask = _mm256_and_pd(
+            _mm256_and_pd(MaskX, MaskY),
+            _mm256_and_pd(MaskZ, MaskW)
         );
-        v256d Result = _mm256_mask_mov_pd(
-            _mm256_setzero_pd(),
-            ResultMask,
-            _mm256_set1_pd(1.0)
-        );
-
+        v256d Result = _mm256_and_pd(Mask, _mm256_set1_pd(1.0));
+ 
         return Result;
     }
 
     INTERNAL v256d 
     operator!=(zv4f64 VecA, zv4f64 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_pd_mask(VecA.X, VecB.X, _CMP_NEQ_OQ);
-        __mmask8 MaskY = _mm256_cmp_pd_mask(VecA.Y, VecB.Y, _CMP_NEQ_OQ);
-        __mmask8 MaskZ = _mm256_cmp_pd_mask(VecA.Z, VecB.Z, _CMP_NEQ_OQ);
-        __mmask8 MaskW = _mm256_cmp_pd_mask(VecA.W, VecB.W, _CMP_NEQ_OQ);
-        __mmask8 ResultMask = _kand_mask8(
-            _kand_mask8(MaskX, MaskY), 
-            _kand_mask8(MaskZ, MaskW)
+        v256d MaskX = _mm256_cmp_pd(VecA.X, VecB.X, _CMP_NEQ_OQ);
+        v256d MaskY = _mm256_cmp_pd(VecA.Y, VecB.Y, _CMP_NEQ_OQ);
+        v256d MaskZ = _mm256_cmp_pd(VecA.Z, VecB.Z, _CMP_NEQ_OQ);
+        v256d MaskW = _mm256_cmp_pd(VecA.W, VecB.W, _CMP_NEQ_OQ);
+        v256d Mask = _mm256_and_pd(
+            _mm256_and_pd(MaskX, MaskY),
+            _mm256_and_pd(MaskZ, MaskW)
         );
-        v256d Result = _mm256_mask_mov_pd(
-            _mm256_setzero_pd(),
-            ResultMask,
-            _mm256_set1_pd(1.0)
-        );
-
+        v256d Result = _mm256_and_pd(Mask, _mm256_set1_pd(1.0));
+ 
         return Result;
     }
 
     INTERNAL v256d 
     operator<(zv4f64 VecA, zv4f64 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_pd_mask(VecA.X, VecB.X, _CMP_LT_OQ);
-        __mmask8 MaskY = _mm256_cmp_pd_mask(VecA.Y, VecB.Y, _CMP_LT_OQ);
-        __mmask8 MaskZ = _mm256_cmp_pd_mask(VecA.Z, VecB.Z, _CMP_LT_OQ);
-        __mmask8 MaskW = _mm256_cmp_pd_mask(VecA.W, VecB.W, _CMP_LT_OQ);
-        __mmask8 ResultMask = _kand_mask8(
-            _kand_mask8(MaskX, MaskY), 
-            _kand_mask8(MaskZ, MaskW)
+        v256d MaskX = _mm256_cmp_pd(VecA.X, VecB.X, _CMP_LT_OQ);
+        v256d MaskY = _mm256_cmp_pd(VecA.Y, VecB.Y, _CMP_LT_OQ);
+        v256d MaskZ = _mm256_cmp_pd(VecA.Z, VecB.Z, _CMP_LT_OQ);
+        v256d MaskW = _mm256_cmp_pd(VecA.W, VecB.W, _CMP_LT_OQ);
+        v256d Mask = _mm256_and_pd(
+            _mm256_and_pd(MaskX, MaskY),
+            _mm256_and_pd(MaskZ, MaskW)
         );
-        v256d Result = _mm256_mask_mov_pd(
-            _mm256_setzero_pd(),
-            ResultMask,
-            _mm256_set1_pd(1.0)
-        );
-
+        v256d Result = _mm256_and_pd(Mask, _mm256_set1_pd(1.0));
+ 
         return Result;
     }
 
     INTERNAL v256d 
     operator>(zv4f64 VecA, zv4f64 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_pd_mask(VecA.X, VecB.X, _CMP_GT_OQ);
-        __mmask8 MaskY = _mm256_cmp_pd_mask(VecA.Y, VecB.Y, _CMP_GT_OQ);
-        __mmask8 MaskZ = _mm256_cmp_pd_mask(VecA.Z, VecB.Z, _CMP_GT_OQ);
-        __mmask8 MaskW = _mm256_cmp_pd_mask(VecA.W, VecB.W, _CMP_GT_OQ);
-        __mmask8 ResultMask = _kand_mask8(
-            _kand_mask8(MaskX, MaskY), 
-            _kand_mask8(MaskZ, MaskW)
+        v256d MaskX = _mm256_cmp_pd(VecA.X, VecB.X, _CMP_GT_OQ);
+        v256d MaskY = _mm256_cmp_pd(VecA.Y, VecB.Y, _CMP_GT_OQ);
+        v256d MaskZ = _mm256_cmp_pd(VecA.Z, VecB.Z, _CMP_GT_OQ);
+        v256d MaskW = _mm256_cmp_pd(VecA.W, VecB.W, _CMP_GT_OQ);
+        v256d Mask = _mm256_and_pd(
+            _mm256_and_pd(MaskX, MaskY),
+            _mm256_and_pd(MaskZ, MaskW)
         );
-        v256d Result = _mm256_mask_mov_pd(
-            _mm256_setzero_pd(),
-            ResultMask,
-            _mm256_set1_pd(1.0)
-        );
-
+        v256d Result = _mm256_and_pd(Mask, _mm256_set1_pd(1.0));
+ 
         return Result;
     }
 
     INTERNAL v256d 
     operator<=(zv4f64 VecA, zv4f64 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_pd_mask(VecA.X, VecB.X, _CMP_LE_OQ);
-        __mmask8 MaskY = _mm256_cmp_pd_mask(VecA.Y, VecB.Y, _CMP_LE_OQ);
-        __mmask8 MaskZ = _mm256_cmp_pd_mask(VecA.Z, VecB.Z, _CMP_LE_OQ);
-        __mmask8 MaskW = _mm256_cmp_pd_mask(VecA.W, VecB.W, _CMP_LE_OQ);
-        __mmask8 ResultMask = _kand_mask8(
-            _kand_mask8(MaskX, MaskY), 
-            _kand_mask8(MaskZ, MaskW)
+        v256d MaskX = _mm256_cmp_pd(VecA.X, VecB.X, _CMP_LE_OQ);
+        v256d MaskY = _mm256_cmp_pd(VecA.Y, VecB.Y, _CMP_LE_OQ);
+        v256d MaskZ = _mm256_cmp_pd(VecA.Z, VecB.Z, _CMP_LE_OQ);
+        v256d MaskW = _mm256_cmp_pd(VecA.W, VecB.W, _CMP_LE_OQ);
+        v256d Mask = _mm256_and_pd(
+            _mm256_and_pd(MaskX, MaskY),
+            _mm256_and_pd(MaskZ, MaskW)
         );
-        v256d Result = _mm256_mask_mov_pd(
-            _mm256_setzero_pd(),
-            ResultMask,
-            _mm256_set1_pd(1.0)
-        );
-
+        v256d Result = _mm256_and_pd(Mask, _mm256_set1_pd(1.0));
+ 
         return Result;
     }
 
     INTERNAL v256d 
     operator>=(zv4f64 VecA, zv4f64 VecB) 
     {
-        __mmask8 MaskX = _mm256_cmp_pd_mask(VecA.X, VecB.X, _CMP_GE_OQ);
-        __mmask8 MaskY = _mm256_cmp_pd_mask(VecA.Y, VecB.Y, _CMP_GE_OQ);
-        __mmask8 MaskZ = _mm256_cmp_pd_mask(VecA.Z, VecB.Z, _CMP_GE_OQ);
-        __mmask8 MaskW = _mm256_cmp_pd_mask(VecA.W, VecB.W, _CMP_GE_OQ);
-        __mmask8 ResultMask = _kand_mask8(
-            _kand_mask8(MaskX, MaskY), 
-            _kand_mask8(MaskZ, MaskW)
+        v256d MaskX = _mm256_cmp_pd(VecA.X, VecB.X, _CMP_GE_OQ);
+        v256d MaskY = _mm256_cmp_pd(VecA.Y, VecB.Y, _CMP_GE_OQ);
+        v256d MaskZ = _mm256_cmp_pd(VecA.Z, VecB.Z, _CMP_GE_OQ);
+        v256d MaskW = _mm256_cmp_pd(VecA.W, VecB.W, _CMP_GE_OQ);
+        v256d Mask = _mm256_and_pd(
+            _mm256_and_pd(MaskX, MaskY),
+            _mm256_and_pd(MaskZ, MaskW)
         );
-        v256d Result = _mm256_mask_mov_pd(
-            _mm256_setzero_pd(),
-            ResultMask,
-            _mm256_set1_pd(1.0)
-        );
-
+        v256d Result = _mm256_and_pd(Mask, _mm256_set1_pd(1.0));
+ 
         return Result;
     }
 
@@ -6910,6 +6721,11 @@
             ResultMask,
             _mm256_set1_epi32(1)
         );
+ //        v256f MinMask = _mm256_cmp_ps(Range.Min, Val, _CMP_GE_OQ);
+ //        v256f MaxMask = _mm256_cmp_ps(Val, Range.Max, _CMP_LT_OQ);
+ //        v256f Mask = _mm256_and_ps(MinMask, MaxMask);
+ // 
+ //        return _mm256_and_ps(Mask, _mm256_set1_ps(1.0f));
     }
 
     INTERNAL v256
@@ -6994,15 +6810,16 @@
     INTERNAL v256f
     InRange(zr1f32 Range, v256f Val)
     {
-        __mmask8 MinMask = _mm256_cmp_ps_mask(Range.Min, Val, _CMP_GE_OQ);
-        __mmask8 MaxMask = _mm256_cmp_ps_mask(Val, Range.Max, _CMP_LT_OQ);
-        __mmask8 ResultMask = _kand_mask8(MinMask, MaxMask);
+        v256f MinMask = _mm256_cmp_ps(Range.Min, Val, _CMP_GE_OQ);
+        v256f MaxMask = _mm256_cmp_ps(Val, Range.Max, _CMP_LT_OQ);
+        v256f Mask = _mm256_and_ps(MinMask, MaxMask);
 
-        return _mm256_mask_mov_ps(
-            _mm256_setzero_ps(),
-            ResultMask,
-            _mm256_set1_ps(1.0f)
-        );
+        return _mm256_and_ps(Mask, _mm256_set1_ps(1.0f));
+ //        v256d MinMask = _mm256_cmp_pd(Range.Min, Val, _CMP_GE_OQ);
+ //        v256d MaxMask = _mm256_cmp_pd(Val, Range.Max, _CMP_LT_OQ);
+ //        v256d Mask = _mm256_and_pd(MinMask, MaxMask);
+ // 
+ //        return _mm256_and_pd(Mask, _mm256_set1_pd(1.0));
     }
 
     INTERNAL v256f
@@ -7087,15 +6904,11 @@
     INTERNAL v256d
     InRange(zr1f64 Range, v256d Val)
     {
-        __mmask8 MinMask = _mm256_cmp_pd_mask(Range.Min, Val, _CMP_GE_OQ);
-        __mmask8 MaxMask = _mm256_cmp_pd_mask(Val, Range.Max, _CMP_LT_OQ);
-        __mmask8 ResultMask = _kand_mask8(MinMask, MaxMask);
+        v256d MinMask = _mm256_cmp_pd(Range.Min, Val, _CMP_GE_OQ);
+        v256d MaxMask = _mm256_cmp_pd(Val, Range.Max, _CMP_LT_OQ);
+        v256d Mask = _mm256_and_pd(MinMask, MaxMask);
 
-        return _mm256_mask_mov_pd(
-            _mm256_setzero_pd(),
-            ResultMask,
-            _mm256_set1_pd(1.0)
-        );
+        return _mm256_and_pd(Mask, _mm256_set1_pd(1.0));
     }
 
     INTERNAL v256d

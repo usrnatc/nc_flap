@@ -4,9 +4,9 @@
 #include "nc_string.h"
 #include "nc_tls.h"
 
-// #include "flv_type_check.h"
+#include "flv_type_check.h"
 #include "flv_ast.h"
-// #include "flv_type.h"
+#include "flv_type.h"
 #include "flv_token.h"
 #include "flv_symbol_table.h"
 #include "flv_parser.h"
@@ -1306,7 +1306,7 @@ CheckCall(CheckState* State, ASTNodeFuncCall* Call, ExprIndex Self)
     Node->Type = Return;
 }
 
-internal void
+no_inline internal void
 CheckExpr(CheckState* State, ASTNodeExprAccel* Node, ExprIndex Self)
 {
     switch (Node->Header.Type) {
@@ -1604,7 +1604,7 @@ CheckIf(CheckState* State, ASTNodeIf* If)
     }
 }
 
-INTERNAL u32
+no_inline internal u32
 CheckStmt(CheckState* State, u32 Offset, u32* ScopeKinds)
 {
     AST* Tree = State->Tree;

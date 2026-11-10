@@ -52,8 +52,15 @@ SignalHandler(int Signal, siginfo_t* SigInfo, void* Param)
                 if (Func.Size)
                     --Func.Size;
 
-                Str8 Module = StrSkipLastSlash(Str8Lit(Info.dli_fname));
-                Str8 File = StrSkipLastSlash(Str((u8*) FileName, (u8*) (FileName + sizeof(FileName))));
+                Str8 Module = StrSkipLastSlash(
+                    (Str8) Str8Lit(Info.dli_fname)
+                );
+                Str8 File = StrSkipLastSlash(
+                    Str(
+                        (u8*) FileName, 
+                        (u8*) (FileName + sizeof(FileName))
+                    )
+                );
 
                 if (File.Size)
                     --File.Size;

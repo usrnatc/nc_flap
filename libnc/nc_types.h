@@ -405,14 +405,19 @@ union u512 {
     #define Ctz64(X) __ctz64(X)
 #endif
 
-#if defined(NC_CC_MSVC)
+#if defined(NC_CC_MSVC) || defined(NC_CC_GNU) || defined(NC_CC_CLANG)
     // NOTE: see win32/win32_intrin.asm
+    // NOTE: see linux/linux_intrin.asm
     EXTERN_C_LINK_BEGIN
     extern u64 BitScanForward64(u64 Val);
     extern u64 BitScanReverse64(u64 Val);
     extern u64 PopCount64(u64 Val);
     EXTERN_C_LINK_END
+#else
+    #error "Intrinsics not defined for your compiler"
+#endif
 
+#if defined(NC_CC_MSVC)
     internal force_inline u64
     NumSetBits(u64 Val)
     {

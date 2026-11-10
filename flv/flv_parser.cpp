@@ -38,7 +38,7 @@ FLVLogErrorAt(SourceLoc Loc, char const* Fmt, ...)
     ReleaseScratch(Scratch);
 }
 
-INTERNAL void
+internal void
 FLVLogPanicAt(SourceLoc Loc, char const* Fmt, ...)
 {
     TempArena Scratch = GetScratch(NULL, 0);

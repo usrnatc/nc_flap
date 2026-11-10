@@ -27,8 +27,8 @@ ASMFlags="-f elf64"
 MATHASMOutputObj=linux_math.o
 INTRINASMOutputObj=linux_intrin.o
 
-SourceFiles="../fume.cpp"
-OutputBin="fume"
+SourceFiles="../flap.cpp"
+OutputBin="flap"
 
 SharedCompilerFlags=(
     "-std=c++14"
@@ -45,6 +45,8 @@ SharedCompilerFlags=(
     "-msse2"
     "-mbmi"
     "-mbmi2"
+    "-mpclmul"
+    "-maes"
     "-fno-stack-protector"
     "-fno-strict-aliasing"
     "-fno-stack-protector"
@@ -60,6 +62,8 @@ SharedCompilerFlags=(
     "-I../libnc/internal"
     "-I../libnc/cache"
     "-I../libnc"
+    "-I../fli"
+    "-I../flv"
     "-DUNICODE"
     "-D_GNU_SOURCE"
 )

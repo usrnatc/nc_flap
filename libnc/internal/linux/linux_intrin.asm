@@ -31,5 +31,5 @@ align 16
 MemZero:
     xor     eax, eax
     mov     rcx, rsi
-    rep stosb
+    rep     stosb
     ret

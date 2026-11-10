@@ -261,7 +261,7 @@ FLVEmitBuildFlatten(FLVLane* Lane, FLVEmitBuild* Build)
     return Result;
 }
 
-INTERNAL u32
+no_inline internal u32
 FLVEmitSourceSlot(FLVLane* Lane, FLVRegion const* Region, u32 OpIndex, FLVOperand Operand)
 {
     if (FLVGetOperandKind(Operand) == FLV_OPERAND_KIND_SLOT)

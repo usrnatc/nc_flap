@@ -708,7 +708,14 @@
     #define DLL_IMPORT
     #define DLL_EXPORT
 #endif
-#define INTERNAL internal force_inline
+// NOTE(nc): for some reason GCC and clang hate inlining so easiest to just remove it
+#if defined(NC_CC_MSVC)
+    #define INTERNAL internal force_inline
+#elif defined(NC_CC_GCC) || defined(NC_CC_CLANG)
+    #define INTERNAL internal
+#else
+    #define INTERNAL
+#endif
 #define API_INTERNAL force_inline
 #if defined(NC_LANG_CPP)
     #define EXTERN_C_LINK extern "C"

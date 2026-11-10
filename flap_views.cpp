@@ -10,7 +10,7 @@
 
 #include "flap_views.h"
 
-INTERNAL FLAPFlightSet
+internal FLAPFlightSet
 FLAPFlightSetFromConfig(Arena* MemPool)
 {
     TempArena Scratch = GetScratch(&MemPool, 1);
@@ -49,7 +49,7 @@ FLAPFlightSetFromConfig(Arena* MemPool)
     return Result;
 }
 
-INTERNAL Str8
+internal Str8
 FLAPStrFromTimeOffset(Arena* MemPool, u64 USecs)
 {
     Str8 Result = "0s"_s8;
@@ -66,7 +66,7 @@ FLAPStrFromTimeOffset(Arena* MemPool, u64 USecs)
     return Result;
 }
  
-INTERNAL b32
+internal b32
 FLAPScalarKindIsChar(FLIScalarKind Kind)
 {
     b32 Result = (
@@ -78,7 +78,7 @@ FLAPScalarKindIsChar(FLIScalarKind Kind)
     return Result;
 }
 
-INTERNAL u64
+internal u64
 FLAPTablePositionFromRow(FLVRenderTable const* Table, u64 Row)
 {
     u64 Result = Row;
@@ -107,7 +107,7 @@ FLAPTablePositionFromRow(FLVRenderTable const* Table, u64 Row)
     return Result;
 }
 
-INTERNAL Str8
+internal Str8
 FLAPStrFromCell(
     Arena* MemPool,
     FLAPTableCtx* Data,
@@ -652,7 +652,7 @@ FLAPAnalysisUI(FLAPViewTabCtx* Ctx, u32 NodeIndex, r2f32 Rect)
     }
 }
 
-INTERNAL void
+internal void
 FLAPLayoutUI(FLAPViewTabCtx* Ctx, u32 NodeIndex, r2f32 Rect)
 {
     FLVLayoutNode const* Node = &Ctx->Unit->Lowered.Layout[NodeIndex];
