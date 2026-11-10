@@ -3110,8 +3110,6 @@ UIBuildBoxFromKey(UIBoxKind Kind, UIKey Key)
     Box->Tail = EMPTY_UI_BOX_VALUE;
     Box->Next = EMPTY_UI_BOX_VALUE;
     Box->Prev = EMPTY_UI_BOX_VALUE;
-    Box->HashNext = EMPTY_UI_BOX_VALUE;
-    Box->HashPrev = EMPTY_UI_BOX_VALUE;
     Box->Parent = EMPTY_UI_BOX_VALUE;
     Box->ChildCount = 0;
     Box->Kind = 0;
@@ -3143,7 +3141,11 @@ UIBuildBoxFromKey(UIBoxKind Kind, UIKey Key)
     Box->FastpathCodepoint = UI_STATE->FastpathCodepointStack.Head->V;
     Box->GroupKey = UI_STATE->GroupKeyStack.Head->V;
 
-    if (UIIsFocusActive() && (Box->Kind & UI_BOX_KIND_DEFAULT_FOCUS_NAV) && (UI_STATE->DefaultNavRootKey == EMPTY_UI_KEY_VALUE)) {
+    if (
+        UIIsFocusActive() && 
+        (Box->Kind & UI_BOX_KIND_DEFAULT_FOCUS_NAV) && 
+        (UI_STATE->DefaultNavRootKey == EMPTY_UI_KEY_VALUE)
+    ) {
         UI_STATE->DefaultNavRootKey = Box->Key;
     }
 
@@ -3154,7 +3156,13 @@ UIBuildBoxFromKey(UIBoxKind Kind, UIKey Key)
 
     Box->LastTouchedBuildIndex = UI_STATE->BuildIndex;
 
-    if (Box->Kind & UI_BOX_KIND_DISABLED && (!(LastKind & UI_BOX_KIND_DISABLED) || BoxFirstFrame)) {
+    if (
+        Box->Kind & UI_BOX_KIND_DISABLED && 
+        (
+            !(LastKind & UI_BOX_KIND_DISABLED) || 
+            BoxFirstFrame
+        )
+    ) {
         Box->FirstDisabledBuildIndex = UI_STATE->BuildIndex;
     }
 
@@ -3235,8 +3243,18 @@ UIBuildBoxFromKey(UIBoxKind Kind, UIKey Key)
         }
     }
 
-    if (Box->Kind & (UI_BOX_KIND_DRAW_BORDER | UI_BOX_KIND_DRAW_SIDE_RIGHT | UI_BOX_KIND_DRAW_SIDE_LEFT | UI_BOX_KIND_DRAW_SIDE_TOP | UI_BOX_KIND_DRAW_SIDE_BOTTOM)) {
-        if (UI_STATE->BorderColourStack.Head != &UI_STATE->BorderColourEmptyStackHead) {
+    if (
+        Box->Kind & (
+            UI_BOX_KIND_DRAW_BORDER | 
+            UI_BOX_KIND_DRAW_SIDE_RIGHT | 
+            UI_BOX_KIND_DRAW_SIDE_LEFT | 
+            UI_BOX_KIND_DRAW_SIDE_TOP | 
+            UI_BOX_KIND_DRAW_SIDE_BOTTOM
+        )
+    ) {
+        if (
+            UI_STATE->BorderColourStack.Head != &UI_STATE->BorderColourEmptyStackHead
+        ) {
             Box->BorderColour = UI_STATE->BorderColourStack.Head->V;
         } else {
             Box->BorderColour = UIColourFromName("border"_s8);
