@@ -21,6 +21,7 @@
 #include "flv_compile.h"
 #include "flv_kernel.h"
 
+#include "flap_widgets.h"
 #include "flap_views.h"
 
 #include "fli.cpp"
@@ -43,14 +44,10 @@
 #include "flv_kernel.cpp"
 #include "flv_run.cpp"
 
+#include "flap_widgets.cpp"
 #include "flap_views.cpp"
 
 #define FLAP_MAX_LANE_COUNT 256
-
-struct FLAPListViewState {
-    v2i64 Cursor;
-    v2i64 Mark;
-};
 
 void
 AppFileRecorded(Str8 Path)
@@ -216,11 +213,10 @@ AppViewUI(r2f32 Rect)
                 ? UI_FOCUS_KIND_OFF 
                 : UI_FOCUS_KIND_NULL
         ) {
-            if (StrMatch(ViewName, "files"_s8, 0)) {
-            } else if (StrMatch(ViewName, "views"_s8, 0)) {
-            } else {
-                FLAPViewTabUI(Rect);
-            }
+            FLAPViewUIFuncType* ViewUIFunc = FLAPViewUIFuncFromName(ViewName);
+
+            if (ViewUIFunc)
+                ViewUIFunc(Rect);
         }
     }
  

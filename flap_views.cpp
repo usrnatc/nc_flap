@@ -9,6 +9,7 @@
 #include "flv_run.h"
 
 #include "flap_views.h"
+#include "flap_widgets.h"
 
 FLAPViewRuleNode        __EMPTY_FLAP_VIEW_RULE_NODE_VALUE;
 FLAPViewRuleNode* const EMPTY_FLAP_VIEW_RULE_NODE_VALUE = &__EMPTY_FLAP_VIEW_RULE_NODE_VALUE;
@@ -48,15 +49,15 @@ FLAPViewsInit(void)
         FLAPViewUIFuncType* ViewUIFunc;
     } ViewInfos[] = {
         {
-            "FILES"_s8,
+            "files"_s8,
             FLAPFilesViewUI
         },
         {
-            "VIEWS"_s8,
+            "views"_s8,
             FLAPViewsViewUI
         },
         {
-            "VIEW"_s8,
+            "view"_s8,
             FLAPViewTabUI
         }
     };
@@ -76,6 +77,7 @@ FLAPViewsInit(void)
         ViewRule.Key = ViewNameHash;
         ViewRule.Name = Info.Name;
         ViewRule.ViewUIFunc = Info.ViewUIFunc;
+        NewNode->V = ViewRule;
         NewNode->Next = EMPTY_FLAP_VIEW_RULE_NODE_VALUE;
         NewNode->Prev = EMPTY_FLAP_VIEW_RULE_NODE_VALUE;
         DLL_PUSH_BACK_EX(
@@ -157,164 +159,6 @@ FLAPFlightSetFromConfig(Arena* MemPool)
     return Result;
 }
 
-internal Str8
-FLAPStrFromTimeOffset(Arena* MemPool, u64 USecs)
-{
-    Str8 Result = "0s"_s8;
- 
-    if (USecs) {
-        Result = ArenaPushStrFmt(
-            MemPool,
-            "+ %llu.%03llus",
-            USecs / MILLION(1),
-            (USecs % MILLION(1)) / THOUSAND(1)
-        );
-    }
- 
-    return Result;
-}
- 
-internal b32
-FLAPScalarKindIsChar(FLIScalarKind Kind)
-{
-    b32 Result = (
-        Kind == FLI_SCALAR_KIND_CHAR4 ||
-        Kind == FLI_SCALAR_KIND_CHAR16 ||
-        Kind == FLI_SCALAR_KIND_CHAR64
-    );
- 
-    return Result;
-}
-
-internal u64
-FLAPTablePositionFromRow(FLVRenderTable const* Table, u64 Row)
-{
-    u64 Result = Row;
- 
-    if (Table->Mask) {
-        u64 Low = 0;
-        u64 High = FLVSeriesWordCount(Table->SampleCount);
- 
-        while (High - Low > 1) {
-            u64 Mid = Low + (High - Low) / 2;
- 
-            if (Table->Rank[Mid] <= Row)
-                Low = Mid;
-            else
-                High = Mid;
-        }
- 
-        u64 Word = Table->Mask[Low];
- 
-        for (u64 Skip = Row - Table->Rank[Low]; Skip; --Skip)
-            Word &= Word - 1;
- 
-        Result = (Low << 6) + Ctz64(Word);
-    }
- 
-    return Result;
-}
-
-internal Str8
-FLAPStrFromCell(
-    Arena* MemPool,
-    FLAPTableCtx* Data,
-    u32 ColumnIndex,
-    u64 Row,
-    u64 Sample
-) {
-    FLVRenderTableColumn const* Column = &Data->Table->Columns[ColumnIndex];
-    FLVColumn const* Ref = &Data->Columns[ColumnIndex];
-    Str8 Result = "-"_s8;
- 
-    if (Column->IsMissing)
-        return Result;
- 
-    if (Column->Column != FLV_COLUMN_NONE) {
-        if (Ref->IsMissing)
-            return Result;
- 
-        if (FLAPScalarKindIsChar(Ref->Kind)) {
-            u8 const* Chars = (u8 const*) Ref->Data + Sample * Ref->ElementSize;
-            u64 Size = 0;
- 
-            for ( ; Size < Ref->ElementSize && Chars[Size]; ++Size);
- 
-            Result = Str((u8*) Chars, Size);
-        } else {
-            f64 Value = FLVColumnF64At(Ref, Sample);
-            b32 IsInteger = (
-                Ref->Scale == 1.0 &&
-                Ref->Kind != FLI_SCALAR_KIND_F32 &&
-                Ref->Kind != FLI_SCALAR_KIND_F64
-            );
- 
-            if (Value != Value) {
-                // NOTE(nathan): no-op
-            } else if (IsInteger) {
-                Result = ArenaPushStrFmt(MemPool, "%lld", (i64) Value);
-            } else {
-                Result = ArenaPushStrFmt(MemPool, "%.3f", Value);
-            }
-        }
-    } else {
-        u8 const* Bytes = (u8 const*) Column->Values + Row * Column->Width;
- 
-        if (FLAPScalarKindIsChar(Column->Kind)) {
-            u64 Size = 0;
- 
-            for ( ; Size < Column->Width && Bytes[Size]; ++Size);
- 
-            Result = Str((u8*) Bytes, Size);
-        } else if (Column->Kind == FLI_SCALAR_KIND_F64) {
-            f64 Value = 0.0;
- 
-            MemCpy(&Value, Bytes, sizeof(Value));
- 
-            if (Value == Value)
-                Result = ArenaPushStrFmt(MemPool, "%.3f", Value);
-        } else {
-            i64 Value = 0;
- 
-            MemCpy(&Value, Bytes, sizeof(Value));
- 
-            if (Value != FLV_I64_HOLE)
-                Result = ArenaPushStrFmt(MemPool, "%lld", Value);
-        }
-    }
- 
-    return Result;
-}
-
-INTERNAL
-UI_BOX_CUSTOM_DRAW(FLAPFlaggedRowDraw)
-{
-    v4f32 Colour = UIColourFromTagsKeyName(Box->TagsKey, "hover"_s8);
- 
-    UNUSED(UserData);
-    Colour.W *= 0.5f;
-    DrawRect(Box->Rect, Colour, 0.0f);
-}
-
-INTERNAL b32
-FLAPTimeIsFlagged(FLAPTableCtx* Ctx, u64 TimeUSecs)
-{
-    b32 Result = FALSE;
- 
-    for (
-        u32 FlagIndex = 0; 
-        FlagIndex < Ctx->FlagsCount && !Result; 
-        ++FlagIndex
-    ) {
-        FLVRenderFlag const* Flag = Ctx->Flags[FlagIndex];
- 
-        for (u64 Index = 0; Index < Flag->Count && !Result; ++Index)
-            Result = InRange(Flag->Ranges[Index], TimeUSecs);
-    }
- 
-    return Result;
-}
-
 INTERNAL f32**
 FLAPTablePercents(FLAPViewTabCtx* Ctx, u32 NodeIndex, u32 Count)
 {
@@ -340,323 +184,6 @@ FLAPTablePercents(FLAPViewTabCtx* Ctx, u32 NodeIndex, u32 Count)
         Result[Index] = &State->Percents[NodeIndex][Index];
  
     return Result;
-}
-
-INTERNAL void
-FLAPTableUI(
-    FLAPViewTabCtx* Ctx,
-    u32 NodeIndex,
-    FLVProgram const* Program,
-    FLVRenderItem* Items,
-    u32 HeadEmit,
-    r2f32 Rect
-) {
-    TempArena Scratch = GetScratch(NULL, 0);
-    FLVRenderTable const* Table = &Items[HeadEmit].Table;
-    FLAPTableCtx TableCtx = {};
-    u32 ColumnCount = Table->ColumnCount + 1;
-    f32** Percents = FLAPTablePercents(Ctx, NodeIndex, ColumnCount);
- 
-    TableCtx.Table = Table;
-    TableCtx.Program = Program;
-    TableCtx.Columns = ArenaPushArrayZero(
-        Scratch.MemPool,
-        FLVColumn,
-        Table->ColumnCount
-    );
-    TableCtx.Flags = ArenaPushArrayZero(
-        Scratch.MemPool,
-        FLVRenderFlag const*,
-        Program->EmitCount
-    );
- 
-    FLVColumnInit(
-        Ctx->Acc,
-        Ctx->Keys[Ctx->Flight],
-        Ctx->FLI,
-        Table->TimeColumn,
-        0,
-        &TableCtx.Time
-    );
- 
-    for (u32 Index = 0; Index < Table->ColumnCount; ++Index) {
-        FLVRenderTableColumn const* Column = &Table->Columns[Index];
- 
-        if (Column->Column != FLV_COLUMN_NONE) {
-            FLVColumnInit(
-                Ctx->Acc,
-                Ctx->Keys[Ctx->Flight],
-                Ctx->FLI,
-                Column->Column,
-                0,
-                &TableCtx.Columns[Index]
-            );
-        }
-    }
- 
-    for (u32 Index = 0; Index < Program->EmitCount; ++Index) {
-        if (
-            Program->Emits[Index].DisplayKind == TOKEN_KIND_FLAG &&
-            !Items[Index].IsMissing
-        ) {
-            TableCtx.Flags[TableCtx.FlagsCount++] = &Items[Index].Flag;
-        }
-    }
- 
-    if (Table->RowCount && !TableCtx.Time.IsMissing) {
-        u64 StartSample = FLVSeriesSampleIndex(
-            Table->Ranges,
-            Table->RangesCount,
-            FLAPTablePositionFromRow(Table, 0)
-        );
- 
-        TableCtx.StartTimeUSecs = FLVTimeAt(&TableCtx.Time, StartSample);
-    }
- 
-    UIScrollListParameters Params = {};
-    UIScrollListSignal ListSig = {};
-    r1i64 Visible = {};
- 
-    Params.Kind = UI_SCROLL_LIST_KIND_ALL;
-    Params.DimensionsPX = Vec(Length(Rect).X, Length(Rect).Y - 1.0f);
-    Params.RowHeightPX = 1.0f;
-    Params.CursorRange.Max.Y = (i64) Table->RowCount;
-    Params.ItemRange = Rng((i64) 0, (i64) Table->RowCount);
-    Params.CursorMinIsEmptySelection[AXIS_2D_Y] = TRUE;
- 
-    UITableFmt(ColumnCount, Percents, "###table_%u", NodeIndex) {
-        UITag("menu_bar"_s8) {
-            UISetNextFlags(UI_BOX_KIND_DRAW_BACKGROUND);
- 
-            UITableVector() {
-                UITableCell() {
-                    UILabel("time"_s8);
-                }
- 
-                for (u32 Index = 0; Index < Table->ColumnCount; ++Index) {
-                    UITableCell() {
-                        UILabel(
-                            Program->Strings[
-                                Table->Columns[Index].LabelStringIndex
-                            ]
-                        );
-                    }
-                }
-            }
-        }
- 
-        UIScrollList(
-            &Params,
-            &Ctx->State->Scroll[NodeIndex],
-            &Ctx->State->Cursor[NodeIndex],
-            &Ctx->State->Mark[NodeIndex],
-            &Visible,
-            &ListSig
-        ) {
-            for (
-                i64 Row = Visible.Min;
-                Row <= Visible.Max && Row < (i64) Table->RowCount;
-                ++Row
-            ) {
-                b32 IsCursor = (Ctx->State->Cursor[NodeIndex].Y == Row + 1);
-                u64 Sample = FLVSeriesSampleIndex(
-                    Table->Ranges,
-                    Table->RangesCount,
-                    FLAPTablePositionFromRow(Table, (u64) Row)
-                );
-                u64 TimeUSecs = FLVTimeAt(&TableCtx.Time, Sample);
- 
-                UITag(
-                    IsCursor 
-                        ? "pop"_s8 
-                        : ""_s8
-                ) {
-                    UISetNextFlags(
-                        UI_BOX_KIND_MOUSE_CLICKABLE |
-                        UI_BOX_KIND_DRAW_BACKGROUND |
-                        UI_BOX_KIND_DRAW_HOT_EFFECTS
-                    );
- 
-                    UIBox* RowBox = UITableVectorBegin();
- 
-                    if (FLAPTimeIsFlagged(&TableCtx, TimeUSecs)) {
-                        UIBoxEquipCustomDraw(
-                            RowBox, 
-                            FLAPFlaggedRowDraw, 
-                            NULL
-                        );
-                    }
-
-                    UITextAlignment(UI_TEXT_ALIGN_RIGHT) {
-                        UITableCell() {
-                            UILabel(
-                                "%S###c0",
-                                PRINT_STR(
-                                    FLAPStrFromTimeOffset(
-                                        UIBuildMemPool(),
-                                        TimeUSecs - TableCtx.StartTimeUSecs
-                                    )
-                                )
-                            );
-                        }
- 
-                        for (
-                            u32 Index = 0; 
-                            Index < Table->ColumnCount; 
-                            ++Index
-                        ) {
-                            b32 IsChar = FLAPScalarKindIsChar(
-                                Table->Columns[Index].Kind
-                            );
- 
-                            UITextAlignment(
-                                IsChar
-                                    ? UI_TEXT_ALIGN_LEFT
-                                    : UI_TEXT_ALIGN_RIGHT
-                            ) {
-                                UITableCell() {
-                                    UILabel(
-                                        "%S###c%u",
-                                        PRINT_STR(
-                                            FLAPStrFromCell(
-                                                UIBuildMemPool(),
-                                                &TableCtx,
-                                                Index,
-                                                (u64) Row,
-                                                Sample
-                                            )
-                                        ),
-                                        Index + 1
-                                    );
-                                }
-                            }
-                        }
-                    }
- 
-                    UISignal RowSig = UITableVectorEnd();
- 
-                    if (UI_PRESSED(RowSig)) {
-                        Ctx->State->Cursor[NodeIndex].Y = Row + 1;
-                        Ctx->State->Mark[NodeIndex] = Ctx->State->Cursor[
-                            NodeIndex
-                        ];
-                    }
-                }
-            }
-        }
-    }
- 
-    ReleaseScratch(Scratch);
-}
-
-INTERNAL Str8
-FLAPFlagLine(
-    Arena* MemPool,
-    FLVProgram const* Program,
-    FLVRenderItem* Items,
-    u64 Row
-) {
-    Str8 Result = ""_s8;
- 
-    for (u32 Index = 0; Index < Program->EmitCount; ++Index) {
-        if (Program->Emits[Index].DisplayKind != TOKEN_KIND_FLAG)
-            continue;
- 
-        FLVRenderItem const* Item = &Items[Index];
-        Str8 Label = Program->Strings[Program->Emits[Index].LabelStringIndex];
-        u64 Lines = Item->IsMissing ? 1 : 1 + Item->Flag.Count;
- 
-        if (Row >= Lines) {
-            Row -= Lines;
-            continue;
-        }
- 
-        if (!Row) {
-            Result = Item->IsMissing
-                ? ArenaPushStrFmt(MemPool, "%S: missing", PRINT_STR(Label))
-                : ArenaPushStrFmt(
-                    MemPool,
-                    "%S: %llu, total %S",
-                    PRINT_STR(Label),
-                    Item->Flag.Count,
-                    PRINT_STR(
-                        FLAPStrFromTimeOffset(
-                            MemPool,
-                            Item->Flag.TotalDurationUSecs
-                        )
-                    )
-                );
-        } else {
-            r1u64 Range = Item->Flag.Ranges[Row - 1];
- 
-            Result = ArenaPushStrFmt(
-                MemPool,
-                "  %S for %S",
-                PRINT_STR(FLAPStrFromTimeOffset(MemPool, Range.Min)),
-                PRINT_STR(FLAPStrFromTimeOffset(MemPool, Length(Range)))
-            );
-        }
- 
-        break;
-    }
- 
-    return Result;
-}
-
-INTERNAL void
-FLAPFlagListUI(
-    FLAPViewTabCtx* Ctx,
-    u32 NodeIndex,
-    FLVProgram const* Program,
-    FLVRenderItem* Items,
-    r2f32 Rect
-) {
-    u64 LineCount = 0;
- 
-    for (u32 Index = 0; Index < Program->EmitCount; ++Index) {
-        if (Program->Emits[Index].DisplayKind == TOKEN_KIND_FLAG) {
-            LineCount += Items[Index].IsMissing
-                ? 1
-                : 1 + Items[Index].Flag.Count;
-        }
-    }
- 
-    UIScrollListParameters Params = {};
-    UIScrollListSignal ListSig = {};
-    r1i64 Visible = {};
- 
-    Params.Kind = UI_SCROLL_LIST_KIND_ALL;
-    Params.DimensionsPX = Length(Rect);
-    Params.RowHeightPX = 1.0f;
-    Params.CursorRange.Max.Y = (i64) LineCount;
-    Params.ItemRange = Rng((i64) 0, (i64) LineCount);
-    Params.CursorMinIsEmptySelection[AXIS_2D_Y] = TRUE;
- 
-    UIScrollList(
-        &Params,
-        &Ctx->State->Scroll[NodeIndex],
-        &Ctx->State->Cursor[NodeIndex],
-        &Ctx->State->Mark[NodeIndex],
-        &Visible,
-        &ListSig
-    ) {
-        for (
-            i64 Row = Visible.Min;
-            Row <= Visible.Max && Row < (i64) LineCount;
-            ++Row
-        ) {
-            UIWidthFill() {
-                UILabel(
-                    FLAPFlagLine(
-                        UIBuildMemPool(),
-                        Program,
-                        Items,
-                        (u64) Row
-                    )
-                );
-            }
-        }
-    }
 }
 
 INTERNAL void
@@ -752,46 +279,301 @@ FLAPAnalysisUI(FLAPViewTabCtx* Ctx, u32 NodeIndex, r2f32 Rect)
                 }
             }
  
-            if (TableEmit != U32_MAX)
-                FLAPTableUI(Ctx, NodeIndex, Program, Items, TableEmit, Rect);
-            else if (FlagCount)
-                FLAPFlagListUI(Ctx, NodeIndex, Program, Items, Rect);
+            if (TableEmit != U32_MAX) {
+                FLAPTableParams Params = {};
+
+                Params.Acc = Ctx->Acc;
+                Params.FLI = Ctx->FLI;
+                Params.Program = Program;
+                Params.Items = Items;
+                Params.Percents = FLAPTablePercents(
+                    Ctx,
+                    NodeIndex,
+                    Items[TableEmit].Table.ColumnCount + 1
+                );
+                Params.Scroll = &Ctx->State->Scroll[NodeIndex];
+                Params.Cursor = &Ctx->State->Cursor[NodeIndex];
+                Params.Mark = &Ctx->State->Mark[NodeIndex];
+                Params.Flight = Ctx->Keys[Ctx->Flight];
+                Params.HeadEmit = TableEmit;
+                Params.Key = NodeIndex;
+                FLAPTable(&Params, Rect);
+            } else if (FlagCount) {
+                FLAPFlagListParams Params = {};
+
+                Params.Program = Program;
+                Params.Items = Items;
+                Params.Scroll = &Ctx->State->Scroll[NodeIndex];
+                Params.Cursor = &Ctx->State->Cursor[NodeIndex];
+                Params.Mark = &Ctx->State->Mark[NodeIndex];
+                FLAPFlagList(&Params, Rect);
+            }
         }
     }
 }
 
-internal void
-FLAPLayoutUI(FLAPViewTabCtx* Ctx, u32 NodeIndex, r2f32 Rect)
+INTERNAL Str8
+FLAPLayoutKey(FLAPViewTabCtx* Ctx, u32 NodeIndex, Str8 ParentKey)
 {
     FLVLayoutNode const* Node = &Ctx->Unit->Lowered.Layout[NodeIndex];
- 
-    if (Node->AnalysisIndex != U32_MAX) {
-        FLAPAnalysisUI(Ctx, NodeIndex, Rect);
- 
-        return;
-    }
- 
-    Axis2D Axis = (Node->Depth & 1) ? AXIS_2D_X : AXIS_2D_Y;
-    u32 Count = MAX(Node->ChildCount, 1);
-    f32 Share = 1.0f / (f32) Count;
-    f32 Step = Length(Rect).V[Axis] * Share;
- 
-    UISetNextChildLayoutAxis(Axis);
- 
-    UIBox* Box = UIBuildBoxFromStrFmt(0, "###layout_%u", NodeIndex);
- 
-    UIParent(Box) {
-        for (u32 Child = 0; Child < Node->ChildCount; ++Child) {
-            r2f32 ChildRect = Rect;
- 
-            ChildRect.Point0.V[Axis] = Rect.Point0.V[Axis] + Step * (f32) Child;
-            ChildRect.Point1.V[Axis] = ChildRect.Point0.V[Axis] + Step;
- 
-            UISetNextPreferredSize(Axis, UI_PERCENT(Share, 0.0f));
-            UISetNextPreferredSize(FLIP_AXIS(Axis), UI_PERCENT(1.0f, 0.0f));
-            FLAPLayoutUI(Ctx, Node->HeadChild + Child, ChildRect);
+    Str8 Name = Ctx->Unit->LayoutNames[NodeIndex];
+    Str8 Result = {};
+
+    if (!Name.Size)
+        Name = ArenaPushStrFmt(UIBuildMemPool(), "%u", Node->Ordinal);
+
+    Result = ParentKey.Size
+        ? ArenaPushStrFmt(
+            UIBuildMemPool(),
+            "%S.%S",
+            PRINT_STR(ParentKey),
+            PRINT_STR(Name)
+        )
+        : Name;
+
+    return Result;
+}
+
+INTERNAL void
+FLAPOverrideStore(ConfigNode* View, Str8 Key, f32 PercentOfParent)
+{
+    ConfigNode* Overrides = ConfigNodeChildFromStrOrAlloc(
+        APP_STATE->Config,
+        View,
+        "overrides"_s8
+    );
+    ConfigNode* Node = ConfigNodeChildFromStrOrAlloc(
+        APP_STATE->Config,
+        Overrides,
+        Key
+    );
+
+    ConfigNodeNewReplace(APP_STATE->Config, Node, "%f", PercentOfParent);
+}
+
+INTERNAL FLAPLayoutRecord
+FLAPLayoutRecDepthFirstPre(FLVLayoutNode const* Layout, u32 NodeIndex)
+{
+    FLAPLayoutRecord Result = {};
+    FLVLayoutNode const* Node = &Layout[NodeIndex];
+
+    Result.Next = U32_MAX;
+
+    if (Node->AnalysisIndex == U32_MAX && Node->ChildCount) {
+        Result.Next = Node->HeadChild;
+        ++Result.PushCount;
+    } else {
+        for (
+            u32 P = NodeIndex; 
+            P != 0; 
+            P = Layout[P].Parent, ++Result.PopCount
+        ) {
+            FLVLayoutNode const* Parent = &Layout[Layout[P].Parent];
+
+            if (P + 1 < Parent->HeadChild + Parent->ChildCount) {
+                Result.Next = P + 1;
+                break;
+            }
         }
     }
+
+    return Result;
+}
+
+internal Str8
+FLAPLayoutShape(Arena* MemPool, FLVUnit const* Unit) {
+    FLVLayoutNode const* Layout = Unit->Lowered.Layout;
+    Str8 Result = {};
+
+    for (
+        u32 Index = 0;
+        Index != U32_MAX;
+        Index = FLAPLayoutRecDepthFirstPre(Layout, Index).Next
+    ) {
+        FLVLayoutNode const* Node = &Layout[Index];
+
+        if (Node->AnalysisIndex != U32_MAX)
+            continue;
+
+        Result = Result.Size
+            ? ArenaPushStrFmt(
+                MemPool,
+                "%S.%u",
+                PRINT_STR(Result),
+                Node->ChildCount
+            )
+            : ArenaPushStrFmt(MemPool, "%u", Node->ChildCount);
+    }
+
+    return Result;
+}
+
+internal void
+FLAPLayoutUI(FLAPViewTabCtx* Ctx, r2f32 Rect) {
+    TempArena Scratch = GetScratch(NULL, 0);
+    FLVLayoutNode const* Layout = Ctx->Unit->Lowered.Layout;
+    ConfigNode* Overrides = ConfigNodeChildFromStr(Ctx->View, "overrides"_s8);
+    FLAPLayoutTask* Tasks = ArenaPushArrayZero(
+        Scratch.MemPool,
+        FLAPLayoutTask,
+        Ctx->Unit->Lowered.LayoutCount
+    );
+
+    Tasks[0].Rect = Rect;
+    Tasks[0].PercentOfParent = 1.0f;
+
+    for (u32 Index = 0; Index != U32_MAX; ) {
+        FLVLayoutNode const* Node = &Layout[Index];
+        FLAPLayoutTask* Task = &Tasks[Index];
+        FLAPLayoutRecord Rec = FLAPLayoutRecDepthFirstPre(Layout, Index);
+
+        if (Index) {
+            FLVLayoutNode const* Parent = &Layout[Node->Parent];
+            FLAPLayoutTask* ParentTask = &Tasks[Node->Parent];
+            Axis2D ParentAxis = (Parent->Depth & 1) ? AXIS_2D_X : AXIS_2D_Y;
+
+            if (Index != Parent->HeadChild) {
+                FLAPLayoutTask* PrevTask = Task - 1;
+                f32 TotalSize = ParentTask->ChildrenSize;
+                UIBox* BoundaryBox = EMPTY_UI_BOX_VALUE;
+
+                UITag("menu_bar"_s8) {
+                    UISetNextPreferredSize(ParentAxis, UI_PX(1.0f, 1.0f));
+                    UISetNextPreferredSize(
+                        FLIP_AXIS(ParentAxis),
+                        UI_PERCENT(1.0f, 0.0f)
+                    );
+                    UISetNextHoverCursor(
+                        (ParentAxis == AXIS_2D_X)
+                            ? CURSOR_KIND_LEFT_RIGHT
+                            : CURSOR_KIND_UP_DOWN
+                    );
+                    BoundaryBox = UIBuildBoxFromStrFmt(
+                        (
+                            UI_BOX_KIND_MOUSE_CLICKABLE |
+                            UI_BOX_KIND_DRAW_BACKGROUND |
+                            UI_BOX_KIND_DRAW_HOT_EFFECTS |
+                            UI_BOX_KIND_DRAW_ACTIVE_EFFECTS
+                        ),
+                        "###layout_boundary_%u",
+                        Index
+                    );
+                }
+
+                UISignal Sig = UISignalFromBox(BoundaryBox);
+
+                if (UI_PRESSED(Sig)) {
+                    v2f32 Percents = Vec(
+                        PrevTask->PercentOfParent, 
+                        Task->PercentOfParent
+                    );
+
+                    UIStoreDragStruct(&Percents);
+                } else if (UI_DRAGGING(Sig)) {
+                    v2f32 Percents = *UIGetDragStruct(v2f32);
+                    f32 BothSize = (Percents.X + Percents.Y) * TotalSize;
+
+                    if (BothSize >= 6.0f) {
+                        f32 MinSize = CLAMP(
+                            3.0f,
+                            Percents.X * TotalSize + UIDragDelta().V[ParentAxis],
+                            BothSize - 3.0f
+                        );
+
+                        FLAPOverrideStore(
+                            Ctx->View,
+                            PrevTask->Key,
+                            MinSize / TotalSize
+                        );
+                        FLAPOverrideStore(
+                            Ctx->View,
+                            Task->Key,
+                            (BothSize - MinSize) / TotalSize
+                        );
+                    }
+                }
+            }
+
+            UISetNextPreferredSize(
+                ParentAxis,
+                UI_PX(Length(Task->Rect).V[ParentAxis], 0.0f)
+            );
+            UISetNextPreferredSize(
+                FLIP_AXIS(ParentAxis),
+                UI_PERCENT(1.0f, 0.0f)
+            );
+        }
+
+        if (Node->AnalysisIndex != U32_MAX) {
+            FLAPAnalysisUI(Ctx, Index, Task->Rect);
+        } else {
+            Axis2D Axis = (Node->Depth & 1) ? AXIS_2D_X : AXIS_2D_Y;
+            u32 Count = Node->ChildCount;
+            f32 Remaining = 1.0f;
+            f32 Offset = 0.0f;
+            u32 FreeCount = 0;
+
+            Task->ChildrenSize = Length(Task->Rect).V[Axis];
+
+            if (Count)
+                Task->ChildrenSize -= (f32) (Count - 1);
+
+            for (u32 Child = 0; Child < Count; ++Child) {
+                FLAPLayoutTask* ChildTask = &Tasks[Node->HeadChild + Child];
+
+                ChildTask->Key = FLAPLayoutKey(
+                    Ctx,
+                    Node->HeadChild + Child,
+                    Task->Key
+                );
+
+                Str8 Value = ConfigNodeChildFromStr(
+                    Overrides,
+                    ChildTask->Key
+                )->Head->String;
+
+                if (Value.Size) {
+                    ChildTask->PercentOfParent = (f32) F64FromStr(Value);
+                    Remaining -= ChildTask->PercentOfParent;
+                } else {
+                    ++FreeCount;
+                }
+            }
+
+            Remaining = CLAMP_BOT(0.0f, Remaining);
+
+            for (u32 Child = 0; Child < Count; ++Child) {
+                FLAPLayoutTask* ChildTask = &Tasks[Node->HeadChild + Child];
+
+                if (ChildTask->PercentOfParent == 0.0f)
+                    ChildTask->PercentOfParent = Remaining / (f32) FreeCount;
+
+                ChildTask->Rect = Task->Rect;
+                ChildTask->Rect.Point0.V[Axis] = RoundF32(
+                    Task->Rect.Point0.V[Axis] + Offset
+                );
+                Offset += ChildTask->PercentOfParent * Task->ChildrenSize;
+                ChildTask->Rect.Point1.V[Axis] = RoundF32(
+                    Task->Rect.Point0.V[Axis] + Offset
+                );
+                Offset += 1.0f;
+            }
+
+            UISetNextChildLayoutAxis(Axis);
+
+            UIBox* Box = UIBuildBoxFromStrFmt(0, "###layout_%u", Index);
+
+            if (Rec.PushCount)
+                UIPushParent(Box);
+        }
+
+        for (i32 Pop = 0; Pop < Rec.PopCount; ++Pop)
+            UIPopParent();
+
+        Index = Rec.Next;
+    }
+
+    ReleaseScratch(Scratch);
 }
 
 FLAP_VIEW_UI_FUNC_SIG(FLAPViewTabUI)
@@ -831,8 +613,36 @@ FLAP_VIEW_UI_FUNC_SIG(FLAPViewTabUI)
             AppRequestFrame();
         } else {
             FLAPViewTabCtx Ctx = {};
+            ConfigNode* View = ConfigNodeFromID(Registers()->View);
+
+            if (State->UnitHash != Unit->Hash) {
+                Str8 Shape = FLAPLayoutShape(Scratch.MemPool, Unit);
+                ConfigNode* ShapeNode = ConfigNodeChildFromStrOrAlloc(
+                    APP_STATE->Config,
+                    View,
+                    "shape"_s8
+                );
+                ConfigNode* Overrides = ConfigNodeChildFromStr(
+                    View,
+                    "overrides"_s8
+                );
+
+                if (!StrMatch(ShapeNode->Head->String, Shape, 0)) {
+                    if (Overrides != EMPTY_CFG_NODE_VALUE) {
+                        ConfigNodeReleaseAllChildren(
+                            APP_STATE->Config,
+                            Overrides
+                        );
+                    }
+
+                    ConfigNodeNewReplace(APP_STATE->Config, ShapeNode, Shape);
+                }
+
+                State->UnitHash = Unit->Hash;
+            }
 
             for (u32 Index = 0; Index < Unit->Lowered.LayoutCount; ++Index) {
+
                 UIScrollPoint* Scroll = &State->Scroll[Index];
                 f32 Diff = -Scroll->Offset;
 
@@ -851,10 +661,11 @@ FLAP_VIEW_UI_FUNC_SIG(FLAPViewTabUI)
             Ctx.Flight = Flights.Selected;
             Ctx.FLI = FLI;
             Ctx.State = State;
+            Ctx.View = View;
  
             UISetNextPreferredSize(AXIS_2D_X, UI_PERCENT(1.0f, 0.0f));
             UISetNextPreferredSize(AXIS_2D_Y, UI_PERCENT(1.0f, 0.0f));
-            FLAPLayoutUI(&Ctx, 0, Rect);
+            FLAPLayoutUI(&Ctx, Rect);
         }
     }
  
@@ -882,8 +693,8 @@ FLAP_VIEW_UI_FUNC_SIG(FLAPFilesViewUI)
     AppViewState* VS = AppViewStateFromConfig(View);
     ConfigNode* QueryRoot = ConfigNodeChildFromStr(View, "query"_s8);
     ConfigNode* CmdRoot = ConfigNodeChildFromStr(QueryRoot, "cmd"_s8);
-    FLAPListViewState* State = GetAppViewState(
-        FLAPListViewState
+    FLAPFilesViewState* State = GetAppViewState(
+        FLAPFilesViewState
     );
     ConfigNodePtrList FileList = ConfigNodeTopLevelListFromStr(
         Scratch.MemPool,
@@ -1128,8 +939,8 @@ FLAP_VIEW_UI_FUNC_SIG(FLAPViewsViewUI)
     AppViewState* VS = AppViewStateFromConfig(View);
     ConfigNode* QueryRoot = ConfigNodeChildFromStr(View, "query"_s8);
     ConfigNode* CmdRoot = ConfigNodeChildFromStr(QueryRoot, "cmd"_s8);
-    FLAPListViewState* State = GetAppViewState(
-        FLAPListViewState
+    FLAPViewsViewState* State = GetAppViewState(
+        FLAPViewsViewState
     );
     ConfigNodePtrList ViewList = ConfigNodeTopLevelListFromStr(
         Scratch.MemPool,

@@ -1462,6 +1462,14 @@ CheckDisplay(CheckState* State, ASTNodeDisplay* Display, u32* ScopeKinds)
             );
         }
 
+        if (Kind == TOKEN_KIND_TABLE && (*ScopeKinds & Bit)) {
+            CHECK_ERROR(
+                State,
+                &Display->Header,
+                "an analysis can hold only one table; put each table in its own scope"
+            );
+        }
+
         *ScopeKinds |= Bit;
     }
 

@@ -5,6 +5,7 @@
 #include "nc_math.h"
 #include "nc_string.h"
 #include "nc_ui.h"
+#include "nc_config.h"
 
 #include "fli.h"
 
@@ -34,12 +35,8 @@ struct FLAPViewRuleSlot {
     FLAPViewRuleNode* Tail;
 };
 
-struct FLAPListViewState {
-    v2i64 Cursor;
-    v2i64 Mark;
-};
-
 struct FLAPViewTabState {
+    u64           UnitHash;
     UIScrollPoint Scroll[FLV_LAYOUT_MAX];
     v2i64         Cursor[FLV_LAYOUT_MAX];
     v2i64         Mark[FLV_LAYOUT_MAX];
@@ -47,19 +44,9 @@ struct FLAPViewTabState {
     u32           PercentsCount[FLV_LAYOUT_MAX];
 };
 
-struct FLAPTableCtx {
-    FLVRenderTable const* Table;
-    FLVProgram const*     Program;
-    FLVColumn*            Columns;
-    FLVColumn             Time;
-    FLVRenderFlag const** Flags;
-    u32                   FlagsCount;
-    u32                   __Padding;
-    u64                   StartTimeUSecs;
-};
-
 struct FLAPViewTabCtx {
     Access*           Acc;
+    ConfigNode*       View;
     FLVUnit const*    Unit;
     FLIKey const*     Keys;
     u64               KeysCount;
@@ -75,10 +62,33 @@ struct FLAPFlightSet {
     u32         __Padding;
 };
 
+struct FLAPFilesViewState {
+    v2i64 Cursor;
+    v2i64 Mark;
+};
+
+struct FLAPViewsViewState {
+    v2i64 Cursor;
+    v2i64 Mark;
+};
+
 struct FLAPViewsState {
     Arena*            MemPool;
     FLAPViewRuleSlot* Slots;
     u64               SlotsCount;
+};
+
+struct FLAPLayoutRecord {
+    u32 Next;
+    i32 PushCount;
+    i32 PopCount;
+};
+
+struct FLAPLayoutTask {
+    r2f32 Rect;
+    Str8  Key;
+    f32   PercentOfParent;
+    f32   ChildrenSize;
 };
 
 // @runtime____________________________________________________________________
@@ -87,8 +97,6 @@ extern FLAPViewRuleNode* const EMPTY_FLAP_VIEW_RULE_NODE_VALUE;
 
 // @functions__________________________________________________________________
 void FLAPViewsInit(void);
-
-INTERNAL UI_BOX_CUSTOM_DRAW(FLAPFlaggedRowDraw);
 
 // TODO(nc): empty stub for missing view funcs?
 FLAP_VIEW_UI_FUNC_SIG(FLAPFilesViewUI);

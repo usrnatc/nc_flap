@@ -1,6 +1,16 @@
 analysis {
-    // table(BAT[0].Volt, BAT[0].Curr, BAT[0].Volt * BAT[0].Curr);
+    table(BAT[0].Volt, BAT[0].Curr, BAT[0].Volt * BAT[0].Curr);
     // flag(BAT[0].Volt >= 8);
 
-    flag(mode(MANUAL) & SYAW.wow == 0, "Safety Pilot Takeover");
+    // flag(mode(MANUAL) & SYAW.wow == 0, "Safety Pilot Takeover");
+}
+
+{
+    {
+        table(ATT.Pitch);
+    }
+
+    {
+        table(ATT.Roll);
+    }
 }
