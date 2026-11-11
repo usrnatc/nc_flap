@@ -161,7 +161,7 @@ FLVBindSlots(
             case FLV_SLOT_KIND_MODE: {
                 Bound->ModeNumber = FLVModeNumberFromName(
                     VehicleKind, 
-                    SlotNames[Index].Field
+                    SlotNames[Index].Mode
                 );
                 Bound->IsMissing = (Bound->ModeNumber == FLV_MODE_NUMBER_NONE);
             } break;

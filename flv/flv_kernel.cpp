@@ -1365,8 +1365,11 @@ FLV_KERNEL_FUNC_SIG(FLVKernelSEL_AND)
     while (IndexA < A->Count && IndexB < B->Count) {
         r1u64 RangeA = A->V[IndexA];
         r1u64 RangeB = B->V[IndexB];
+        u64 Min = MAX(RangeA.Min, RangeB.Min);
+        u64 Max = MIN(RangeA.Max, RangeB.Max);
 
-        Dst->V[Dst->Count++] = Intersect(RangeA, RangeB);
+        Dst->V[Dst->Count] = Rng(Min, Max);
+        Dst->Count += (Min <= Max);
 
         if (RangeA.Max < RangeB.Max)
             ++IndexA;

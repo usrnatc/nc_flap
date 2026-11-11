@@ -10,6 +10,114 @@
 
 #include "flap_views.h"
 
+FLAPViewRuleNode        __EMPTY_FLAP_VIEW_RULE_NODE_VALUE;
+FLAPViewRuleNode* const EMPTY_FLAP_VIEW_RULE_NODE_VALUE = &__EMPTY_FLAP_VIEW_RULE_NODE_VALUE;
+
+FLAPViewsState* FLAP_VIEWS_STATE = NULL;
+
+void 
+FLAPViewsInit(void)
+{
+    EMPTY_FLAP_VIEW_RULE_NODE_VALUE->Next = EMPTY_FLAP_VIEW_RULE_NODE_VALUE;
+    EMPTY_FLAP_VIEW_RULE_NODE_VALUE->Prev = EMPTY_FLAP_VIEW_RULE_NODE_VALUE;
+
+    Arena* MemPool = ArenaAlloc();
+
+    FLAP_VIEWS_STATE = ArenaPushArrayZero(
+        MemPool, 
+        FLAPViewsState, 
+        1
+    );
+    FLAP_VIEWS_STATE->MemPool = MemPool;
+    FLAP_VIEWS_STATE->SlotsCount = 64;
+    FLAP_VIEWS_STATE->Slots = ArenaPushArrayZero(
+        MemPool,
+        FLAPViewRuleSlot,
+        FLAP_VIEWS_STATE->SlotsCount
+    );
+
+    for (u64 Index = 0; Index < FLAP_VIEWS_STATE->SlotsCount; ++Index) {
+        FLAPViewRuleSlot* Slot = &FLAP_VIEWS_STATE->Slots[Index];
+
+        Slot->Head = EMPTY_FLAP_VIEW_RULE_NODE_VALUE;
+        Slot->Tail = EMPTY_FLAP_VIEW_RULE_NODE_VALUE;
+    }
+
+    struct ViewInfo {
+        Str8                Name;
+        FLAPViewUIFuncType* ViewUIFunc;
+    } ViewInfos[] = {
+        {
+            "FILES"_s8,
+            FLAPFilesViewUI
+        },
+        {
+            "VIEWS"_s8,
+            FLAPViewsViewUI
+        },
+        {
+            "VIEW"_s8,
+            FLAPViewTabUI
+        }
+    };
+
+    for (u64 Index = 0; Index < ARRAY_COUNT(ViewInfos); ++Index) {
+        FLAPViewRuleNode* NewNode = ArenaPushArrayZero(
+            MemPool, 
+            FLAPViewRuleNode, 
+            1
+        );
+        ViewInfo Info = ViewInfos[Index];
+        u64 ViewNameHash = Hash(Info.Name);
+        u64 SlotIndex = ViewNameHash % FLAP_VIEWS_STATE->SlotsCount;
+        FLAPViewRuleSlot* Slot = &FLAP_VIEWS_STATE->Slots[SlotIndex];
+        FLAPViewRule ViewRule = {};
+
+        ViewRule.Key = ViewNameHash;
+        ViewRule.Name = Info.Name;
+        ViewRule.ViewUIFunc = Info.ViewUIFunc;
+        NewNode->Next = EMPTY_FLAP_VIEW_RULE_NODE_VALUE;
+        NewNode->Prev = EMPTY_FLAP_VIEW_RULE_NODE_VALUE;
+        DLL_PUSH_BACK_EX(
+            EMPTY_FLAP_VIEW_RULE_NODE_VALUE,
+            Slot->Head,
+            Slot->Tail,
+            NewNode,
+            Next,
+            Prev
+        );
+    }
+}
+
+FLAPViewUIFuncType*
+FLAPViewUIFuncFromName(Str8 Name)
+{
+    FLAPViewUIFuncType* Result = NULL;
+
+    if (FLAP_VIEWS_STATE) {
+        u64 NameHash = Hash(Name);
+        u64 SlotIndex = NameHash % FLAP_VIEWS_STATE->SlotsCount;
+        FLAPViewRuleSlot* Slot = &FLAP_VIEWS_STATE->Slots[SlotIndex];
+        FLAPViewRuleNode* FoundNode = EMPTY_FLAP_VIEW_RULE_NODE_VALUE;
+
+        for (
+            FLAPViewRuleNode* Node = Slot->Head;
+            Node && Node != EMPTY_FLAP_VIEW_RULE_NODE_VALUE;
+            Node = Node->Next
+        ){
+            if (Node->V.Key == NameHash) {
+                FoundNode = Node;
+                break;
+            }
+        }
+
+        if (FoundNode != EMPTY_FLAP_VIEW_RULE_NODE_VALUE)
+            Result = FoundNode->V.ViewUIFunc;
+    }
+
+    return Result;
+}
+
 internal FLAPFlightSet
 FLAPFlightSetFromConfig(Arena* MemPool)
 {
@@ -686,8 +794,7 @@ FLAPLayoutUI(FLAPViewTabCtx* Ctx, u32 NodeIndex, r2f32 Rect)
     }
 }
 
-void
-FLAPViewTabUI(r2f32 Rect)
+FLAP_VIEW_UI_FUNC_SIG(FLAPViewTabUI)
 {
     TempArena Scratch = GetScratch(NULL, 0);
     FLAPViewTabState* State = GetAppViewState(FLAPViewTabState);
@@ -765,5 +872,502 @@ FLAPViewTabUI(r2f32 Rect)
         }
     }
  
+    ReleaseScratch(Scratch);
+}
+
+FLAP_VIEW_UI_FUNC_SIG(FLAPFilesViewUI)
+{
+    TempArena Scratch = GetScratch(NULL, 0);
+    ConfigNode* View = ConfigNodeFromID(Registers()->View);
+    AppViewState* VS = AppViewStateFromConfig(View);
+    ConfigNode* QueryRoot = ConfigNodeChildFromStr(View, "query"_s8);
+    ConfigNode* CmdRoot = ConfigNodeChildFromStr(QueryRoot, "cmd"_s8);
+    FLAPListViewState* State = GetAppViewState(
+        FLAPListViewState
+    );
+    ConfigNodePtrList FileList = ConfigNodeTopLevelListFromStr(
+        Scratch.MemPool,
+        "file"_s8
+    );
+    ConfigNodePtrArray AllFiles = ConfigNodePtrArrayFromList(
+        Scratch.MemPool,
+        &FileList
+    );
+    ConfigNodePtrArray Files = {};
+    UIScrollPoint2D ScrollPosition = AppViewScrollPosition();
+    Str8 OpenCommandName = APP_COMMAND_KIND_INFO_TABLE[
+        APP_COMMAND_KIND_OPEN
+    ].String;
+    Str8 Filter = {};
+
+    if (
+        VS->QueryIsOpen &&
+        StrMatch(
+            CmdRoot->Head->String,
+            APP_COMMAND_KIND_INFO_TABLE[APP_COMMAND_KIND_FILTER].String,
+            0
+        )
+    ) {
+        Filter = Str(VS->QueryBuffer, VS->QueryStringSize);
+    }
+
+    Files.V = ArenaPushArrayZero(
+        Scratch.MemPool,
+        ConfigNode*,
+        AllFiles.Count
+    );
+
+    for (u64 Index = 0; Index < AllFiles.Count; ++Index) {
+        FMRangeList Matches = FuzzyFind(
+            Scratch.MemPool,
+            Filter,
+            AllFiles.V[Index]->Head->String
+        );
+
+        if (Matches.Count == Matches.StrPartCount)
+            Files.V[Files.Count++] = AllFiles.V[Index];
+    }
+
+    State->Cursor.Y = MIN(State->Cursor.Y, (i64) Files.Count);
+    State->Mark = State->Cursor;
+
+    UITag("menu_bar"_s8) {
+        UISetNextFlags(UI_BOX_KIND_DRAW_BACKGROUND);
+
+        UINamedRow("###files_toolbar"_s8) {
+            UITag("pop"_s8) {
+                UIPreferredWidth(UI_PX(26.0f, 1.0f)) {
+                    UISignal AddSig = AppIconButton(
+                        APP_ICON_KIND_ADD,
+                        NULL,
+                        "Add File or Folder###add_file"_s8
+                    );
+
+                    if (UI_CLICKED(AddSig)) {
+                        AppCmd(
+                            APP_COMMAND_KIND_RUN_COMMAND,
+                            __Registers.CommandName = OpenCommandName
+                        );
+                    }
+                }
+            }
+
+            AppCommandBindingButtons(OpenCommandName, ""_s8, 1, 0);
+        }
+    }
+
+    Rect.Y0 += 1.0f;
+
+    if (!Files.Count) {
+        UISpacer(UI_PERCENT(1.0f, 0.0f));
+
+        UIWidthFill() {
+            UITextAlignment(UI_TEXT_ALIGN_CENTRE) {
+                UITag("weak"_s8) {
+                    UILabel(
+                        AllFiles.Count
+                            ? "No file agrees with the filter."_s8
+                            : "There are no files in the list."_s8
+                    );
+                }
+            }
+        }
+
+        if (!AllFiles.Count) {
+            UIRow() {
+                UISpacer(UI_PERCENT(1.0f, 0.0f));
+
+                UITag("pop"_s8) {
+                    UIPreferredWidth(UI_PX(26.0f, 1.0f)) {
+                        UISignal AddSig = AppIconButton(
+                            APP_ICON_KIND_ADD,
+                            NULL,
+                            "Add File or Folder###add_file_centre"_s8
+                        );
+
+                        if (UI_CLICKED(AddSig)) {
+                            AppCmd(
+                                APP_COMMAND_KIND_RUN_COMMAND,
+                                __Registers.CommandName = OpenCommandName
+                            );
+                        }
+                    }
+                }
+
+                AppCommandBindingButtons(OpenCommandName, ""_s8, 1, 0);
+                UISpacer(UI_PERCENT(1.0f, 0.0f));
+            }
+        }
+
+        UISpacer(UI_PERCENT(1.0f, 0.0f));
+    } else {
+        UIScrollListParameters Params = {};
+        UIScrollListSignal ListSig = {};
+        r1i64 Visible = {};
+        Str8 AcceptedPath = {};
+
+        Params.Kind = UI_SCROLL_LIST_KIND_ALL;
+        Params.DimensionsPX = Length(Rect);
+        Params.RowHeightPX = 1.0f;
+        Params.CursorRange.Max.Y = (i64) Files.Count;
+        Params.ItemRange = Rng((i64) 0, (i64) Files.Count);
+        Params.CursorMinIsEmptySelection[AXIS_2D_Y] = TRUE;
+
+        UIFocus(UI_FOCUS_KIND_ON) {
+            UIScrollList(
+                &Params,
+                &ScrollPosition.Y,
+                &State->Cursor,
+                &State->Mark,
+                &Visible,
+                &ListSig
+            ) {
+                for (
+                    i64 Row = Visible.Min;
+                    Row <= Visible.Max && Row < (i64) Files.Count;
+                    ++Row
+                ) {
+                    Str8 Path = StrSkipLastSlash(
+                        Files.V[Row]->Head->String
+                    );
+                    b32 IsCursor = (State->Cursor.Y == Row + 1);
+
+                    UITag(IsCursor ? "pop"_s8 : ""_s8) {
+                        UISetNextChildLayoutAxis(AXIS_2D_X);
+
+                        UIBox* RowBox = UIBuildBoxFromStrFmt(
+                            (
+                                UI_BOX_KIND_MOUSE_CLICKABLE |
+                                UI_BOX_KIND_DRAW_BACKGROUND |
+                                UI_BOX_KIND_DRAW_HOT_EFFECTS
+                            ),
+                            "###file_row_%p",
+                            Files.V[Row]
+                        );
+
+                        UIParent(RowBox) {
+                            UIWidthFill() {
+                                UIBox* LabelBox = UILabel(Path).Box;
+
+                                if (Filter.Size) {
+                                    FMRangeList Matches = FuzzyFind(
+                                        Scratch.MemPool,
+                                        Filter,
+                                        Path
+                                    );
+
+                                    UIBoxEquipFuzzyMatchRanges(
+                                        LabelBox,
+                                        &Matches
+                                    );
+                                }
+                            }
+                        }
+
+                        UISignal RowSig = UISignalFromBox(RowBox);
+
+                        if (UI_PRESSED(RowSig)) {
+                            State->Cursor.Y = Row + 1;
+                            State->Mark = State->Cursor;
+                        }
+
+                        if (UI_DOUBLE_CLICKED(RowSig))
+                            AcceptedPath = Files.V[Row]->Head->String;
+                    }
+                }
+            }
+
+            if (
+                UIIsFocusActive() &&
+                State->Cursor.Y > 0 &&
+                UISlotPress(UI_EVENT_ACTION_SLOT_ACCEPT)
+            ) {
+                AcceptedPath = Files.V[State->Cursor.Y - 1]->Head->String;
+            }
+        }
+
+        if (State->Cursor.Y > 0) {
+            Str8 Selected = Files.V[
+                State->Cursor.Y - 1
+            ]->Head->String;
+            ConfigNode* Transient = ConfigNodeChildFromStr(
+                ConfigNodeRoot(),
+                "transient"_s8
+            );
+            ConfigNode* Flight = ConfigNodeChildFromStrOrAlloc(
+                APP_STATE->Config,
+                Transient,
+                "flight"_s8
+            );
+
+            if (!StrMatch(Flight->Head->String, Selected, 0)) {
+                ConfigNodeNewReplace(
+                    APP_STATE->Config,
+                    Flight,
+                    Selected
+                );
+            }
+
+            Registers()->FilePath = ArenaPushStrCpy(
+                AppFrameMemPool(),
+                Selected
+            );
+            Registers()->FlightIndex = (u32) (State->Cursor.Y - 1);
+        }
+    }
+
+    ScrollPosition.Y.Offset = 0.0f;
+    AppStoreViewScrollPosition(ScrollPosition);
+    ReleaseScratch(Scratch);
+}
+
+FLAP_VIEW_UI_FUNC_SIG(FLAPViewsViewUI)
+{
+    TempArena Scratch = GetScratch(NULL, 0);
+    ConfigNode* View = ConfigNodeFromID(Registers()->View);
+    AppViewState* VS = AppViewStateFromConfig(View);
+    ConfigNode* QueryRoot = ConfigNodeChildFromStr(View, "query"_s8);
+    ConfigNode* CmdRoot = ConfigNodeChildFromStr(QueryRoot, "cmd"_s8);
+    FLAPListViewState* State = GetAppViewState(
+        FLAPListViewState
+    );
+    ConfigNodePtrList ViewList = ConfigNodeTopLevelListFromStr(
+        Scratch.MemPool,
+        "view"_s8
+    );
+    ConfigNodePtrArray AllFiles = ConfigNodePtrArrayFromList(
+        Scratch.MemPool,
+        &ViewList
+    );
+    ConfigNodePtrArray Files = {};
+    UIScrollPoint2D ScrollPosition = AppViewScrollPosition();
+    Str8 OpenCommandName = APP_COMMAND_KIND_INFO_TABLE[APP_COMMAND_KIND_OPEN].String;
+    Str8 Filter = {};
+
+    if (
+        VS->QueryIsOpen &&
+        StrMatch(
+            CmdRoot->Head->String,
+            APP_COMMAND_KIND_INFO_TABLE[APP_COMMAND_KIND_FILTER].String,
+            0
+        )
+    ) {
+        Filter = Str(VS->QueryBuffer, VS->QueryStringSize);
+    }
+
+    Files.V = ArenaPushArrayZero(
+        Scratch.MemPool,
+        ConfigNode*,
+        AllFiles.Count
+    );
+
+    for (u64 Index = 0; Index < AllFiles.Count; ++Index) {
+        FMRangeList Matches = FuzzyFind(
+            Scratch.MemPool,
+            Filter,
+            AllFiles.V[Index]->Head->String
+        );
+
+        if (Matches.Count == Matches.StrPartCount)
+            Files.V[Files.Count++] = AllFiles.V[Index];
+    }
+
+    State->Cursor.Y = MIN(State->Cursor.Y, (i64) Files.Count);
+    State->Mark = State->Cursor;
+
+    UITag("menu_bar"_s8) {
+        UISetNextFlags(UI_BOX_KIND_DRAW_BACKGROUND);
+
+        UINamedRow("###views_toolbar"_s8) {
+            UITag("pop"_s8) {
+                UIPreferredWidth(UI_PX(26.0f, 1.0f)) {
+                    UISignal AddSig = AppIconButton(
+                        APP_ICON_KIND_ADD,
+                        NULL,
+                        "Add View###add_view"_s8
+                    );
+
+                    if (UI_CLICKED(AddSig)) {
+                        AppCmd(
+                            APP_COMMAND_KIND_RUN_COMMAND,
+                            __Registers.CommandName = OpenCommandName
+                        );
+                    }
+                }
+            }
+
+            AppCommandBindingButtons(OpenCommandName, ""_s8, 1, 0);
+        }
+    }
+
+    Rect.Y0 += 1.0f;
+
+    if (!Files.Count) {
+        UISpacer(UI_PERCENT(1.0f, 0.0f));
+
+        UIWidthFill() {
+            UITextAlignment(UI_TEXT_ALIGN_CENTRE) {
+                UITag("weak"_s8) {
+                    UILabel(
+                        AllFiles.Count
+                            ? "No view agrees with the filter."_s8
+                            : "There are no views in the list."_s8
+                    );
+                }
+            }
+        }
+
+        if (!AllFiles.Count) {
+            UIRow() {
+                UISpacer(UI_PERCENT(1.0f, 0.0f));
+
+                UITag("pop"_s8) {
+                    UIPreferredWidth(UI_PX(26.0f, 1.0f)) {
+                        UISignal AddSig = AppIconButton(
+                            APP_ICON_KIND_ADD,
+                            NULL,
+                            "Add View###add_view_centre"_s8
+                        );
+
+                        if (UI_CLICKED(AddSig)) {
+                            AppCmd(
+                                APP_COMMAND_KIND_RUN_COMMAND,
+                                __Registers.CommandName = OpenCommandName
+                            );
+                        }
+                    }
+                }
+
+                AppCommandBindingButtons(OpenCommandName, ""_s8, 1, 0);
+                UISpacer(UI_PERCENT(1.0f, 0.0f));
+            }
+        }
+
+        UISpacer(UI_PERCENT(1.0f, 0.0f));
+    } else {
+        UIScrollListParameters Params = {};
+        UIScrollListSignal ListSig = {};
+        r1i64 Visible = {};
+        Str8 AcceptedPath = {};
+
+        Params.Kind = UI_SCROLL_LIST_KIND_ALL;
+        Params.DimensionsPX = Length(Rect);
+        Params.RowHeightPX = 1.0f;
+        Params.CursorRange.Max.Y = (i64) Files.Count;
+        Params.ItemRange = Rng((i64) 0, (i64) Files.Count);
+        Params.CursorMinIsEmptySelection[AXIS_2D_Y] = TRUE;
+
+        UIFocus(UI_FOCUS_KIND_ON) {
+            UIScrollList(
+                &Params,
+                &ScrollPosition.Y,
+                &State->Cursor,
+                &State->Mark,
+                &Visible,
+                &ListSig
+            ) {
+                for (
+                    i64 Row = Visible.Min;
+                    Row <= Visible.Max && Row < (i64) Files.Count;
+                    ++Row
+                ) {
+                    Str8 Path = StrSkipLastSlash(
+                        Files.V[Row]->Head->String
+                    );
+                    b32 IsCursor = (State->Cursor.Y == Row + 1);
+
+                    UITag(IsCursor ? "pop"_s8 : ""_s8) {
+                        UISetNextChildLayoutAxis(AXIS_2D_X);
+
+                        UIBox* RowBox = UIBuildBoxFromStrFmt(
+                            (
+                                UI_BOX_KIND_MOUSE_CLICKABLE |
+                                UI_BOX_KIND_DRAW_BACKGROUND |
+                                UI_BOX_KIND_DRAW_HOT_EFFECTS
+                            ),
+                            "###view_row_%p",
+                            Files.V[Row]
+                        );
+
+                        UIParent(RowBox) {
+                            b32 IsOpen = FALSE;
+
+                            for (
+                                Str8Node* N = APP_STATE->TabFilePaths.Head;
+                                N && !IsOpen;
+                                N = N->Next
+                            ) {
+                                IsOpen = PathMatchNormalised(
+                                    N->String,
+                                    Files.V[Row]->Head->String
+                                );
+                            }
+
+                            UIPreferredWidth(UI_PX(2.0f, 1.0f)) {
+                                UILabel(
+                                    IsOpen
+                                        ? APP_ICON_KIND_TEXT_TABLE[APP_ICON_KIND_DOT]
+                                        : ""_s8
+                                );
+                            }
+
+                            UIWidthFill() {
+                                UIBox* LabelBox = UILabel(Path).Box;
+
+                                if (Filter.Size) {
+                                    FMRangeList Matches = FuzzyFind(
+                                        Scratch.MemPool,
+                                        Filter,
+                                        Path
+                                    );
+
+                                    UIBoxEquipFuzzyMatchRanges(
+                                        LabelBox,
+                                        &Matches
+                                    );
+                                }
+                            }
+                        }
+
+                        UISignal RowSig = UISignalFromBox(RowBox);
+
+                        if (UI_PRESSED(RowSig)) {
+                            State->Cursor.Y = Row + 1;
+                            State->Mark = State->Cursor;
+                        }
+
+                        if (UI_DOUBLE_CLICKED(RowSig))
+                            AcceptedPath = Files.V[Row]->Head->String;
+                    }
+                }
+            }
+
+            if (
+                UIIsFocusActive() &&
+                State->Cursor.Y > 0 &&
+                UISlotPress(UI_EVENT_ACTION_SLOT_ACCEPT)
+            ) {
+                AcceptedPath = Files.V[State->Cursor.Y - 1]->Head->String;
+            }
+        }
+
+        if (State->Cursor.Y > 0) {
+            Registers()->FilePath = ArenaPushStrCpy(
+                AppFrameMemPool(),
+                Files.V[State->Cursor.Y - 1]->Head->String
+            );
+        }
+
+        if (AcceptedPath.Size) {
+            AppCmd(
+                APP_COMMAND_KIND_BUILD_TAB,
+                __Registers.String = "view"_s8,
+                __Registers.FilePath = AcceptedPath
+            );
+        }
+    }
+
+    ScrollPosition.Y.Offset = 0.0f;
+    AppStoreViewScrollPosition(ScrollPosition);
     ReleaseScratch(Scratch);
 }

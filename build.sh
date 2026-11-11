@@ -47,6 +47,7 @@ SharedCompilerFlags=(
     "-mbmi2"
     "-mpclmul"
     "-maes"
+    "-mfma"
     "-fno-stack-protector"
     "-fno-strict-aliasing"
     "-fno-stack-protector"

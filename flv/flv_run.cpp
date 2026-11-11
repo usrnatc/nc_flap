@@ -262,10 +262,10 @@ FLVUpperBoundU64(FLVColumn const* Time, u64 Key)
     u64 Low = 0;
     u64 High = Time->Count;
 
-    while (Low <= High) {
+    while (Low < High) {
         u64 Mid = Low + (High - Low) / 2;
 
-        if (FLVTimeAt(Time, Mid) < Key)
+        if (FLVTimeAt(Time, Mid) <= Key)
             Low = Mid + 1;
         else
             High = Mid;
@@ -355,7 +355,6 @@ FLVRegionRun(FLVLane* Lane, FLVRegion const* Region)
     Lane->Region = Region;
     Lane->BaseTime = FLVBaseTimeColumn(Lane, Region->BaseSlot);
     Lane->Mask = NULL;
-    FLVChunkTimeDecode(Lane);
 
     if (!Lane->BaseTime || FLVTempIsMissing(Lane, Region->RangeSelection)) {
         FLVRegionMarkMissing(Lane, Region);
@@ -380,6 +379,7 @@ FLVRegionRun(FLVLane* Lane, FLVRegion const* Region)
             Lane->ChunkBase = Base;
             Lane->ChunkCount = MIN(FLV_CHUNK_SAMPLES, Range.Max - Base);
             Lane->Mask = NULL;
+            FLVChunkTimeDecode(Lane);
 
             for (u32 OpIndex = 0; OpIndex < Region->OpCount; ++OpIndex) {
                 FLVOp Op = Program->Ops[Region->HeadOp + OpIndex];

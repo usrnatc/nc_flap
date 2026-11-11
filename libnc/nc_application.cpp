@@ -6297,11 +6297,15 @@ AppWindowFrame(void)
             ) {
                 UIWidthFill() {
                     UILabel("Frame: %llu", APP_STATE->FrameIndex);
-                    UILabel("Frames requested: %llu", APP_STATE->NumFramesRequested);
-                    UILabel("Frame time: %llu us", FrameTimeCount ? FrameTimeSumUSecs / FrameTimeCount : 0);
+                    // UILabel("Frames requested: %llu", APP_STATE->NumFramesRequested);
+                    // UILabel("Frame time: %llu us", FrameTimeCount ? FrameTimeSumUSecs / FrameTimeCount : 0);
                     UILabel("Frame bytes: %llu", REND_STATE->PrevFrameBytes);
-                    UILabel("UI is animating: %d", (i32) UIIsAnimatingFromState(APP_STATE->UI));
+                    // UILabel("UI is animating: %d", (i32) UIIsAnimatingFromState(APP_STATE->UI));
                     UILabel("UI box count: %llu", APP_STATE->UI->LastBuildBoxCount);
+                    // UILabel("UI build index: %llu", APP_STATE->UI->BuildIndex);
+                    UILabel("UI table: %llu", APP_STATE->UI->TableBoxCount);
+                    UILabel("UI free: %llu", APP_STATE->UI->FreeBoxCount);
+                    UILabel("UI pruned: %llu", APP_STATE->UI->PrunedBoxCount);
                     UILabel("UI memory: %llu", ArenaGetPosition(APP_STATE->UI->MemPool));
                     UILabel(
                         "UI build memory: %llu, %llu",

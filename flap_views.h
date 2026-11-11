@@ -13,9 +13,32 @@
 #include "flv_compile.h"
 
 // @defines____________________________________________________________________
-
+#define FLAP_VIEW_UI_FUNC_SIG(X) void X(r2f32 Rect)
+typedef FLAP_VIEW_UI_FUNC_SIG(FLAPViewUIFuncType);
 
 // @types______________________________________________________________________
+struct FLAPViewRule {
+    u64                 Key;
+    Str8                Name;
+    FLAPViewUIFuncType* ViewUIFunc;
+};
+
+struct FLAPViewRuleNode {
+    FLAPViewRuleNode* Next;
+    FLAPViewRuleNode* Prev;
+    FLAPViewRule      V;
+};
+
+struct FLAPViewRuleSlot {
+    FLAPViewRuleNode* Head;
+    FLAPViewRuleNode* Tail;
+};
+
+struct FLAPListViewState {
+    v2i64 Cursor;
+    v2i64 Mark;
+};
+
 struct FLAPViewTabState {
     UIScrollPoint Scroll[FLV_LAYOUT_MAX];
     v2i64         Cursor[FLV_LAYOUT_MAX];
@@ -52,12 +75,24 @@ struct FLAPFlightSet {
     u32         __Padding;
 };
 
-// @runtime____________________________________________________________________
+struct FLAPViewsState {
+    Arena*            MemPool;
+    FLAPViewRuleSlot* Slots;
+    u64               SlotsCount;
+};
 
+// @runtime____________________________________________________________________
+extern FLAPViewsState* FLAP_VIEWS_STATE;
+extern FLAPViewRuleNode* const EMPTY_FLAP_VIEW_RULE_NODE_VALUE;
 
 // @functions__________________________________________________________________
-void FLAPViewTabUI(r2f32 Rect);
+void FLAPViewsInit(void);
 
 INTERNAL UI_BOX_CUSTOM_DRAW(FLAPFlaggedRowDraw);
+
+// TODO(nc): empty stub for missing view funcs?
+FLAP_VIEW_UI_FUNC_SIG(FLAPFilesViewUI);
+FLAP_VIEW_UI_FUNC_SIG(FLAPViewsViewUI);
+FLAP_VIEW_UI_FUNC_SIG(FLAPViewTabUI);
 
 #endif // __FLAP_VIEWS_H__

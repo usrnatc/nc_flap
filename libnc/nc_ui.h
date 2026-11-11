@@ -684,6 +684,9 @@ struct UIState {
     UIKey                    DefaultNavRootKey;
     u64                      BuildBoxCount;
     u64                      LastBuildBoxCount;
+    u64                      PrunedBoxCount;
+    u64                      FreeBoxCount;
+    u64                      TableBoxCount;
     b32                      ContextMenuTouchedThisFrame;
     b32                      IsAnimating;
     UIIconInfo               IconInfo;

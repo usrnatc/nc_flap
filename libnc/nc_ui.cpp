@@ -63,12 +63,12 @@ __UIAnimate(UIKey Key, UIAnimationParameters Params)
         UIAnimationSlot* Slot = &UI_STATE->AnimationSlots[SlotIndex];
 
         for (
-            UIAnimationNode* ANode = Slot->Head; 
-            ANode != EMPTY_ANIMATION_NODE_VALUE && ANode; 
-            ANode = ANode->SlotNext
+            UIAnimationNode* AnimNode = Slot->Head; 
+            AnimNode != EMPTY_ANIMATION_NODE_VALUE && AnimNode; 
+            AnimNode = AnimNode->SlotNext
         ) {
-            if (ANode->Key == Key) {
-                Node = ANode;
+            if (AnimNode->Key == Key) {
+                Node = AnimNode;
                 break;
             }
         }

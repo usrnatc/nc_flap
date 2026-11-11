@@ -1,3 +1,5 @@
+var Foo = BAT.Volt[BAT.Curr > 0];
+
 sag {
     graph(
         BAT.Volt,

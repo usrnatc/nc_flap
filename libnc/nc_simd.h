@@ -4224,8 +4224,8 @@
         zv2f32 Result = {};
         v256f DivX = _mm256_div_ps(VecA.X, VecB.X);
         v256f DivY = _mm256_div_ps(VecA.Y, VecB.Y);
-        v256f FloorX = _mm256_roundscale_ps(DivX, _MM_FROUND_FLOOR);            // TODO: compare against _mm256_floor_ps and 
-        v256f FloorY = _mm256_roundscale_ps(DivY, _MM_FROUND_FLOOR);            //     : _mm256_roundscale_round_ps
+        v256f FloorX = _mm256_floor_ps(DivX);
+        v256f FloorY = _mm256_floor_ps(DivY);
 
         Result.X = _mm256_fnmadd_ps(FloorX, VecB.X, VecA.X);
         Result.Y = _mm256_fnmadd_ps(FloorY, VecB.Y, VecA.Y);
@@ -4262,7 +4262,7 @@
     INTERNAL zv2f32
     Norm(zv2f32 Vec)
     {
-        v256f Scale = _mm256_rsqrt14_ps(LengthSq(Vec));
+        v256f Scale = _mm256_rsqrt_ps(LengthSq(Vec));
 
         return Vec * Scale;
     }
@@ -4379,8 +4379,8 @@
     {
         zv2i32 Result = {};
 
-        Result.X = _mm256_or_epi32(VecA.X, VecB.X);
-        Result.Y = _mm256_or_epi32(VecA.Y, VecB.Y);
+        Result.X = _mm256_or_si256(VecA.X, VecB.X);
+        Result.Y = _mm256_or_si256(VecA.Y, VecB.Y);
 
         return Result;
     }
@@ -4390,8 +4390,8 @@
     {
         zv2i32 Result = {};
 
-        Result.X = _mm256_xor_epi32(VecA.X, VecB.X);
-        Result.Y = _mm256_xor_epi32(VecA.Y, VecB.Y);
+        Result.X = _mm256_xor_si256(VecA.X, VecB.X);
+        Result.Y = _mm256_xor_si256(VecA.Y, VecB.Y);
 
         return Result;
     }
@@ -4400,9 +4400,10 @@
     operator~(zv2i32 VecA)
     {
         zv2i32 Result = {};
+        v256 Ones = _mm256_set1_epi32(~0);
 
-        Result.X = _mm256_ternarylogic_epi32(VecA.X, VecA.X, VecA.X, 0x55);
-        Result.Y = _mm256_ternarylogic_epi32(VecA.Y, VecA.Y, VecA.Y, 0x55);
+        Result.X = _mm256_xor_si256(VecA.X, Ones);
+        Result.Y = _mm256_xor_si256(VecA.Y, Ones);
 
         return Result;
     }
@@ -4531,7 +4532,7 @@
     Norm(zv2i32 Vec)
     {
         v256 Scale = _mm256_cvtps_epi32(
-            _mm256_rsqrt14_ps(
+            _mm256_rsqrt_ps(
                 _mm256_cvtepi32_ps(
                     LengthSq(Vec)
                 )
@@ -4762,8 +4763,8 @@
         zv2f64 Result = {};
         v256d DivX = _mm256_div_pd(VecA.X, VecB.X);
         v256d DivY = _mm256_div_pd(VecA.Y, VecB.Y);
-        v256d FloorX = _mm256_roundscale_pd(DivX, _MM_FROUND_FLOOR);            // TODO: compare against _mm256_floor_pd and 
-        v256d FloorY = _mm256_roundscale_pd(DivY, _MM_FROUND_FLOOR);            //     : _mm256_roundscale_round_pd
+        v256d FloorX = _mm256_floor_pd(DivX);
+        v256d FloorY = _mm256_floor_pd(DivY);
 
         Result.X = _mm256_fnmadd_pd(FloorX, VecB.X, VecA.X);
         Result.Y = _mm256_fnmadd_pd(FloorY, VecB.Y, VecA.Y);
@@ -4800,8 +4801,9 @@
     INTERNAL zv2f64
     Norm(zv2f64 Vec)
     {
-        v256d Scale = _mm256_rsqrt14_pd(
-            LengthSq(Vec)
+        v256d Scale = _mm256_div_pd(
+            _mm256_set1_pd(1.0),
+            Length(Vec)
         );
 
         return Vec * Scale;
@@ -5037,9 +5039,9 @@
         v256f DivX = _mm256_div_ps(VecA.X, VecB.X);
         v256f DivY = _mm256_div_ps(VecA.Y, VecB.Y);
         v256f DivZ = _mm256_div_ps(VecA.Z, VecB.Z);
-        v256f FloorX = _mm256_roundscale_ps(DivX, _MM_FROUND_FLOOR);            // TODO: compare against _mm256_floor_ps and 
-        v256f FloorY = _mm256_roundscale_ps(DivY, _MM_FROUND_FLOOR);            //     : _mm256_roundscale_round_ps
-        v256f FloorZ = _mm256_roundscale_ps(DivZ, _MM_FROUND_FLOOR);
+        v256f FloorX = _mm256_floor_ps(DivX);
+        v256f FloorY = _mm256_floor_ps(DivY);
+        v256f FloorZ = _mm256_floor_ps(DivZ);
 
         Result.X = _mm256_fnmadd_ps(FloorX, VecB.X, VecA.X);
         Result.Y = _mm256_fnmadd_ps(FloorY, VecB.Y, VecA.Y);
@@ -5081,7 +5083,7 @@
     INTERNAL zv3f32
     Norm(zv3f32 Vec)
     {
-        v256f Scale = _mm256_rsqrt14_ps(LengthSq(Vec));
+        v256f Scale = _mm256_rsqrt_ps(LengthSq(Vec));
 
         return Vec * Scale;
     }
@@ -5236,9 +5238,9 @@
     {
         zv3i32 Result = {};
 
-        Result.X = _mm256_or_epi32(VecA.X, VecB.X);
-        Result.Y = _mm256_or_epi32(VecA.Y, VecB.X);
-        Result.Z = _mm256_or_epi32(VecA.Z, VecB.X);
+        Result.X = _mm256_or_si256(VecA.X, VecB.X);
+        Result.Y = _mm256_or_si256(VecA.Y, VecB.X);
+        Result.Z = _mm256_or_si256(VecA.Z, VecB.X);
 
         return Result;
     }
@@ -5248,9 +5250,9 @@
     {
         zv3i32 Result = {};
 
-        Result.X = _mm256_xor_epi32(VecA.X, VecB.X);
-        Result.Y = _mm256_xor_epi32(VecA.Y, VecB.X);
-        Result.Z = _mm256_xor_epi32(VecA.Z, VecB.X);
+        Result.X = _mm256_xor_si256(VecA.X, VecB.X);
+        Result.Y = _mm256_xor_si256(VecA.Y, VecB.X);
+        Result.Z = _mm256_xor_si256(VecA.Z, VecB.X);
 
         return Result;
     }
@@ -5384,7 +5386,7 @@
     Norm(zv3i32 Vec)
     {
         v256 Scale = _mm256_cvtps_epi32(
-            _mm256_rsqrt14_ps(
+            _mm256_rsqrt_ps(
                 _mm256_cvtepi32_ps(
                     Length(Vec)
                 )
@@ -5698,7 +5700,10 @@
     INTERNAL zv3f64
     Norm(zv3f64 Vec)
     {
-        v256d Scale = _mm256_rsqrt14_pd(LengthSq(Vec));
+        v256d Scale = _mm256_div_pd(
+            _mm256_set1_pd(1.0),
+            Length(Vec)
+        );
 
         return Vec * Scale;
     }
@@ -6004,7 +6009,7 @@
     INTERNAL zv4f32
     Norm(zv4f32 Vec)
     {
-        v256f Scale = _mm256_rsqrt14_ps(LengthSq(Vec));
+        v256f Scale = _mm256_rsqrt_ps(LengthSq(Vec));
 
         return Vec * Scale;
     }
@@ -6165,10 +6170,10 @@
     {
         zv4i32 Result = {};
 
-        Result.X = _mm256_or_epi32(VecA.X, VecB.X);
-        Result.Y = _mm256_or_epi32(VecA.Y, VecB.Y);
-        Result.Z = _mm256_or_epi32(VecA.Z, VecB.Z);
-        Result.W = _mm256_or_epi32(VecA.W, VecB.W);
+        Result.X = _mm256_or_si256(VecA.X, VecB.X);
+        Result.Y = _mm256_or_si256(VecA.Y, VecB.Y);
+        Result.Z = _mm256_or_si256(VecA.Z, VecB.Z);
+        Result.W = _mm256_or_si256(VecA.W, VecB.W);
 
         return Result;
     }
@@ -6178,10 +6183,10 @@
     {
         zv4i32 Result = {};
 
-        Result.X = _mm256_xor_epi32(VecA.X, VecB.X);
-        Result.Y = _mm256_xor_epi32(VecA.Y, VecB.Y);
-        Result.Z = _mm256_xor_epi32(VecA.Z, VecB.Z);
-        Result.W = _mm256_xor_epi32(VecA.W, VecB.W);
+        Result.X = _mm256_xor_si256(VecA.X, VecB.X);
+        Result.Y = _mm256_xor_si256(VecA.Y, VecB.Y);
+        Result.Z = _mm256_xor_si256(VecA.Z, VecB.Z);
+        Result.W = _mm256_xor_si256(VecA.W, VecB.W);
 
         return Result;
     }
@@ -6318,7 +6323,7 @@
     Norm(zv4i32 Vec)
     {
         v256 Scale = _mm256_cvtps_epi32(
-            _mm256_rsqrt14_ps(
+            _mm256_rsqrt_ps(
                 _mm256_cvtepi32_ps(
                     LengthSq(Vec)
                 )
@@ -6639,7 +6644,10 @@
     INTERNAL zv4f64
     Norm(zv4f64 Vec)
     {
-        v256d Scale = _mm256_rsqrt14_pd(LengthSq(Vec));
+        v256d Scale = _mm256_div_pd(
+            _mm256_set1_pd(1.0),
+            Length(Vec)
+        );
 
         return Vec * Scale;
     }
@@ -6712,20 +6720,16 @@
     INTERNAL v256
     InRange(zr1i32 Range, v256 Val)
     {
-        __mmask8 MinMask = _mm256_cmp_epi32_mask(Range.Min, Val, _MM_CMPINT_GE);
-        __mmask8 MaxMask = _mm256_cmp_epi32_mask(Val, Range.Max, _MM_CMPINT_LT);
-        __mmask8 ResultMask = _kand_mask8(MinMask, MaxMask);
-
-        return _mm256_mask_mov_epi32(
-            _mm256_setzero_si256(),
-            ResultMask,
-            _mm256_set1_epi32(1)
+        v256 BelowMin = _mm256_cmpgt_epi32(
+            Range.Min,
+            Val
         );
- //        v256f MinMask = _mm256_cmp_ps(Range.Min, Val, _CMP_GE_OQ);
- //        v256f MaxMask = _mm256_cmp_ps(Val, Range.Max, _CMP_LT_OQ);
- //        v256f Mask = _mm256_and_ps(MinMask, MaxMask);
- // 
- //        return _mm256_and_ps(Mask, _mm256_set1_ps(1.0f));
+        v256 BelowMax = _mm256_cmpgt_epi32(
+            Range.Max,
+            Val
+        );
+
+        return _mm256_andnot_si256(BelowMin, BelowMax);
     }
 
     INTERNAL v256
