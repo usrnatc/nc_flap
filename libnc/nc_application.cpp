@@ -108,7 +108,6 @@ AppCommandKindInfo APP_COMMAND_KIND_INFO_TABLE[APP_COMMAND_KIND_COUNT] = {
         APP_ICON_KIND_UP_ARROW
     },
     {
-
         Str8Lit("new_panel_right"),
         Str8Lit("Split Panel Right"),
         Str8Lit("Makes a new panel on the right side of the focused panel."),
@@ -117,7 +116,6 @@ AppCommandKindInfo APP_COMMAND_KIND_INFO_TABLE[APP_COMMAND_KIND_COUNT] = {
         APP_ICON_KIND_RIGHT_ARROW
     },
     {
-
         Str8Lit("new_panel_down"),
         Str8Lit("Split Panel Down"),
         Str8Lit("Makes a new panel below the focused panel."),
