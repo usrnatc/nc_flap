@@ -22,19 +22,11 @@ enum AppRegistersSlot {
     APP_REGISTERS_SLOT_VIEW,
     APP_REGISTERS_SLOT_PREV_TAB,
     APP_REGISTERS_SLOT_DST_PANEL,
-
-    // >>>
     APP_REGISTERS_SLOT_CONFIG,
     APP_REGISTERS_SLOT_CONFIG_LIST,
-    // <<<
-
     APP_REGISTERS_SLOT_FILE_PATH,
-
-    // >>>
     APP_REGISTERS_SLOT_CURSOR,
     APP_REGISTERS_SLOT_MARK,
-    // <<<
-
     APP_REGISTERS_SLOT_FLIGHT_INDEX,
     APP_REGISTERS_SLOT_EXPRESSION,
     APP_REGISTERS_SLOT_UI_KEY,
@@ -67,12 +59,8 @@ enum AppCommandKind {
     APP_COMMAND_KIND_FOCUS_PANEL_LEFT,
     APP_COMMAND_KIND_FOCUS_PANEL_UP,
     APP_COMMAND_KIND_FOCUS_PANEL_DOWN,
-
-    // >>>
     APP_COMMAND_KIND_UNDO,
     APP_COMMAND_KIND_REDO,
-    // <<<
-
     APP_COMMAND_KIND_GO_BACK,
     APP_COMMAND_KIND_GO_FORWARD,
     APP_COMMAND_KIND_CLOSE_PANEL,
@@ -84,19 +72,13 @@ enum AppCommandKind {
     APP_COMMAND_KIND_OPEN_TAB,
     APP_COMMAND_KIND_BUILD_TAB,
     APP_COMMAND_KIND_DUPLICATE_TAB,
-
-    // >>>
     APP_COMMAND_KIND_COPY_TAB_FULL_PATH,
-    // <<<
-
     APP_COMMAND_KIND_CLOSE_TAB,
     APP_COMMAND_KIND_MOVE_VIEW,
     APP_COMMAND_KIND_SET_TAB_VIEW,
     APP_COMMAND_KIND_SET_TAB_FILE,
     APP_COMMAND_KIND_SET_CURRENT_PATH,
     APP_COMMAND_KIND_OPEN,
-
-    // >>>
     APP_COMMAND_KIND_SWITCH,
     APP_COMMAND_KIND_SHOW_FILE_IN_EXPLORER,
     APP_COMMAND_KIND_NEW_SESSION,
@@ -105,8 +87,6 @@ enum AppCommandKind {
     APP_COMMAND_KIND_SAVE_SESSION,
     APP_COMMAND_KIND_WRITE_SESSION_DATA,
     APP_COMMAND_KIND_SESSION_SETTINGS,
-    // <<<
-
     APP_COMMAND_KIND_EDIT,
     APP_COMMAND_KIND_ACCEPT,
     APP_COMMAND_KIND_CANCEL,
@@ -149,19 +129,13 @@ enum AppCommandKind {
     APP_COMMAND_KIND_INSERT_TEXT,
     APP_COMMAND_KIND_MOVE_NEXT,
     APP_COMMAND_KIND_MOVE_PREV,
-
-    // >>>
     APP_COMMAND_KIND_CENTRE_CURSOR,
     APP_COMMAND_KIND_CONTAIN_CURSOR,
-    // <<<
-
     APP_COMMAND_KIND_GOTO_TIME,
     APP_COMMAND_KIND_SEARCH,
     APP_COMMAND_KIND_SEARCH_BACKWARDS,
     APP_COMMAND_KIND_FIND_NEXT,
     APP_COMMAND_KIND_FIND_PREV,
-
-    // >>>
     APP_COMMAND_KIND_ENABLE_CONFIG,
     APP_COMMAND_KIND_DISABLE_CONFIG,
     APP_COMMAND_KIND_SELECT_CONFIG,
@@ -178,34 +152,20 @@ enum AppCommandKind {
     APP_COMMAND_KIND_PICK_FILE,
     APP_COMMAND_KIND_PICK_FOLDER,
     APP_COMMAND_KIND_PICK_FILE_OR_FOLDER,
-    // <<<
-
     APP_COMMAND_KIND_FILTER,
     APP_COMMAND_KIND_SET_THEME,
     APP_COMMAND_KIND_TOGGLE_DEV_MENU,
-
-    // >>>
     APP_COMMAND_KIND_RECORD_SESSION_AS_LAST_OPENED,
     APP_COMMAND_KIND_RECORD_RECENT_SESSION,
     APP_COMMAND_KIND_QUERY,
-    // <<<
-
     APP_COMMAND_KIND_PUSH_QUERY,
-
-    // >>>
     APP_COMMAND_KIND_RECORD_FILE_IN_SESSION,
-    // <<<
-
     APP_COMMAND_KIND_COMPLETE_QUERY,
     APP_COMMAND_KIND_CANCEL_QUERY,
     APP_COMMAND_KIND_UPDATE_QUERY,
     APP_COMMAND_KIND_OPEN_FILES,
     APP_COMMAND_KIND_OPEN_VIEWS,
-
-    // >>>
     APP_COMMAND_KIND_OPEN_FLV,
-    // <<<
-
     APP_COMMAND_KIND_COUNT,
     APP_COMMAND_KIND_FIRST_TAB_FAST_PATH_CMD = APP_COMMAND_KIND_OPEN_FILES
 };
@@ -282,28 +242,28 @@ enum AppQueryExpressionKind {
     APP_QUERY_EXPR_KIND_NULL,
     APP_QUERY_EXPR_KIND_COMMANDS,
     APP_QUERY_EXPR_KIND_TAB_COMMANDS,
-
-    // >>>
     APP_QUERY_EXPR_KIND_RECENT_FILES,
     APP_QUERY_EXPR_KIND_FLV_FILES,
-    APP_QUERY_KIND_RECENT_SESSIONS,
-    // <<<
-
+    APP_QUERY_EXPR_KIND_RECENT_SESSIONS,
     APP_QUERY_EXPR_KIND_THEMES,
-
-    // >>>
-    APP_COMMAND_EXPR_KIND_SESSION_SETTINGS,
-    APP_COMMAND_EXPR_KIND_CONFIG,
-    APP_COMMAND_EXPR_KIND_CONFIG_CHILD,
-    // <<<
-
+    APP_QUERY_EXPR_KIND_SESSION_SETTINGS,
+    APP_QUERY_EXPR_KIND_CONFIG,
+    APP_QUERY_EXPR_KIND_CONFIG_CHILD,
     APP_QUERY_EXPR_KIND_FILE_PATH,
     APP_QUERY_EXPR_KIND_COUNT
 };
 
-#define GetAppViewState(X) (X*) AppViewStateFromSize(sizeof(X))
-#define Registers()        (&APP_STATE->HeadRegisters->V)
-#define BaseRegisters()    (&APP_STATE->BaseRegisters.V)
+#define AppPluralFromCodeName(X)         (AppVocabInfoFromCodeName(X)->CodeNamePlural)
+#define AppDisplayFromCodeName(X)        (AppVocabInfoFromCodeName(X)->DisplayName)
+#define AppDisplayPluralFromCodeName(X)  (AppVocabInfoFromCodeName(X)->DisplayNamePlural)
+#define AppIconKindFromCodeName(X)       (AppVocabInfoFromCodeName(X)->IconKind)
+#define AppSingularFromCodeNamePlural(X) (AppVocabInfoFromCodeNamePlural(X)->CodeName)
+#define GetAppViewState(X) (X*)          AppViewStateFromSize(sizeof(X))
+#define AppStoreViewParameterF32(X, Y)   AppStoreViewParameter((X), "%ff", (Y))
+#define AppStoreViewParameterI64(X, Y)   AppStoreViewParameter((X), "%lld", (Y))
+#define AppStoreViewParameterU64(X, Y)   AppStoreViewParameter((X), "0x%llX", (Y))
+#define Registers()                      (&APP_STATE->HeadRegisters->V)
+#define BaseRegisters()                  (&APP_STATE->BaseRegisters.V)
 
 #define APP_REGISTERS_DEFAULT_INIT(X)           \
     X.Window = Registers()->Window,             \
@@ -312,11 +272,11 @@ enum AppQueryExpressionKind {
     X.View = Registers()->View,                 \
     X.PrevTab = Registers()->PrevTab,           \
     X.DstPanel = Registers()->DstPanel,         \
-    X.Config = Registers()->Config              \
-    X.ConfigList = Registers()->ConfigList      \
+    X.Config = Registers()->Config,             \
+    X.ConfigList = Registers()->ConfigList,     \
     X.FilePath = Registers()->FilePath,         \
-    X.Cursor = Registers()->Cursor              \
-    X.Mark = Registers()->Mark                  \
+    X.Cursor = Registers()->Cursor,             \
+    X.Mark = Registers()->Mark,                 \
     X.FlightIndex = Registers()->FlightIndex,   \
     X.Expression = Registers()->Expression,     \
     X.UI = Registers()->UI,                     \
@@ -610,6 +570,12 @@ struct AppState {
     Arena*                    AutoCompleteMemPool;
     AppRegisters*             AutoCompleteRegs;
     AppAutoCompleteCursorInfo AutoCompleteCursorInfo;
+    u64                       HoverEvalFirstTimeUSecs;
+    u64                       HoverEvalLastTimeUSecs;
+    Arena*                    HoverEvalMemPool;
+    Str8                      HoverEvalString;
+    b32                       HoverEvalFocused;
+    v2i32                     HoverEvalSpawnPosition;
 
     TextPoint                 QueryCursor;
     TextPoint                 QueryMark;
@@ -681,7 +647,7 @@ extern ConfigID APP_LAST_DRAG_DROP_PREV_TAB;
 
 EXTERN_C_LINK_BEGIN
 extern AppCommandKindInfo APP_COMMAND_KIND_INFO_TABLE[APP_COMMAND_KIND_COUNT];
-extern BindingTableEntry APP_DEFAULT_BINDING_TABLE[75];
+extern BindingTableEntry APP_DEFAULT_BINDING_TABLE[81];
 extern Str8 APP_ICON_KIND_TEXT_TABLE[APP_ICON_KIND_COUNT];
 extern Str8 APP_THEME_PRESET_DISPLAY_STR_TABLE[APP_THEME_PRESET_COUNT];
 extern Str8 APP_THEME_PRESET_CODE_STR_TABLE[APP_THEME_PRESET_COUNT];
@@ -716,8 +682,8 @@ void AppDragKill(void);
 void AppSetHoverRegisters(AppRegistersSlot Slot);
 AppRegisters* AppGetHoverRegisters(void);
 b32 AppIsProjectFiltered(ConfigNode* Config);
+v4f32 AppHSVAFromConfig(ConfigNode* Config);
 v4f32 AppColourFromConfig(ConfigNode* Config);
-u32 AppColourFromConfigU32(ConfigNode* Config);
 b32 AppIsDisabled(ConfigNode* Config);
 Str8 LabelFromConfig(ConfigNode* Config);
 Str8 ExpressionFromConfig(ConfigNode* Config);
@@ -769,8 +735,7 @@ Str8 AppLabelFromConfig(ConfigNode* Config);
 MDNode* AppThemeTreeFromName(Arena* MemPool, Access* Acc, Str8 Name);
 AppViewUIRule* AppViewUIRuleFromStr(Str8 String);
 void __AppSetAutoCompleteRegisters(Str8 Expr, AppRegisters* Regs);
-void AppSetHoverEval(v2f32 Position, Str8 String);
-AppQueryExpressionKind AppQueryExpressionKindFromStr(Str8 Expression);
+void AppSetHoverEval(v2i32 Position, Str8 String);
 AppQueryResultList AppQueryResultsFromExpression(Arena* MemPool, Str8 Expression, Str8 Input);
 void AppQueryViewUI(r2f32 Rect);
 FancyStrList AppTitleFStrFromConfig(Arena* MemPool, ConfigNode* Config, b32 IncludeExtras);

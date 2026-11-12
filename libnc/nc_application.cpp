@@ -22,295 +22,248 @@
 #include "nc_ui_components.h"
 
 AppViewState              __EMPTY_APP_VIEW_STATE_VALUE;
-AppViewState* const       EMPTY_APP_VIEW_STATE_VALUE        = &__EMPTY_APP_VIEW_STATE_VALUE;
+AppViewState* const       EMPTY_APP_VIEW_STATE_VALUE            = &__EMPTY_APP_VIEW_STATE_VALUE;
 AppCommandKindInfo        __EMPTY_APP_COMMAND_KIND_INFO_VALUE;
-AppCommandKindInfo* const EMPTY_APP_COMMAND_KIND_INFO_VALUE = &__EMPTY_APP_COMMAND_KIND_INFO_VALUE;
-AppState*                 APP_STATE                         = NULL;
+AppCommandKindInfo* const EMPTY_APP_COMMAND_KIND_INFO_VALUE     = &__EMPTY_APP_COMMAND_KIND_INFO_VALUE;
+AppVocabInfo              __EMPTY_APP_VOCAB_INFO_VALUE;
+AppVocabInfo* const       EMPTY_APP_VOCAB_INFO_VALUE            = &__EMPTY_APP_VOCAB_INFO_VALUE;
+AppViewUIRule             __EMPTY_APP_VIEW_UI_RULE_VALUE;
+AppViewUIRule* const      EMPTY_APP_VIEW_UI_RULE_VALUE          = &__EMPTY_APP_VIEW_UI_RULE_VALUE;
+AppState*                 APP_STATE                             = NULL;
+ConfigID                  APP_LAST_DRAG_DROP_PANEL              = 0;
+ConfigID                  APP_LAST_DRAG_DROP_PREV_TAB           = 0;
 
 EXTERN_C_LINK_BEGIN
 AppCommandKindInfo APP_COMMAND_KIND_INFO_TABLE[APP_COMMAND_KIND_COUNT] = {
     {},
     {
         Str8Lit("exit"),
-        Str8Lit("Exit"),
-        Str8Lit("Stops the program."),
-        Str8Lit("quit,close,end"),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_X
+        Str8Lit("Exits the application."),
+        Str8Lit("quit,close,end,abort"),
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
-        Str8Lit("open_palette"),
-        Str8Lit("Open Palette"),
-        Str8Lit("Shows the list of commands."),
-        Str8Lit("help,cmd,lister,commands"),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_FIND
+        Str8Lit("open_palette"), 
+        Str8Lit("Opens the palette."), 
+        Str8Lit("help,cmd,lister,commands"), 
+        Str8Lit(""), 
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
-        Str8Lit("run_command"),
-        Str8Lit("Run Command"),
-        Str8Lit("Runs a command from the palette."),
-        Str8Lit("help,cmd"),
-        0,
-        APP_ICON_KIND_NULL,
+        Str8Lit("run_command"), 
+        Str8Lit("Runs a command from the command palette."), 
+        Str8Lit("help,cmd"), 
+        Str8Lit(""), 
+        0, 
+        {
+            APP_QUERY_KIND_FLOATING | APP_QUERY_KIND_REQUIRED, 
+            APP_REGISTERS_SLOT_COMMAND_NAME, 
+            Str8Lit("query:commands")
+        }
+    },
+    {
+        Str8Lit("os_event")
+    },
+    {
+        Str8Lit("popup_accept"),
+        Str8Lit("Accepts the active popup prompt.")
+    },
+    {
+        Str8Lit("popup_cancel"),
+        Str8Lit("Cancels the active popup prompt.")
+    },
+    {
+        Str8Lit("reset_to_default_bindings"),
+        Str8Lit("Resets all keybindings to their defaults."),
+        Str8Lit(""),
+        Str8Lit(""),
+        0
+    },
+    {
+        Str8Lit("new_panel_left"),
+        Str8Lit("Creates a new panel to the left of the active panel."),
+        Str8Lit("panel"),
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
+    },
+    {
+        Str8Lit("new_panel_up"),
+        Str8Lit("Creates a new panel at the top of the active panel."),
+        Str8Lit("panel"),
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
+    },
+    {
+        Str8Lit("new_panel_right"),
+        Str8Lit("Creates a new panel to the right of the active panel."),
+        Str8Lit("panel"),
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
+    },
+    {
+        Str8Lit("new_panel_down"),
+        Str8Lit("Creates a new panel at the bottom of the active panel."),
+        Str8Lit("panel"),
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
+    },
+    {
+        Str8Lit("split_panel"),
+        Str8Lit("Creates a new panel in a given direction, and moves a tab to it, if specified.")
+    },
+    {
+        Str8Lit("next_panel"),
+        Str8Lit("Cycles the active panel forward."),
+        Str8Lit(""),
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
+    },
+    {
+        Str8Lit("prev_panel"),
+        Str8Lit("Cycles the active panel backwards."),
+        Str8Lit(""),
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
+    },
+    {
+        Str8Lit("focus_panel"),
+        Str8Lit("Focuses a new panel.")
+    },
+    {
+        Str8Lit("focus_panel_right"),
+        Str8Lit("Focuses a panel rightward of the currently focused panel."),
+        Str8Lit(""),
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
+    },
+    {
+        Str8Lit("focus_panel_left"),
+        Str8Lit("Focuses a panel leftward of the currently focused panel."),
+        Str8Lit(""),
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
+    },
+    {
+        Str8Lit("focus_panel_up"),
+        Str8Lit("Focuses a panel upward of the currently focused panel."),
+        Str8Lit(""),
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
+    },
+    {
+        Str8Lit("focus_panel_down"),
+        Str8Lit("Focuses a panel downward of the currently focused panel."),
+        Str8Lit(""),
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
+    },
+    {
+        Str8Lit("undo"),
+        Str8Lit("Undoes the previous action.")
+    },
+    {
+        Str8Lit("redo"),
+        Str8Lit("Redoes the first previously undone action.")
+    },
+    {
+        Str8Lit("go_back"),
+        Str8Lit("Returns to the previously selected panel and tab in recorded history.")
+    },
+    {
+        Str8Lit("go_forward"),
+        Str8Lit("Returns to the next selected panel and tab in recorded history.")
+    },
+    {
+        Str8Lit("close_panel"),
+        Str8Lit("Closes the currently active panel."),
+        Str8Lit(""),
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
+    },
+    {
+        Str8Lit("focus_tab"),
+        Str8Lit("Focuses the passed tab within its containing panel.")
+    },
+    {
+        Str8Lit("next_tab"),
+        Str8Lit("Focuses the next tab on the active panel."),
+        Str8Lit(""),
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
+    },
+    {
+        Str8Lit("prev_tab"),
+        Str8Lit("Focuses the previous tab on the active panel."),
+        Str8Lit(""),
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
+    },
+    {
+        Str8Lit("move_tab_right"),
+        Str8Lit("Moves the selected tab right one slot."),
+        Str8Lit(""),
+        Str8Lit("$tab,"),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
+    },
+    {
+        Str8Lit("move_tab_left"),
+        Str8Lit("Moves the selected tab left one slot."),
+        Str8Lit(""),
+        Str8Lit("$tab,"),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
+    },
+    {
+        Str8Lit("open_tab"),
+        Str8Lit("Opens a new tab."),
+        Str8Lit(""),
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
         {
             APP_QUERY_KIND_FLOATING | APP_QUERY_KIND_REQUIRED,
             APP_REGISTERS_SLOT_COMMAND_NAME,
+            Str8Lit("query:tab_commands"),
             Str8Lit("commands")
         }
     },
     {
-        Str8Lit("os_event"),
-        Str8Lit(""),
-        Str8Lit(""),
-        Str8Lit(""),
-        0,
-        APP_ICON_KIND_NULL
-    },
-    {
-        Str8Lit("popup_accept"),
-        Str8Lit("Accept"),
-        Str8Lit("Accepts the question that is on the screen."),
-        Str8Lit(""),
-        0,
-        APP_ICON_KIND_NULL
-    },
-    {
-        Str8Lit("popup_cancel"),
-        Str8Lit("Cancel"),
-        Str8Lit("Cancels the question that is on the screen."),
-        Str8Lit(""),
-        0,
-        APP_ICON_KIND_NULL
-    },
-    {
-        Str8Lit("reset_to_default_bindings"),
-        Str8Lit("Reset Keys"),
-        Str8Lit("Sets all keys to their initial commands."),
-        Str8Lit("keys,bindings,hotkeys"),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
-    },
-    {
-        Str8Lit("new_panel_left"),
-        Str8Lit("Split Panel Left"),
-        Str8Lit("Makes a new panel on the left side of the focused panel."),
-        Str8Lit("split,pane,side"),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_LEFT_ARROW
-    },
-    {
-        Str8Lit("new_panel_up"),
-        Str8Lit("Split Panel Up"),
-        Str8Lit("Makes a new panel above the focused panel."),
-        Str8Lit("split,pane,side"),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_UP_ARROW
-    },
-    {
-        Str8Lit("new_panel_right"),
-        Str8Lit("Split Panel Right"),
-        Str8Lit("Makes a new panel on the right side of the focused panel."),
-        Str8Lit("split,pane,side"),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_RIGHT_ARROW
-    },
-    {
-        Str8Lit("new_panel_down"),
-        Str8Lit("Split Panel Down"),
-        Str8Lit("Makes a new panel below the focused panel."),
-        Str8Lit("split,pane,side"),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_DOWN_ARROW
-    },
-    {
-        Str8Lit("split_panel"),
-        Str8Lit("Split Panel"),
-        Str8Lit("Makes a new panel and moves a tab into it."),
-        Str8Lit(""),
-        0,
-        APP_ICON_KIND_NULL
-    },
-    {
-        Str8Lit("next_panel"),
-        Str8Lit("Next Panel"),
-        Str8Lit("Moves the focus to the next panel."),
-        Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
-    },
-    {
-        Str8Lit("prev_panel"),
-        Str8Lit("Previous Panel"),
-        Str8Lit("Moves the focus to the previous panel."),
-        Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
-    },
-    {
-        Str8Lit("focus_panel"),
-        Str8Lit("Focus Panel"),
-        Str8Lit("Moves the focus to a panel."),
-        Str8Lit(""),
-        0,
-        APP_ICON_KIND_NULL
-    },
-    {
-        Str8Lit("focus_panel_right"),
-        Str8Lit("Focus Panel Right"),
-        Str8Lit("Moves the focus to the panel on the right."),
-        Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
-    },
-    {
-        Str8Lit("focus_panel_left"),
-        Str8Lit("Focus Panel Left"),
-        Str8Lit("Moves the focus to the panel on the left."),
-        Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
-    },
-    {
-        Str8Lit("focus_panel_up"),
-        Str8Lit("Focus Panel Up"),
-        Str8Lit("Moves the focus to the panel above."),
-        Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
-    },
-    {
-        Str8Lit("focus_panel_down"),
-        Str8Lit("Focus Panel Down"),
-        Str8Lit("Moves the focus to the panel below."),
-        Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
-    },
-    {
-        Str8Lit("go_back"),
-        Str8Lit("Go Back"),
-        Str8Lit("Goes to the position that you had before."),
-        Str8Lit("history"),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_LEFT_ARROW
-    },
-    {
-        Str8Lit("go_forward"),
-        Str8Lit("Go Forward"),
-        Str8Lit("Goes to the position that you had before you went back."),
-        Str8Lit("history"),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_RIGHT_ARROW
-    },
-    {
-        Str8Lit("close_panel"),
-        Str8Lit("Close Panel"),
-        Str8Lit("Closes the panel and all of its tabs."),
-        Str8Lit("split,pane"),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_X
-    },
-    {
-        Str8Lit("focus_tab"),
-        Str8Lit("Focus Tab"),
-        Str8Lit("Shows a tab."),
-        Str8Lit(""),
-        0,
-        APP_ICON_KIND_NULL
-    },
-    {
-        Str8Lit("next_tab"),
-        Str8Lit("Next Tab"),
-        Str8Lit("Shows the next tab."),
-        Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
-    },
-    {
-        Str8Lit("prev_tab"),
-        Str8Lit("Previous Tab"),
-        Str8Lit("Shows the previous tab."),
-        Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
-    },
-    {
-        Str8Lit("move_tab_right"),
-        Str8Lit("Move Tab Right"),
-        Str8Lit("Moves the tab one position to the right."),
-        Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI | APP_COMMAND_KIND_FLAG_LIST_IN_TAB,
-        APP_ICON_KIND_NULL
-    },
-    {
-        Str8Lit("move_tab_left"),
-        Str8Lit("Move Tab Left"),
-        Str8Lit("Moves the tab one position to the left."),
-        Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI | APP_COMMAND_KIND_FLAG_LIST_IN_TAB,
-        APP_ICON_KIND_NULL
-    },
-    {
-        Str8Lit("open_tab"),
-        Str8Lit("Open Tab"),
-        Str8Lit("Opens a new tab."),
-        Str8Lit("view,new"),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_ADD,
-        {
-            APP_QUERY_KIND_FLOATING | APP_QUERY_KIND_REQUIRED,
-            APP_REGISTERS_SLOT_COMMAND_NAME,
-            Str8Lit("tab_commands")
-        }
-    },
-    {
         Str8Lit("build_tab"),
-        Str8Lit("Build Tab"),
-        Str8Lit("Opens a new tab that shows a view of a file."),
-        Str8Lit(""),
-        0,
-        APP_ICON_KIND_NULL
+        Str8Lit("Opens a new tab with the parameterized view specification.")
     },
     {
         Str8Lit("duplicate_tab"),
-        Str8Lit("Duplicate Tab"),
-        Str8Lit("Makes a copy of the tab."),
-        Str8Lit("copy,clone"),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI | APP_COMMAND_KIND_FLAG_LIST_IN_TAB,
-        APP_ICON_KIND_ADD
+        Str8Lit("Duplicates a tab."),
+        Str8Lit(""),
+        Str8Lit("$tab,"),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
+    },
+    {
+        Str8Lit("copy_tab_full_path"),
+        Str8Lit("Copies the full path of the file being viewed by this tab."),
+        Str8Lit(""),
+        Str8Lit("$tab,")
     },
     {
         Str8Lit("close_tab"),
-        Str8Lit("Close Tab"),
-        Str8Lit("Closes the tab."),
+        Str8Lit("Closes the currently opened tab."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI | APP_COMMAND_KIND_FLAG_LIST_IN_TAB,
-        APP_ICON_KIND_X
+        Str8Lit("$tab,"),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_view"),
-        Str8Lit("Move View"),
-        Str8Lit("Moves a tab to a position in a panel."),
-        Str8Lit(""),
-        0,
-        APP_ICON_KIND_NULL
+        Str8Lit("Moves a view to a new panel.")
     },
     {
         Str8Lit("set_tab_view"),
-        Str8Lit("Set Tab View"),
-        Str8Lit("Changes the view that the tab is currently showing."),
-        Str8Lit(""),
-        0,
-        APP_ICON_KIND_NULL
+        Str8Lit("Changes the view that the tab is currently showing.")
     },
     {
         Str8Lit("change_file"),
-        Str8Lit("Change File"),
         Str8Lit("Changes the tlog file that the tab is showing."),
         Str8Lit("file,tlog,load"),
+        Str8Lit("$tab,"),
         APP_COMMAND_KIND_FLAG_LIST_IN_UI | APP_COMMAND_KIND_FLAG_LIST_IN_TAB,
-        APP_ICON_KIND_FILE,
         {
             (
                 APP_QUERY_KIND_ALLOW_FILES | 
@@ -318,373 +271,420 @@ AppCommandKindInfo APP_COMMAND_KIND_INFO_TABLE[APP_COMMAND_KIND_COUNT] = {
                 APP_QUERY_KIND_REQUIRED
             ),
             APP_REGISTERS_SLOT_FILE_PATH,
-            Str8Lit("")
+            Str8Lit("query:recent_files, query:flv_files")
         }
     },
     {
         Str8Lit("set_current_path"),
-        Str8Lit("Set Current Path"),
         Str8Lit("Sets the folder that the file list starts in."),
-        Str8Lit(""),
-        0,
-        APP_ICON_KIND_NULL
+        Str8Lit("")
     },
     {
         Str8Lit("open"),
-        Str8Lit("Open"),
         Str8Lit("Opens a tlog file, or all tlog files in a folder."),
         Str8Lit("file,folder,tlog,load"),
+        Str8Lit(""),
         APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_FOLDER,
         {
-            APP_QUERY_KIND_ALLOW_FILES | APP_QUERY_KIND_ALLOW_FOLDERS | APP_QUERY_KIND_FLOATING | APP_QUERY_KIND_REQUIRED,
+            (
+                APP_QUERY_KIND_ALLOW_FILES | 
+                APP_QUERY_KIND_ALLOW_FOLDERS | 
+                APP_QUERY_KIND_FLOATING | 
+                APP_QUERY_KIND_REQUIRED
+            ),
             APP_REGISTERS_SLOT_FILE_PATH,
-            Str8Lit("")
+            Str8Lit("folder:\"$input\"")
         }
     },
     {
-        Str8Lit("edit"),
-        Str8Lit("Edit"),
-        Str8Lit("Starts an edit of the selection."),
+        Str8Lit("switch"),
+        Str8Lit("Switches to a recent file."),
+        Str8Lit("flv,view,file"),
         Str8Lit(""),
         APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        {
+            APP_QUERY_KIND_FLOATING | APP_QUERY_KIND_REQUIRED,
+            APP_REGISTERS_SLOT_CONFIG,
+            Str8Lit("query:recent_files, query:flv_files")
+        }
+    },
+    {
+        Str8Lit("show_file_in_explorer"),
+        Str8Lit("Opens the operating system's file explorer and shows the selected file."),
+        Str8Lit(""),
+        Str8Lit("$file"),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
+    },
+    {
+        Str8Lit("new_session"),
+        Str8Lit("Creates a new session file, and sets the current session path as that file's path."),
+        Str8Lit("new,session,layout"),
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
+        {
+            APP_QUERY_KIND_ALLOW_FILES | APP_QUERY_KIND_FLOATING | APP_QUERY_KIND_REQUIRED,
+            APP_REGISTERS_SLOT_FILE_PATH,
+            Str8Lit("folder:\"$input\"")
+        }
+    },
+    {
+        Str8Lit("open_session"),
+        Str8Lit("Opens a session file path, immediately loading it, and begins autosaving to it."),
+        Str8Lit("session"),
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
+        {
+            APP_QUERY_KIND_ALLOW_FILES | APP_QUERY_KIND_FLOATING | APP_QUERY_KIND_REQUIRED,
+            APP_REGISTERS_SLOT_FILE_PATH,
+            Str8Lit("folder:\"$input\"")
+        }
+    },
+    {
+        Str8Lit("open_recent_session"),
+        Str8Lit("Opens a recently used session file."),
+        Str8Lit("session"),
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
+        {
+            APP_QUERY_KIND_FLOATING | APP_QUERY_KIND_REQUIRED,
+            APP_REGISTERS_SLOT_CONFIG,
+            Str8Lit("query:recent_sessions")
+        }
+    },
+    {
+        Str8Lit("save_session"),
+        Str8Lit("Saves session data to a file, and sets the current session path as that path."),
+        Str8Lit("session"),
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
+        {
+            APP_QUERY_KIND_ALLOW_FILES | APP_QUERY_KIND_FLOATING | APP_QUERY_KIND_REQUIRED,
+            APP_REGISTERS_SLOT_FILE_PATH,
+            Str8Lit("folder:\"$input\"")
+        }
+    },
+    {
+        Str8Lit("write_session_data"),
+        Str8Lit("Writes session data to the active session file.")
+    },
+    {
+        Str8Lit("session_settings"),
+        Str8Lit("Opens session settings."),
+        Str8Lit(""),
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
+    },
+    {
+        Str8Lit("edit"),
+        Str8Lit("Edits the current selection."),
+        Str8Lit(""),
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("accept"),
-        Str8Lit("Accept"),
-        Str8Lit("Accepts the changes, or gives the answer yes."),
+        Str8Lit("Accepts current changes, or answers prompts in the affirmative."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("cancel"),
-        Str8Lit("Cancel"),
-        Str8Lit("Rejects the changes, closes a menu, or gives the answer no."),
+        Str8Lit("Rejects current changes, exits temporary menus, or answers prompts in the negative."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_left"),
-        Str8Lit("Move Left"),
-        Str8Lit("Moves the cursor left."),
+        Str8Lit("Moves the cursor or selection left."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_right"),
-        Str8Lit("Move Right"),
-        Str8Lit("Moves the cursor right."),
+        Str8Lit("Moves the cursor or selection right."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_up"),
-        Str8Lit("Move Up"),
-        Str8Lit("Moves the cursor up."),
+        Str8Lit("Moves the cursor or selection up."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_down"),
-        Str8Lit("Move Down"),
-        Str8Lit("Moves the cursor down."),
+        Str8Lit("Moves the cursor or selection down."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_left_select"),
-        Str8Lit("Move Left Select"),
-        Str8Lit("Moves the cursor left and selects."),
+        Str8Lit("Moves the cursor or selection left, while selecting."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_right_select"),
-        Str8Lit("Move Right Select"),
-        Str8Lit("Moves the cursor right and selects."),
+        Str8Lit("Moves the cursor or selection right, while selecting."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_up_select"),
-        Str8Lit("Move Up Select"),
-        Str8Lit("Moves the cursor up and selects."),
+        Str8Lit("Moves the cursor or selection up, while selecting."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_down_select"),
-        Str8Lit("Move Down Select"),
-        Str8Lit("Moves the cursor down and selects."),
+        Str8Lit("Moves the cursor or selection down, while selecting."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_left_chunk"),
-        Str8Lit("Move Left Chunk"),
-        Str8Lit("Moves the cursor left one word."),
+        Str8Lit("Moves the cursor or selection left one chunk."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_right_chunk"),
-        Str8Lit("Move Right Chunk"),
-        Str8Lit("Moves the cursor right one word."),
+        Str8Lit("Moves the cursor or selection right one chunk."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_up_chunk"),
-        Str8Lit("Move Up Chunk"),
-        Str8Lit("Moves the cursor up one group."),
+        Str8Lit("Moves the cursor or selection up one chunk."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_down_chunk"),
-        Str8Lit("Move Down Chunk"),
-        Str8Lit("Moves the cursor down one group."),
+        Str8Lit("Moves the cursor or selection down one chunk."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_left_chunk_select"),
-        Str8Lit("Move Left Chunk Select"),
-        Str8Lit("Moves the cursor left one word and selects."),
+        Str8Lit("Moves the cursor or selection left one chunk."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_right_chunk_select"),
-        Str8Lit("Move Right Chunk Select"),
-        Str8Lit("Moves the cursor right one word and selects."),
+        Str8Lit("Moves the cursor or selection right one chunk."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_up_chunk_select"),
-        Str8Lit("Move Up Chunk Select"),
-        Str8Lit("Moves the cursor up one group and selects."),
+        Str8Lit("Moves the cursor or selection up one chunk."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_down_chunk_select"),
-        Str8Lit("Move Down Chunk Select"),
-        Str8Lit("Moves the cursor down one group and selects."),
+        Str8Lit("Moves the cursor or selection down one chunk."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_up_page"),
-        Str8Lit("Move Up Page"),
-        Str8Lit("Moves the cursor up one page."),
+        Str8Lit("Moves the cursor or selection up one page."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_down_page"),
-        Str8Lit("Move Down Page"),
-        Str8Lit("Moves the cursor down one page."),
+        Str8Lit("Moves the cursor or selection down one page."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_up_whole"),
-        Str8Lit("Move To Start"),
-        Str8Lit("Moves the cursor to the first row."),
+        Str8Lit("Moves the cursor or selection to the beginning of the relevant content."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_down_whole"),
-        Str8Lit("Move To End"),
-        Str8Lit("Moves the cursor to the last row."),
+        Str8Lit("Moves the cursor or selection to the end of the relevant content."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_up_page_select"),
-        Str8Lit("Move Up Page Select"),
-        Str8Lit("Moves the cursor up one page and selects."),
+        Str8Lit("Moves the cursor or selection up one page, while selecting."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_down_page_select"),
-        Str8Lit("Move Down Page Select"),
-        Str8Lit("Moves the cursor down one page and selects."),
+        Str8Lit("Moves the cursor or selection down one page, while selecting."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_up_whole_select"),
-        Str8Lit("Move To Start Select"),
-        Str8Lit("Moves the cursor to the first row and selects."),
+        Str8Lit("Moves the cursor or selection to the beginning of the relevant content, while selecting."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_down_whole_select"),
-        Str8Lit("Move To End Select"),
-        Str8Lit("Moves the cursor to the last row and selects."),
+        Str8Lit("Moves the cursor or selection to the end of the relevant content, while selecting."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_home"),
-        Str8Lit("Move Home"),
-        Str8Lit("Moves the cursor to the start of the line."),
+        Str8Lit("Moves the cursor to the beginning of the line."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_end"),
-        Str8Lit("Move End"),
         Str8Lit("Moves the cursor to the end of the line."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_home_select"),
-        Str8Lit("Move Home Select"),
-        Str8Lit("Moves the cursor to the start of the line and selects."),
+        Str8Lit("Moves the cursor to the beginning of the line, while selecting."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_end_select"),
-        Str8Lit("Move End Select"),
-        Str8Lit("Moves the cursor to the end of the line and selects."),
+        Str8Lit("Moves the cursor to the end of the line, while selecting."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("select_all"),
-        Str8Lit("Select All"),
-        Str8Lit("Selects all items."),
+        Str8Lit("Selects everything possible."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("delete_single"),
-        Str8Lit("Delete"),
-        Str8Lit("Deletes the character to the right of the cursor, or the selection."),
+        Str8Lit("Deletes a single element to the right of the cursor, or the active selection."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("delete_chunk"),
-        Str8Lit("Delete Word"),
-        Str8Lit("Deletes the word to the right of the cursor, or the selection."),
+        Str8Lit("Deletes a chunk to the right of the cursor, or the active selection."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("backspace_single"),
-        Str8Lit("Backspace"),
-        Str8Lit("Deletes the character to the left of the cursor, or the selection."),
+        Str8Lit("Deletes a single element to the left of the cursor, or the active selection."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("backspace_chunk"),
-        Str8Lit("Backspace Word"),
-        Str8Lit("Deletes the word to the left of the cursor, or the selection."),
+        Str8Lit("Deletes a chunk to the left of the cursor, or the active selection."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("copy"),
-        Str8Lit("Copy"),
-        Str8Lit("Copies the selection to the clipboard."),
-        Str8Lit("csv,clipboard"),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit("Copies the active selection to the clipboard."),
+        Str8Lit(""),
+        Str8Lit("$text_rng,"),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("cut"),
-        Str8Lit("Cut"),
-        Str8Lit("Copies the selection to the clipboard, then deletes the selection."),
+        Str8Lit("Copies the active selection to the clipboard, then deletes it."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("paste"),
-        Str8Lit("Paste"),
-        Str8Lit("Puts the contents of the clipboard at the cursor."),
+        Str8Lit("Pastes the current contents of the clipboard."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("insert_text"),
-        Str8Lit("Insert Text"),
-        Str8Lit("Puts the text that caused this command at the cursor."),
-        Str8Lit(""),
-        0,
-        APP_ICON_KIND_NULL
+        Str8Lit("Inserts the text that was used to cause this command.")
     },
     {
         Str8Lit("move_next"),
-        Str8Lit("Move Next"),
-        Str8Lit("Moves the cursor to the next item."),
+        Str8Lit("Moves the cursor or selection to the next element."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("move_prev"),
-        Str8Lit("Move Previous"),
-        Str8Lit("Moves the cursor to the previous item."),
+        Str8Lit("Moves the cursor or selection to the previous element."),
         Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
+    },
+    {
+        Str8Lit("centre_cursor"),
+        Str8Lit("Snaps the current code view to centre the cursor."),
+        Str8Lit(""),
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
+    },
+    {
+        Str8Lit("contain_cursor"),
+        Str8Lit("Snaps the current code view to contain the cursor."),
+        Str8Lit(""),
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("goto_time"),
-        Str8Lit("Go To Time"),
         Str8Lit("Goes to the first row at or after a time. The time is in seconds from the start of the flight."),
         Str8Lit("jump,seek,timestamp"),
+        Str8Lit(""),
         APP_COMMAND_KIND_FLAG_LIST_IN_UI | APP_COMMAND_KIND_FLAG_LIST_IN_FILE,
-        APP_ICON_KIND_RIGHT_ARROW,
         {
             APP_QUERY_KIND_REQUIRED,
             APP_REGISTERS_SLOT_STRING,
@@ -693,63 +693,191 @@ AppCommandKindInfo APP_COMMAND_KIND_INFO_TABLE[APP_COMMAND_KIND_COUNT] = {
     },
     {
         Str8Lit("search"),
-        Str8Lit("Search"),
         Str8Lit("Finds the next row that contains the text."),
         Str8Lit("find"),
+        Str8Lit(""),
         APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_FIND,
         {
-            APP_QUERY_KIND_REQUIRED | APP_QUERY_KIND_KEEP_OLD_INPUT | APP_QUERY_KIND_SELECT_OLD_INPUT,
+            (
+                APP_QUERY_KIND_REQUIRED | 
+                APP_QUERY_KIND_KEEP_OLD_INPUT | 
+                APP_QUERY_KIND_SELECT_OLD_INPUT
+            ),
             APP_REGISTERS_SLOT_STRING,
             Str8Lit("")
         }
     },
     {
         Str8Lit("search_backwards"),
-        Str8Lit("Search Backwards"),
         Str8Lit("Finds the previous row that contains the text."),
         Str8Lit("find"),
+        Str8Lit(""),
         APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_FIND,
         {
-            APP_QUERY_KIND_REQUIRED | APP_QUERY_KIND_KEEP_OLD_INPUT | APP_QUERY_KIND_SELECT_OLD_INPUT,
+            (
+                APP_QUERY_KIND_REQUIRED | 
+                APP_QUERY_KIND_KEEP_OLD_INPUT | 
+                APP_QUERY_KIND_SELECT_OLD_INPUT
+            ),
             APP_REGISTERS_SLOT_STRING,
             Str8Lit("")
         }
     },
     {
         Str8Lit("find_next"),
-        Str8Lit("Find Next"),
-        Str8Lit("Finds the next row that contains the text of the last search."),
+        Str8Lit("Searches the current code file forward (from the cursor) for the last searched string."),
         Str8Lit("search"),
+        Str8Lit(""),
         APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL,
         {
             APP_QUERY_KIND_KEEP_OLD_INPUT,
-            APP_REGISTERS_SLOT_NULL,
-            Str8Lit("")
+            APP_REGISTERS_SLOT_NULL
         }
     },
     {
         Str8Lit("find_prev"),
-        Str8Lit("Find Previous"),
-        Str8Lit("Finds the previous row that contains the text of the last search."),
+        Str8Lit("Searches the current code file backwards (from the cursor) for the last searched string."),
         Str8Lit("search"),
+        Str8Lit(""),
         APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL,
         {
             APP_QUERY_KIND_KEEP_OLD_INPUT,
-            APP_REGISTERS_SLOT_NULL,
-            Str8Lit("")
+            APP_REGISTERS_SLOT_NULL
+        }
+    },
+    {
+        Str8Lit("enable_cfg"),
+        Str8Lit("Enables a config tree.")
+    },
+    {
+        Str8Lit("disable_cfg"),
+        Str8Lit("Disables a config tree.")
+    },
+    {
+        Str8Lit("select_cfg"),
+        Str8Lit("Selects a config tree, disabling all others of the same kind.")
+    },
+    {
+        Str8Lit("deselect_cfg"),
+        Str8Lit("Deselects a config tree.")
+    },
+    {
+        Str8Lit("remove_cfg"),
+        Str8Lit("Removes a config tree.")
+    },
+    {
+        Str8Lit("name_cfg"),
+        Str8Lit("Equips a config tree with a label.")
+    },
+    {
+        Str8Lit("duplicate_cfg"),
+        Str8Lit("Duplicates a config tree.")
+    },
+    {
+        Str8Lit("save_cfg_to_session"),
+        Str8Lit("Saves the config tree to the session.")
+    },
+    {
+        Str8Lit("edit_session_theme"),
+        Str8Lit("Edits the current session theme."),
+        Str8Lit("colour"),
+        Str8Lit(""),
+        0,
+        {
+            0,
+            APP_REGISTERS_SLOT_STRING,
+            Str8Lit("query:themes")
+        }
+    },
+    {
+        Str8Lit("add_theme_colour"),
+        Str8Lit("Adds a new theme colour")
+    },
+    {
+        Str8Lit("fork_theme"),
+        Str8Lit("Imports all colours from the current theme so they can be individually edited")
+    },
+    {
+        Str8Lit("save_theme"),
+        Str8Lit("Saves all theme colours to a new theme file."),
+        Str8Lit(""),
+        Str8Lit(""),
+        0,
+        {
+            APP_QUERY_KIND_ALLOW_FILES | APP_QUERY_KIND_FLOATING | APP_QUERY_KIND_REQUIRED,
+            APP_REGISTERS_SLOT_STRING
+        }
+    },
+    {
+        Str8Lit("save_and_set_theme"),
+        Str8Lit("Saves all theme colours to a new theme file, and then sets that theme as the selected theme."),
+        Str8Lit(""),
+        Str8Lit(""),
+        0,
+        {
+            (
+                APP_QUERY_KIND_ALLOW_FILES | 
+                APP_QUERY_KIND_FLOATING | 
+                APP_QUERY_KIND_REQUIRED
+            ),
+            APP_REGISTERS_SLOT_STRING
+        }
+    },
+    {
+        Str8Lit("pick_file"),
+        Str8Lit("Opens the file browser to pick a file."),
+        Str8Lit(""),
+        Str8Lit(""),
+        0,
+        {
+            (
+                APP_QUERY_KIND_ALLOW_FILES | 
+                APP_QUERY_KIND_FLOATING | 
+                APP_QUERY_KIND_REQUIRED
+            ),
+            APP_REGISTERS_SLOT_FILE_PATH,
+            Str8Lit("folder:\"$input\"")
+        }
+    },
+    {
+        Str8Lit("pick_folder"),
+        Str8Lit("Opens the file browser to pick a folder."),
+        Str8Lit(""),
+        Str8Lit(""),
+        0,
+        {
+            (
+                APP_QUERY_KIND_ALLOW_FOLDERS | 
+                APP_QUERY_KIND_FLOATING | 
+                APP_QUERY_KIND_REQUIRED
+            ),
+            APP_REGISTERS_SLOT_FILE_PATH,
+            Str8Lit("folder:\"$input\"")
+        }
+    },
+    {
+        Str8Lit("pick_file_or_folder"),
+        Str8Lit("Opens the file browser to pick a file or folder."),
+        Str8Lit(""),
+        Str8Lit(""),
+        0,
+        {
+            (
+                APP_QUERY_KIND_ALLOW_FILES | 
+                APP_QUERY_KIND_ALLOW_FOLDERS | 
+                APP_QUERY_KIND_FLOATING | 
+                APP_QUERY_KIND_REQUIRED
+            ),
+            APP_REGISTERS_SLOT_FILE_PATH,
+            Str8Lit("folder:\"$input\"")
         }
     },
     {
         Str8Lit("filter"),
-        Str8Lit("Filter"),
         Str8Lit("Shows only the rows that agree with the filter."),
         Str8Lit("fuzzy,find,rows"),
+        Str8Lit(""),
         APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_FIND,
         {
             APP_QUERY_KIND_REQUIRED | APP_QUERY_KIND_KEEP_OLD_INPUT,
             APP_REGISTERS_SLOT_STRING,
@@ -758,11 +886,10 @@ AppCommandKindInfo APP_COMMAND_KIND_INFO_TABLE[APP_COMMAND_KIND_COUNT] = {
     },
     {
         Str8Lit("set_theme"),
-        Str8Lit("Set Theme"),
         Str8Lit("Changes the colours of the program."),
         Str8Lit("colour,color,style"),
+        Str8Lit(""),
         APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL,
         {
             APP_QUERY_KIND_FLOATING | APP_QUERY_KIND_REQUIRED,
             APP_REGISTERS_SLOT_STRING,
@@ -771,63 +898,67 @@ AppCommandKindInfo APP_COMMAND_KIND_INFO_TABLE[APP_COMMAND_KIND_COUNT] = {
     },
     {
         Str8Lit("toggle_dev_menu"),
-        Str8Lit("Developer Menu"),
-        Str8Lit("Shows or hides the developer menu."),
+        Str8Lit("Opens and closes the developer menu."),
         Str8Lit("debug"),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_NULL
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
+    },
+    {
+        Str8Lit("record_session_as_last_opened"),
+        Str8Lit("Records a file path as the last opened session.")
+    },
+    {
+        Str8Lit("record_recent_session"),
+        Str8Lit("Records a file path as a recent session.")
+    },
+    {
+        Str8Lit("query"),
+        Str8Lit("Submits the active query")
     },
     {
         Str8Lit("push_query"),
-        Str8Lit("Push Query"),
-        Str8Lit("Opens an input line for a command."),
-        Str8Lit(""),
-        0,
-        APP_ICON_KIND_NULL
+        Str8Lit("Opens a new temporary query interface")
+    },
+    {
+        Str8Lit("record_file_in_session"),
+        Str8Lit("Records the passed file path as a recent file in the currently loaded session")
     },
     {
         Str8Lit("complete_query"),
-        Str8Lit("Complete Query"),
-        Str8Lit("Runs the command of the input line and closes the input line."),
-        Str8Lit(""),
-        0,
-        APP_ICON_KIND_NULL
+        Str8Lit("Completes and closes a query")
     },
     {
         Str8Lit("cancel_query"),
-        Str8Lit("Cancel Query"),
-        Str8Lit("Closes the input line."),
-        Str8Lit(""),
-        0,
-        APP_ICON_KIND_NULL
+        Str8Lit("Cancels the active query")
     },
     {
         Str8Lit("update_query"),
-        Str8Lit("Update Query"),
-        Str8Lit("Changes the text of the input line."),
-        Str8Lit(""),
-        0,
-        APP_ICON_KIND_NULL
+        Str8Lit("Updates the query input buffer")
     },
     {
         Str8Lit("files"),
-        Str8Lit("Files"),
         Str8Lit("Opens a tab that shows the list of flights."),
         Str8Lit("logs,bin,fli,flights"),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_FOLDER
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
     {
         Str8Lit("views"),
-        Str8Lit("Views"),
         Str8Lit("Opens a tab that shows the list of View files."),
         Str8Lit("flv,analysis"),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
-        APP_ICON_KIND_FOLDER
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
+    },
+    {
+        Str8Lit("flv"),
+        Str8Lit("Opens a tab that allows the viewing and editting of an FLV file."),
+        Str8Lit("flv,edit"),
+        Str8Lit(""),
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI
     }
 };
 
-BindingTableEntry APP_DEFAULT_BINDING_TABLE[75] = {
+BindingTableEntry APP_DEFAULT_BINDING_TABLE[81] = {
     {
         Str8Lit("exit"),
         {
@@ -1337,6 +1468,41 @@ BindingTableEntry APP_DEFAULT_BINDING_TABLE[75] = {
         }
     },
     {
+        Str8Lit("undo"),
+        {
+            INPUT_KIND_Z,
+            INPUT_MOD_KIND_CTRL
+        }
+    },
+    {
+        Str8Lit("redo"),
+        {
+            INPUT_KIND_Y,
+            INPUT_MOD_KIND_CTRL
+        }
+    },
+    {
+        Str8Lit("switch"),
+        {
+            INPUT_KIND_I,
+            INPUT_MOD_KIND_CTRL
+        }
+    },
+    {
+        Str8Lit("open_session"),
+        {
+            INPUT_KIND_RETURN,
+            INPUT_MOD_KIND_CTRL | INPUT_MOD_KIND_ALT
+        }
+    },
+    {
+        Str8Lit("save_session"),
+        {
+            INPUT_KIND_S,
+            INPUT_MOD_KIND_CTRL | INPUT_MOD_KIND_SHIFT
+        }
+    },
+    {
         Str8Lit("toggle_dev_menu"),
         {
             INPUT_KIND_D,
@@ -1354,6 +1520,13 @@ BindingTableEntry APP_DEFAULT_BINDING_TABLE[75] = {
         Str8Lit("views"),
         {
             INPUT_KIND_2,
+            INPUT_MOD_KIND_ALT
+        }
+    },
+    {
+        Str8Lit("flv"),
+        {
+            INPUT_KIND_3,
             INPUT_MOD_KIND_ALT
         }
     }
@@ -1378,7 +1551,7 @@ Str8 APP_ICON_KIND_TEXT_TABLE[APP_ICON_KIND_COUNT] = {
     Str8Lit("( )"),
     Str8Lit("(\xE2\x80\xA2)"),
     Str8Lit("+"),
-    Str8Lit("X"),
+    Str8Lit("x"),
     Str8Lit("/"),
     Str8Lit("\xE2\x80\xA2")
 };
@@ -1775,11 +1948,1524 @@ Str8 APP_THEME_PRESET_CONFIG_STR_TABLE[APP_THEME_PRESET_COUNT] = {
     )
 };
 
+AppNameSchemaInfo APP_NAME_SCHEMA_INFO_TABLE[27] = {
+    {
+        Str8Lit("session"),
+        FALSE,
+        Str8Lit("@expand_commands(edit_session_theme) x:\n{\n@display_name('Animations') @description(\"Enables animations.\")\n\n@default(1) 'animations': bool,\n\n@display_name('Scrolling Animations') @description(\"Enables scrolling animations.\") @expand_if(\"$.animations\") @default(1) 'scrolling_animations': bool,\n\n@display_name('Tooltip Animations') @description(\"Enables tooltip animations.\") @expand_if(\"$.animations\") @default(1) 'tooltip_animations': bool,\n\n@display_name('Menu Animations') @description(\"Enables menu animations.\") @expand_if(\"$.animations\") @default(1) 'menu_animations': bool,\n\n@no_expand @default('query:commands') 'cmd': string,\n\n@display_name('Theme') @description(\"The session theme, which describes all colours used throughout the UI.\") @default(\"Ayu Dark\") 'theme': string,\n\n@no_expand @display_name('Theme Colours') 'theme_colours': query,\n\n@display_name('Autocompletion Lister') @description(\"Enables the autocompletion lister while typing expressions.\") @default(1) 'autocompletion_lister': bool,\n\n@display_name('Cursor Trail') @description(\"Shows a trail after the cursor as it moves\") @default(1) 'cursor_trail': bool,\n\n@display_name('Tab Width') @default(2) 'tab_width': @range[1, 32] u64,\n\n@display_name('Focus Menu Bar With Alt') @description(\"Mimics standard Windows behavior of focusing the menu bar using the Alt key.\") @default(1) 'focus_menu_bar_with_alt': bool,\n}")
+    },
+    {
+        Str8Lit("theme_colour"),
+        FALSE,
+        Str8Lit("@collection_commands(add_theme_colour, fork_theme, save_theme, save_and_set_theme)\n@row_commands(duplicate_cfg, remove_cfg)\nx:\n{\n  @display_name('Tags') tags: string,\n  @display_name('Value') value: @colour @hex u32,\n}\n")
+    },
+    {
+        Str8Lit("tab"),
+        FALSE,
+        Str8Lit("@row_commands(@file copy_tab_full_path, @file show_file_in_explorer, duplicate_tab, close_tab)")
+    },
+    // TODO(nc): implement schema for time. can show as timestamp or as relative to start time and in different units
+    {
+        Str8Lit("flv"),
+        TRUE,
+        Str8Lit("@inherit(tab) x:\n{\n  @description(\"An expression to describe data which should be viewed as FLV script.\")\n  'expression': expr_string,\n  @default(1) @description(\"Controls whether or not line numbers are shown.\")\n  'show_line_numbers':bool,\n  @no_callee_helper @default(1) @display_name('Line Wrapping') @description(\"Splits textual lines into multiple visual lines, so that all text is within the visible area.\")\n  'line_wrapping': bool,\n  @no_callee_helper @default(1) @display_name('Show Cursor Trail') @description(\"Shows cursor trail when cursor position is changed.\")\n  'cursor_trail': bool,\n}\n")
+    },
+    {
+        Str8Lit("colour"),
+        TRUE,
+        Str8Lit("@inherit(tab) x:\n{\n  @display_name(\"Value\") @description(\"An expression to describe the value or location of the colour.\")\n  'expression': expr_string,\n}\n")
+    },
+    {
+        Str8Lit("getting_started"),
+        FALSE,
+        Str8Lit("@inherit(tab) x:\n{\n}\n")
+    },
+    {
+        Str8Lit("recent_session"),
+        FALSE,
+        Str8Lit("x:{'path':path}")
+    },
+    {
+        Str8Lit("recent_file"),
+        FALSE,
+        Str8Lit("x:{'path':path}")
+    }
+    // TODO(nc): implement schema for views (add view(s)/folder, remove view(s)), files (add file(s)/folder, remove file(s)), and just view (switch flv file, edit flv file).
+};
+
+Str8 APP_REGISTERS_SLOT_CODE_NAME_TABLE[APP_REGISTERS_SLOT_COUNT] = {
+    {},
+    Str8Lit("Window"),
+    Str8Lit("Panel"),
+    Str8Lit("Tab"),
+    Str8Lit("View"),
+    Str8Lit("PrevTab"),
+    Str8Lit("DstPanel"),
+    Str8Lit("Config"),
+    Str8Lit("ConfigList"),
+    Str8Lit("FilePath"),
+    Str8Lit("Cursor"),
+    Str8Lit("Mark"),
+    Str8Lit("FlightIndex"),
+    Str8Lit("Expression"),
+    Str8Lit("UI"),
+    Str8Lit("ForceConfirm"),
+    Str8Lit("String"),
+    Str8Lit("CommandName"),
+    Str8Lit("Direction"),
+    Str8Lit("OSEvent")
+};
+
+r1u64 APP_REGISTERS_SLOT_RANGE_TABLE[APP_REGISTERS_SLOT_COUNT] = {
+    {},
+    {
+        OFFSETOF(AppRegisters, Window),
+        OFFSETOF(AppRegisters, Window) + sizeof(ConfigID)
+    },
+    {
+        OFFSETOF(AppRegisters, Panel),
+        OFFSETOF(AppRegisters, Panel) + sizeof(ConfigID)
+    },
+    {
+        OFFSETOF(AppRegisters, Tab),
+        OFFSETOF(AppRegisters, Tab) + sizeof(ConfigID)
+    },
+    {
+        OFFSETOF(AppRegisters, View),
+        OFFSETOF(AppRegisters, View) + sizeof(ConfigID)
+    },
+    {
+        OFFSETOF(AppRegisters, PrevTab),
+        OFFSETOF(AppRegisters, PrevTab) + sizeof(ConfigID)
+    },
+    {
+        OFFSETOF(AppRegisters, DstPanel),
+        OFFSETOF(AppRegisters, DstPanel) + sizeof(ConfigID)
+    },
+    {
+        OFFSETOF(AppRegisters, Config),
+        OFFSETOF(AppRegisters, Config) + sizeof(ConfigID)
+    },
+    {
+        OFFSETOF(AppRegisters, ConfigList),
+        OFFSETOF(AppRegisters, ConfigList) + sizeof(ConfigIDList)
+    },
+    {
+        OFFSETOF(AppRegisters, FilePath),
+        OFFSETOF(AppRegisters, FilePath) + sizeof(Str8)
+    },
+    {
+        OFFSETOF(AppRegisters, Cursor),
+        OFFSETOF(AppRegisters, Cursor) + sizeof(TextPoint)
+    },
+    {
+        OFFSETOF(AppRegisters, Mark),
+        OFFSETOF(AppRegisters, Mark) + sizeof(TextPoint)
+    },
+    {
+        OFFSETOF(AppRegisters, FlightIndex),
+        OFFSETOF(AppRegisters, FlightIndex) + sizeof(u32)
+    },
+    {
+        OFFSETOF(AppRegisters, Expression),
+        OFFSETOF(AppRegisters, Expression) + sizeof(Str8)
+    },
+    {
+        OFFSETOF(AppRegisters, UI),
+        OFFSETOF(AppRegisters, UI) + sizeof(UIKey)
+    },
+    {
+        OFFSETOF(AppRegisters, ForceConfirm),
+        OFFSETOF(AppRegisters, ForceConfirm) + sizeof(b32)
+    },
+    {
+        OFFSETOF(AppRegisters, String),
+        OFFSETOF(AppRegisters, String) + sizeof(Str8)
+    },
+    {
+        OFFSETOF(AppRegisters, CommandName),
+        OFFSETOF(AppRegisters, CommandName) + sizeof(Str8)
+    },
+    {
+        OFFSETOF(AppRegisters, Direction),
+        OFFSETOF(AppRegisters, Direction) + sizeof(Direction2D)
+    },
+    {
+        OFFSETOF(AppRegisters, OSEvent),
+        OFFSETOF(AppRegisters, OSEvent) + sizeof(InputEvent*)
+    }
+};
+
 Str8 APP_TAB_FAST_PATH_VIEW_NAME_TABLE[APP_COMMAND_KIND_COUNT - APP_COMMAND_KIND_FIRST_TAB_FAST_PATH_CMD] = {
     Str8Lit("files"),
-    Str8Lit("views")
+    Str8Lit("views"),
+    Str8Lit("flv")
+};
+
+// TODO(nc): figure out what needs to be here
+Str8 APP_TAB_FAST_PATH_QUERY_NAME[APP_COMMAND_KIND_COUNT - APP_COMMAND_KIND_FIRST_TAB_FAST_PATH_CMD] = {
+    Str8Lit(""),
+    Str8Lit(""),
+    Str8Lit("")
+};
+
+AppVocabInfo APP_VOCAB_INFO_TABLE[232] = {
+    { 
+        Str8Lit("view"),
+        Str8Lit("views"),
+        Str8Lit("View"),
+        Str8Lit("Views"),
+        APP_ICON_KIND_FILE
+    },
+    { 
+        Str8Lit("colour"),
+        Str8Lit("colours"),
+        Str8Lit("Colour"),
+        Str8Lit("Colours"),
+        APP_ICON_KIND_NULL
+    },
+    { 
+        Str8Lit("theme_colour"),
+        Str8Lit("theme_colours"),
+        Str8Lit("Theme Colour"),
+        Str8Lit("Theme Colours"),
+        APP_ICON_KIND_NULL
+    },
+    { 
+        Str8Lit("min"),
+        Str8Lit("mins"),
+        Str8Lit("Minimum"),
+        Str8Lit("Minimums"),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("max"),
+        Str8Lit("maxs"),
+        Str8Lit("Maximum"),
+        Str8Lit("Maximums"),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("panel"),
+        Str8Lit("panels"),
+        Str8Lit("Panel"),
+        Str8Lit("Panels"),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("tab"),
+        Str8Lit("tabs"),
+        Str8Lit("Tab"),
+        Str8Lit("Tabs"),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("recent_file"),
+        Str8Lit("recent_files"),
+        Str8Lit("Recent File"),
+        Str8Lit("Recent Files"),
+        APP_ICON_KIND_FILE
+    },
+    { 
+        Str8Lit("src"),
+        Str8Lit("srcs"),
+        Str8Lit("Source"),
+        Str8Lit("Sources"),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("dst"),
+        Str8Lit("dsts"),
+        Str8Lit("Destination"),
+        Str8Lit("Destinations"),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("source"),
+        Str8Lit("sources"),
+        Str8Lit("Source"),
+        Str8Lit("Sources"),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("dest"),
+        Str8Lit("dests"),
+        Str8Lit("Destination"),
+        Str8Lit("Destinations"),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("label"),
+        Str8Lit("labels"),
+        Str8Lit("Label"),
+        Str8Lit("Labels"),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("getting_started"),
+        Str8Lit(""),
+        Str8Lit("Getting Started"),
+        Str8Lit(""),
+        APP_ICON_KIND_INFO
+    },
+    { 
+        Str8Lit("flv"),
+        Str8Lit(""),
+        Str8Lit("FLV"),
+        Str8Lit(""),
+        APP_ICON_KIND_FILE
+    },
+    { 
+        Str8Lit("enabled"),
+        Str8Lit(""),
+        Str8Lit("Enabled"),
+        Str8Lit("Enabled"),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("disabled"),
+        Str8Lit(""),
+        Str8Lit("Disabled"),
+        Str8Lit("Disabled"),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("id"),
+        Str8Lit("ids"),
+        Str8Lit("ID"),
+        Str8Lit("IDs"),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("last_modified_time"),
+        Str8Lit("last_modified_times"),
+        Str8Lit("Last Modified Time"),
+        Str8Lit("Last Modified Times"),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("creation_time"),
+        Str8Lit("creation_times"),
+        Str8Lit("Creation Time"),
+        Str8Lit("Creation Times"),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("data"),
+        Str8Lit("datas"),
+        Str8Lit("Data"),
+        Str8Lit("Datas"),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("session"),
+        Str8Lit("sessions"),
+        Str8Lit("Session"),
+        Str8Lit("Sessions"),
+        APP_ICON_KIND_FILE
+    },
+    { 
+        Str8Lit("recent_session"),
+        Str8Lit("recent_sessions"),
+        Str8Lit("Recent Session"),
+        Str8Lit("Recent Sessions"),
+        APP_ICON_KIND_FILE
+    },
+    { 
+        Str8Lit("recent_file"),
+        Str8Lit("recent_files"),
+        Str8Lit("Recent File"),
+        Str8Lit("Recent Files"),
+        APP_ICON_KIND_FILE
+    },
+    { 
+        Str8Lit("row_height"),
+        Str8Lit(""),
+        Str8Lit("Row Height"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("tab_height"),
+        Str8Lit(""),
+        Str8Lit("Tab Height"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("rgba"),
+        Str8Lit(""),
+        Str8Lit("RGBA"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL
+    },
+    { 
+        Str8Lit("exit"),
+        Str8Lit(""),
+        Str8Lit("Exit"),
+        Str8Lit(""),
+        APP_ICON_KIND_X 
+    },
+    { 
+        Str8Lit("open_palette"),
+        Str8Lit(""),
+        Str8Lit("Open Palette"),
+        Str8Lit(""),
+        APP_ICON_KIND_INFO
+    },
+    { 
+        Str8Lit("run_command"),
+        Str8Lit(""),
+        Str8Lit("Run Command"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("os_event"),
+        Str8Lit(""),
+        Str8Lit("OS Event"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("select_entity"),
+        Str8Lit(""),
+        Str8Lit("Select"),
+        Str8Lit(""),
+        APP_ICON_KIND_RADIO_HOLLOW 
+    },
+    { 
+        Str8Lit("deselect_entity"),
+        Str8Lit(""),
+        Str8Lit("Deselect"),
+        Str8Lit(""),
+        APP_ICON_KIND_RADIO_FILLED 
+    },
+    { 
+        Str8Lit("popup_accept"),
+        Str8Lit(""),
+        Str8Lit("Popup Accept"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("popup_cancel"),
+        Str8Lit(""),
+        Str8Lit("Popup Cancel"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("reset_to_default_bindings"),
+        Str8Lit(""),
+        Str8Lit("Reset To Default Bindings"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("new_panel_left"),
+        Str8Lit(""),
+        Str8Lit("Split Panel Left"),
+        Str8Lit(""),
+        APP_ICON_KIND_LEFT_ARROW
+    },
+    { 
+        Str8Lit("new_panel_up"),
+        Str8Lit(""),
+        Str8Lit("Split Panel Up"),
+        Str8Lit(""),
+        APP_ICON_KIND_UP_ARROW
+    },
+    { 
+        Str8Lit("new_panel_right"),
+        Str8Lit(""),
+        Str8Lit("Split Panel Right"),
+        Str8Lit(""),
+        APP_ICON_KIND_RIGHT_ARROW
+    },
+    { 
+        Str8Lit("new_panel_down"),
+        Str8Lit(""),
+        Str8Lit("Split Panel Down"),
+        Str8Lit(""),
+        APP_ICON_KIND_DOWN_ARROW
+    },
+    { 
+        Str8Lit("split_panel"),
+        Str8Lit(""),
+        Str8Lit("Split Panel"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("next_panel"),
+        Str8Lit(""),
+        Str8Lit("Focus Next Panel"),
+        Str8Lit(""),
+        APP_ICON_KIND_RIGHT_ARROW 
+    },
+    { 
+        Str8Lit("prev_panel"),
+        Str8Lit(""),
+        Str8Lit("Focus Previous Panel"),
+        Str8Lit(""),
+        APP_ICON_KIND_LEFT_ARROW 
+    },
+    { 
+        Str8Lit("focus_panel"),
+        Str8Lit(""),
+        Str8Lit("Focus Panel"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("focus_panel_right"),
+        Str8Lit(""),
+        Str8Lit("Focus Panel Right"),
+        Str8Lit(""),
+        APP_ICON_KIND_RIGHT_ARROW 
+    },
+    { 
+        Str8Lit("focus_panel_left"),
+        Str8Lit(""),
+        Str8Lit("Focus Panel Left"),
+        Str8Lit(""),
+        APP_ICON_KIND_LEFT_ARROW 
+    },
+    { 
+        Str8Lit("focus_panel_up"),
+        Str8Lit(""),
+        Str8Lit("Focus Panel Up"),
+        Str8Lit(""),
+        APP_ICON_KIND_UP_ARROW 
+    },
+    { 
+        Str8Lit("focus_panel_down"),
+        Str8Lit(""),
+        Str8Lit("Focus Panel Down"),
+        Str8Lit(""),
+        APP_ICON_KIND_DOWN_ARROW 
+    },
+    { 
+        Str8Lit("undo"),
+        Str8Lit(""),
+        Str8Lit("Undo"),
+        Str8Lit(""),
+        APP_ICON_KIND_LEFT_ARROW
+    },
+    { 
+        Str8Lit("redo"),
+        Str8Lit(""),
+        Str8Lit("Redo"),
+        Str8Lit(""),
+        APP_ICON_KIND_RIGHT_ARROW
+    },
+    { 
+        Str8Lit("go_back"),
+        Str8Lit(""),
+        Str8Lit("Go Back"),
+        Str8Lit(""),
+        APP_ICON_KIND_LEFT_ARROW 
+    },
+    { 
+        Str8Lit("go_forward"),
+        Str8Lit(""),
+        Str8Lit("Go Forward"),
+        Str8Lit(""),
+        APP_ICON_KIND_RIGHT_ARROW 
+    },
+    { 
+        Str8Lit("close_panel"),
+        Str8Lit(""),
+        Str8Lit("Close Panel"),
+        Str8Lit(""),
+        APP_ICON_KIND_X
+    },
+    { 
+        Str8Lit("focus_tab"),
+        Str8Lit(""),
+        Str8Lit("Focus Tab"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("next_tab"),
+        Str8Lit(""),
+        Str8Lit("Focus Next Tab"),
+        Str8Lit(""),
+        APP_ICON_KIND_RIGHT_ARROW 
+    },
+    { 
+        Str8Lit("prev_tab"),
+        Str8Lit(""),
+        Str8Lit("Focus Previous Tab"),
+        Str8Lit(""),
+        APP_ICON_KIND_LEFT_ARROW 
+    },
+    { 
+        Str8Lit("move_tab_right"),
+        Str8Lit(""),
+        Str8Lit("Move Tab Right"),
+        Str8Lit(""),
+        APP_ICON_KIND_RIGHT_ARROW 
+    },
+    { 
+        Str8Lit("move_tab_left"),
+        Str8Lit(""),
+        Str8Lit("Move Tab Left"),
+        Str8Lit(""),
+        APP_ICON_KIND_LEFT_ARROW 
+    },
+    { 
+        Str8Lit("open_tab"),
+        Str8Lit(""),
+        Str8Lit("Open New Tab"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("build_tab"),
+        Str8Lit(""),
+        Str8Lit("Build Tab"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("duplicate_tab"),
+        Str8Lit(""),
+        Str8Lit("Duplicate Tab"),
+        Str8Lit(""),
+        APP_ICON_KIND_ADD
+    },
+    { 
+        Str8Lit("copy_tab_full_path"),
+        Str8Lit(""),
+        Str8Lit("Copy Full Path"),
+        Str8Lit(""),
+        APP_ICON_KIND_ADD
+    },
+    { 
+        Str8Lit("close_tab"),
+        Str8Lit(""),
+        Str8Lit("Close Tab"),
+        Str8Lit(""),
+        APP_ICON_KIND_X 
+    },
+    { 
+        Str8Lit("move_view"),
+        Str8Lit(""),
+        Str8Lit("Move View"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("tab_settings"),
+        Str8Lit(""),
+        Str8Lit("Tab Settings"),
+        Str8Lit(""),
+        APP_ICON_KIND_INFO
+    },
+    { 
+        Str8Lit("set_current_path"),
+        Str8Lit(""),
+        Str8Lit("Set Current Path"),
+        Str8Lit(""),
+        APP_ICON_KIND_FILE
+    },
+    { 
+        Str8Lit("open"),
+        Str8Lit(""),
+        Str8Lit("Open"),
+        Str8Lit(""),
+        APP_ICON_KIND_FILE
+    },
+    { 
+        Str8Lit("switch"),
+        Str8Lit(""),
+        Str8Lit("Switch"),
+        Str8Lit(""),
+        APP_ICON_KIND_FILE
+    },
+    { 
+        Str8Lit("record_file_in_session"),
+        Str8Lit(""),
+        Str8Lit("Record File In Session"),
+        Str8Lit(""),
+        APP_ICON_KIND_FILE
+    },
+    { 
+        Str8Lit("show_file_in_explorer"),
+        Str8Lit(""),
+        Str8Lit("Show File In Explorer"),
+        Str8Lit(""),
+        APP_ICON_KIND_FOLDER
+    },
+    { 
+        Str8Lit("set_file_replacement_path"),
+        Str8Lit(""),
+        Str8Lit("Set File Replacement Path"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("new_session"),
+        Str8Lit(""),
+        Str8Lit("New Session"),
+        Str8Lit(""),
+        APP_ICON_KIND_ADD 
+    },
+    { 
+        Str8Lit("open_session"),
+        Str8Lit(""),
+        Str8Lit("Open Session"),
+        Str8Lit(""),
+        APP_ICON_KIND_FILE
+    },
+    { 
+        Str8Lit("open_recent_session"),
+        Str8Lit(""),
+        Str8Lit("Open Recent Session"),
+        Str8Lit(""),
+        APP_ICON_KIND_FILE
+    },
+    { 
+        Str8Lit("save_session"),
+        Str8Lit(""),
+        Str8Lit("Save Session"),
+        Str8Lit(""),
+        APP_ICON_KIND_INFO
+    },
+    { 
+        Str8Lit("record_session_as_last_opened"),
+        Str8Lit(""),
+        Str8Lit("Record Session As Last Opened"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("record_recent_session"),
+        Str8Lit(""),
+        Str8Lit("Records Session In Recents"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("write_session_data"),
+        Str8Lit(""),
+        Str8Lit("Write Session Data"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("session_settings"),
+        Str8Lit(""),
+        Str8Lit("Session Settings"),
+        Str8Lit(""),
+        APP_ICON_KIND_INFO
+    },
+    { 
+        Str8Lit("edit"),
+        Str8Lit(""),
+        Str8Lit("Edit"),
+        Str8Lit(""),
+        APP_ICON_KIND_DOT
+    },
+    { 
+        Str8Lit("accept"),
+        Str8Lit(""),
+        Str8Lit("Accept"),
+        Str8Lit(""),
+        APP_ICON_KIND_CHECK_FILLED 
+    },
+    { 
+        Str8Lit("cancel"),
+        Str8Lit(""),
+        Str8Lit("Cancel"),
+        Str8Lit(""),
+        APP_ICON_KIND_X 
+    },
+    { 
+        Str8Lit("move_left"),
+        Str8Lit(""),
+        Str8Lit("Move Left"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_right"),
+        Str8Lit(""),
+        Str8Lit("Move Right"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_up"),
+        Str8Lit(""),
+        Str8Lit("Move Up"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_down"),
+        Str8Lit(""),
+        Str8Lit("Move Down"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_left_select"),
+        Str8Lit(""),
+        Str8Lit("Move Left Select"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_right_select"),
+        Str8Lit(""),
+        Str8Lit("Move Right Select"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_up_select"),
+        Str8Lit(""),
+        Str8Lit("Move Up Select"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_down_select"),
+        Str8Lit(""),
+        Str8Lit("Move Down Select"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_left_chunk"),
+        Str8Lit(""),
+        Str8Lit("Move Left Chunk"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_right_chunk"),
+        Str8Lit(""),
+        Str8Lit("Move Right Chunk"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_up_chunk"),
+        Str8Lit(""),
+        Str8Lit("Move Up Chunk"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_down_chunk"),
+        Str8Lit(""),
+        Str8Lit("Move Down Chunk"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_up_page"),
+        Str8Lit(""),
+        Str8Lit("Move Up Page"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_down_page"),
+        Str8Lit(""),
+        Str8Lit("Move Down Page"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_up_whole"),
+        Str8Lit(""),
+        Str8Lit("Move Up Whole"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_down_whole"),
+        Str8Lit(""),
+        Str8Lit("Move Down Whole"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_left_chunk_select"),
+        Str8Lit(""),
+        Str8Lit("Move Left Chunk Select"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_right_chunk_select"),
+        Str8Lit(""),
+        Str8Lit("Move Right Chunk Select"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_up_chunk_select"),
+        Str8Lit(""),
+        Str8Lit("Move Up Chunk Select"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_down_chunk_select"),
+        Str8Lit(""),
+        Str8Lit("Move Down Chunk Select"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_up_page_select"),
+        Str8Lit(""),
+        Str8Lit("Move Up Page Select"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_down_page_select"),
+        Str8Lit(""),
+        Str8Lit("Move Down Page Select"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_up_whole_select"),
+        Str8Lit(""),
+        Str8Lit("Move Up Whole Select"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_down_whole_select"),
+        Str8Lit(""),
+        Str8Lit("Move Down Whole Select"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_up_reorder"),
+        Str8Lit(""),
+        Str8Lit("Move Up Reorder"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_down_reorder"),
+        Str8Lit(""),
+        Str8Lit("Move Down Reorder"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_home"),
+        Str8Lit(""),
+        Str8Lit("Move Home"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_end"),
+        Str8Lit(""),
+        Str8Lit("Move End"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_home_select"),
+        Str8Lit(""),
+        Str8Lit("Move Home Select"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_end_select"),
+        Str8Lit(""),
+        Str8Lit("Move End Select"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("select_all"),
+        Str8Lit(""),
+        Str8Lit("Select All"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("delete_single"),
+        Str8Lit(""),
+        Str8Lit("Delete Single"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("delete_chunk"),
+        Str8Lit(""),
+        Str8Lit("Delete Chunk"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("backspace_single"),
+        Str8Lit(""),
+        Str8Lit("Backspace Single"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("backspace_chunk"),
+        Str8Lit(""),
+        Str8Lit("Backspace Chunk"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("copy"),
+        Str8Lit(""),
+        Str8Lit("Copy"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL
+    },
+    { 
+        Str8Lit("cut"),
+        Str8Lit(""),
+        Str8Lit("Cut"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL
+    },
+    { 
+        Str8Lit("paste"),
+        Str8Lit(""),
+        Str8Lit("Paste"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL
+    },
+    { 
+        Str8Lit("insert_text"),
+        Str8Lit(""),
+        Str8Lit("Insert Text"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_next"),
+        Str8Lit(""),
+        Str8Lit("Move Next"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("move_prev"),
+        Str8Lit(""),
+        Str8Lit("Move Previous"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("centre_cursor"),
+        Str8Lit(""),
+        Str8Lit("Centre Cursor"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("contain_cursor"),
+        Str8Lit(""),
+        Str8Lit("Contain Cursor"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("find_next"),
+        Str8Lit(""),
+        Str8Lit("Find Next"),
+        Str8Lit(""),
+        APP_ICON_KIND_FIND 
+    },
+    { 
+        Str8Lit("find_prev"),
+        Str8Lit(""),
+        Str8Lit("Find Previous"),
+        Str8Lit(""),
+        APP_ICON_KIND_FIND 
+    },
+    { 
+        Str8Lit("enable_cfg"),
+        Str8Lit(""),
+        Str8Lit("Enable"),
+        Str8Lit(""),
+        APP_ICON_KIND_CHECK_HOLLOW 
+    },
+    { 
+        Str8Lit("disable_cfg"),
+        Str8Lit(""),
+        Str8Lit("Disable"),
+        Str8Lit(""),
+        APP_ICON_KIND_CHECK_FILLED 
+    },
+    { 
+        Str8Lit("select_cfg"),
+        Str8Lit(""),
+        Str8Lit("Select"),
+        Str8Lit(""),
+        APP_ICON_KIND_RADIO_HOLLOW 
+    },
+    { 
+        Str8Lit("deselect_cfg"),
+        Str8Lit(""),
+        Str8Lit("Deselect"),
+        Str8Lit(""),
+        APP_ICON_KIND_RADIO_FILLED 
+    },
+    { 
+        Str8Lit("remove_cfg"),
+        Str8Lit(""),
+        Str8Lit("Remove"),
+        Str8Lit(""),
+        APP_ICON_KIND_X
+    },
+    { 
+        Str8Lit("name_cfg"),
+        Str8Lit(""),
+        Str8Lit("Name"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("duplicate_cfg"),
+        Str8Lit(""),
+        Str8Lit("Duplicate"),
+        Str8Lit(""),
+        APP_ICON_KIND_ADD
+    },
+    { 
+        Str8Lit("relocate_cfg"),
+        Str8Lit(""),
+        Str8Lit("Relocate"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("save_cfg_to_session"),
+        Str8Lit(""),
+        Str8Lit("Save To Session"),
+        Str8Lit(""),
+        APP_ICON_KIND_FILE
+    },
+    { 
+        Str8Lit("clear_output"),
+        Str8Lit(""),
+        Str8Lit("Clear Output"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("edit_session_theme"),
+        Str8Lit(""),
+        Str8Lit("Edit Session Theme"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL
+    },
+    { 
+        Str8Lit("add_theme_colour"),
+        Str8Lit(""),
+        Str8Lit("Add Theme Colour"),
+        Str8Lit(""),
+        APP_ICON_KIND_ADD
+    },
+    { 
+        Str8Lit("fork_theme"),
+        Str8Lit(""),
+        Str8Lit("Fork Theme"),
+        Str8Lit(""),
+        APP_ICON_KIND_ADD
+    },
+    { 
+        Str8Lit("save_theme"),
+        Str8Lit(""),
+        Str8Lit("Save Theme"),
+        Str8Lit(""),
+        APP_ICON_KIND_INFO
+    },
+    { 
+        Str8Lit("save_and_set_theme"),
+        Str8Lit(""),
+        Str8Lit("Save And Set Theme"),
+        Str8Lit(""),
+        APP_ICON_KIND_ADD
+    },
+    { 
+        Str8Lit("search"),
+        Str8Lit(""),
+        Str8Lit("Search"),
+        Str8Lit(""),
+        APP_ICON_KIND_FIND 
+    },
+    { 
+        Str8Lit("search_backwards"),
+        Str8Lit(""),
+        Str8Lit("Search Backwards"),
+        Str8Lit(""),
+        APP_ICON_KIND_FIND 
+    },
+    { 
+        Str8Lit("pick_file"),
+        Str8Lit(""),
+        Str8Lit("Pick File"),
+        Str8Lit(""),
+        APP_ICON_KIND_FILE
+    },
+    { 
+        Str8Lit("pick_folder"),
+        Str8Lit(""),
+        Str8Lit("Pick Folder"),
+        Str8Lit(""),
+        APP_ICON_KIND_FOLDER
+    },
+    { 
+        Str8Lit("pick_file_or_folder"),
+        Str8Lit(""),
+        Str8Lit("Pick File/Folder"),
+        Str8Lit(""),
+        APP_ICON_KIND_FILE
+    },
+    { 
+        Str8Lit("push_query"),
+        Str8Lit(""),
+        Str8Lit("Push Query"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("complete_query"),
+        Str8Lit(""),
+        Str8Lit("Complete Query"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("cancel_query"),
+        Str8Lit(""),
+        Str8Lit("Cancel Query"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("update_query"),
+        Str8Lit(""),
+        Str8Lit("Update Query"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("toggle_dev_menu"),
+        Str8Lit(""),
+        Str8Lit("Toggle Developer Menu"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL 
+    },
+    { 
+        Str8Lit("files"),
+        Str8Lit(""),
+        Str8Lit("Files"),
+        Str8Lit(""),
+        APP_ICON_KIND_FILE
+    },
+    { 
+        Str8Lit("views"),
+        Str8Lit(""),
+        Str8Lit("Views"),
+        Str8Lit(""),
+        APP_ICON_KIND_FILE
+    },
+    { 
+        Str8Lit("flv"),
+        Str8Lit(""),
+        Str8Lit("FLV"),
+        Str8Lit(""),
+        APP_ICON_KIND_FILE
+    },
+    { 
+        Str8Lit("colour"),
+        Str8Lit(""),
+        Str8Lit("Colour"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL
+    }
 };
 EXTERN_C_LINK_END
+
+struct QueryTypeMapping {
+    Str8                   Name;
+    AppQueryExpressionKind Kind;
+};
+
+global QueryTypeMapping Mappings[] = {
+    {
+        Str8Lit("commands"),
+        APP_QUERY_EXPR_KIND_COMMANDS
+    },
+    {
+        Str8Lit("tab_commands"),
+        APP_QUERY_EXPR_KIND_TAB_COMMANDS
+    },
+    {
+        Str8Lit("recent_files"),
+        APP_QUERY_EXPR_KIND_RECENT_FILES
+    },
+    {
+        Str8Lit("flv_files"),
+        APP_QUERY_EXPR_KIND_FLV_FILES
+    },
+    {
+        Str8Lit("recent_sessions"),
+        APP_QUERY_EXPR_KIND_RECENT_SESSIONS
+    },
+    {
+        Str8Lit("themes"),
+        APP_QUERY_EXPR_KIND_THEMES
+    },
+    {
+        Str8Lit("session_settings"),
+        APP_QUERY_EXPR_KIND_SESSION_SETTINGS
+    },
+    {
+        Str8Lit("file_path"),
+        APP_QUERY_EXPR_KIND_FILE_PATH
+    }
+};
+
+APP_VIEW_UI_FUNC_DEF(Null)
+{}
+
+AppRegisters*
+AppGetHoverRegisters(void)
+{
+    return APP_STATE->HoverRegisters;
+}
+
+AppViewUIRule*
+AppViewUIRuleFromStr(Str8 String)
+{
+    AppViewUIRule* Result = EMPTY_APP_VIEW_UI_RULE_VALUE;
+    AppViewUIRuleMap* Map = APP_STATE->ViewUIRuleMap;
+    u64 StringHash = Hash(String);
+    u64 SlotIndex = StringHash % Map->SlotsCount;
+
+    for (
+        AppViewUIRuleNode* Node = Map->Slots[SlotIndex].Head;
+        Node;
+        Node = Node->Next
+    ) {
+        if (StrMatch(Node->V.Name, String, 0)) {
+            Result = &Node->V;
+            break;
+        }
+    }
+
+    return Result;
+}
+
+FancyStrList
+AppTitleFStrFromCodeName(Arena* MemPool, Str8 CodeName)
+{
+    FancyStrList Result = {};
+    AppVocabInfo* Info = AppVocabInfoFromCodeName(CodeName);
+    FancyStrParams Params = {
+        UIColourFromName("text"_s8)
+    };
+    FancyStrParams Overrides = {};
+
+    Overrides.Colour = UIColourFromName("text"_s8);
+
+    if (Info->IconKind != APP_ICON_KIND_NULL) {
+        UITag("weak"_s8) {
+            ListPush(
+                MemPool,
+                &Result,
+                &Params,
+                &Overrides,
+                APP_ICON_KIND_TEXT_TABLE[Info->IconKind]
+            );
+            ListPush(
+                MemPool,
+                &Result,
+                &Params,
+                NULL,
+                "  "_s8
+            );
+        }
+
+        if (Info->DisplayName.Size) {
+            ListPush(MemPool, &Result, &Params, NULL, Info->DisplayName);
+        } else {
+            Overrides.Colour = Vec(0.0f, 0.0f, 0.0f, 0.0f);
+            ListPush(
+                MemPool,
+                &Result,
+                &Params,
+                &Overrides,
+                CodeName
+            );
+        }
+    }
+
+    return Result;
+}
+
+FancyStrList
+AppTitleFStrFromFilePath(Arena* MemPool, Str8 FilePath, b32 IncludeFolder)
+{
+    FancyStrList Result = {};
+    Str8 FileName = StrSkipLastSlash(FilePath);
+    FileProperties Props = SystemGetFileProperties(FilePath);
+    AppIconKind IconKind = APP_ICON_KIND_FILE;
+
+    if (Props.Kind & SYS_FILE_IS_DIR)
+        IconKind = APP_ICON_KIND_FOLDER;
+
+    if (
+        !FilePath.Size ||
+        StrMatch(FilePath, "/"_s8, STR_MATCH_SKIP_SLASH)
+    ) {
+        IconKind = APP_ICON_KIND_INFO;
+        FileName = "File System"_s8;
+    }
+
+    FancyStrParams Params = {
+        UIColourFromName("text"_s8)
+    };
+    FancyStrParams Overrides = {};
+
+    Overrides.Colour = UIColourFromName("text"_s8);
+
+    UITag("weak"_s8) {
+        ListPush(
+            MemPool,
+            &Result,
+            &Params,
+            &Overrides,
+            APP_ICON_KIND_TEXT_TABLE[IconKind]
+        );
+    }
+
+    ListPush(
+        MemPool,
+        &Result,
+        &Params,
+        NULL,
+        "  "_s8
+    );
+    ListPush(
+        MemPool,
+        &Result,
+        &Params,
+        NULL,
+        FileName
+    );
+
+    if (IncludeFolder) {
+        ListPush(
+            MemPool,
+            &Result,
+            &Params,
+            NULL,
+            "  "_s8
+        );
+
+        UITag("weak"_s8) {
+            Overrides = {};
+            Overrides.Colour = UIColourFromName("text"_s8);
+            ListPush(
+                MemPool,
+                &Result,
+                &Params,
+                &Overrides,
+                StrChopLastSlash(FilePath)
+            );
+        }
+    }
+
+    return Result;
+}
+
+b32 
+AppIsProjectFiltered(ConfigNode* Config)
+{
+    ConfigNode* Session = ConfigNodeChildFromStr(Config, "session"_s8);
+    b32 Result = (
+        Session != EMPTY_CFG_NODE_VALUE &&
+        Session->Head->String.Size &&
+        !PathMatchNormalised(
+            APP_STATE->SessionPath,
+            Session->Head->String
+        )
+    );
+
+    return Result;
+}
+
+AppViewUIRuleMap*
+AppViewUIRuleMapAlloc(Arena* MemPool, u64 SlotsCount)
+{
+    AppViewUIRuleMap* Result = ArenaPushArrayZero(
+        MemPool,
+        AppViewUIRuleMap,
+        1
+    );
+
+    Result->SlotsCount = SlotsCount;
+    Result->Slots = ArenaPushArrayZero(
+        MemPool,
+        AppViewUIRuleSlot,
+        Result->SlotsCount
+    );
+
+    return Result;
+}
+
+void
+MapInsert(
+    Arena* MemPool, 
+    AppViewUIRuleMap* Map, 
+    Str8 String, 
+    AppViewUIFuncType* ViewUIFunc
+) {
+    u64 StringHash = Hash(String);
+    u64 SlotIndex = StringHash % Map->SlotsCount;
+    AppViewUIRuleNode* Node = ArenaPushArrayZero(
+        MemPool,
+        AppViewUIRuleNode,
+        1
+    );
+
+    Node->V.Name = ArenaPushStrCpy(MemPool, String);
+    Node->V.ViewUIFunc = ViewUIFunc;
+    SLL_QUEUE_PUSH(
+        Map->Slots[SlotIndex].Head,
+        Map->Slots[SlotIndex].Tail,
+        Node
+    );
+}
+
+Str8 
+AppExpressionFromConfig(ConfigNode* Cfg)
+{
+    ConfigNode* ExpressionRoot = ConfigNodeChildFromStr(Cfg, "expression"_s8);
+    Str8 Result = ExpressionRoot->Head->String;
+
+    return Result;
+}
 
 void 
 CopyRegisters(Arena* MemPool, AppRegisters* Dst, AppRegisters* Src)
@@ -1868,6 +3554,33 @@ ListPush(Arena* MemPool, AppQueryResultList* List, AppQueryResult Entry)
     ++List->Count;
 }
 
+void
+AppSetHoverEval(v2i32 Position, Str8 String)
+{
+    if (
+        APP_STATE->HoverEvalLastTimeUSecs < APP_STATE->TimeUSecs &&
+        UIActiveKey(UI_MOUSE_BTN_KIND_LEFT) == EMPTY_UI_KEY_VALUE &&
+        UIActiveKey(UI_MOUSE_BTN_KIND_MIDDLE) == EMPTY_UI_KEY_VALUE &&
+        UIActiveKey(UI_MOUSE_BTN_KIND_RIGHT) == EMPTY_UI_KEY_VALUE
+    ) {
+        b32 IsNewString = !StrMatch(APP_STATE->HoverEvalString, String, 0);
+
+        if (IsNewString) {
+            APP_STATE->HoverEvalFirstTimeUSecs = APP_STATE->TimeUSecs;
+            APP_STATE->HoverEvalLastTimeUSecs = APP_STATE->TimeUSecs;
+            ArenaClear(APP_STATE->HoverEvalMemPool);
+            APP_STATE->HoverEvalString = ArenaPushStrCpy(
+                APP_STATE->HoverEvalMemPool, 
+                String
+            );
+            APP_STATE->HoverEvalFocused = FALSE;
+        }
+
+        APP_STATE->HoverEvalSpawnPosition = Position;
+        APP_STATE->HoverEvalLastTimeUSecs = APP_STATE->TimeUSecs;
+    }
+}
+
 Str8 
 AppSettingFromNameStr8(Str8 Name)
 {
@@ -1879,7 +3592,11 @@ AppSettingFromNameStr8(Str8 Name)
         Cfg = ConfigNodeFromID(Registers()->View);
 
         if (Cfg != EMPTY_CFG_NODE_VALUE) {
-            for (ConfigNode* C = Cfg; C != EMPTY_CFG_NODE_VALUE; C = C->Parent) {
+            for (
+                ConfigNode* C = Cfg; 
+                C != EMPTY_CFG_NODE_VALUE; 
+                C = C->Parent
+            ) {
                 ConfigNode* Setting = ConfigNodeChildFromStr(C, Name);
 
                 if (Setting != EMPTY_CFG_NODE_VALUE) {
@@ -2024,6 +3741,211 @@ AppViewStateFromConfig(ConfigNode* Config)
     return Result;
 }
 
+void 
+AppSetHoverRegisters(AppRegistersSlot Slot)
+{
+    APP_STATE->NextHoverRegisters = CopyRegisters(
+        AppFrameMemPool(), 
+        Registers()
+    );
+    APP_STATE->NextHoverRegistersSlot = Slot;
+}
+
+v4f32 
+AppHSVAFromConfig(ConfigNode* Config)
+{
+    v4f32 Result = {};
+    ConfigNode* HSVARoot = ConfigNodeChildFromStr(Config, "hsva"_s8);
+    ConfigNode* H = HSVARoot->Head;
+    ConfigNode* S = H->Next;
+    ConfigNode* V = S->Next;
+    ConfigNode* A = V->Next;
+
+    Result.X = (f32) F64FromStr(H->String);
+    Result.Y = (f32) F64FromStr(S->String);
+    Result.Z = (f32) F64FromStr(V->String);
+    Result.W = (f32) F64FromStr(A->String);
+
+    return Result;
+}
+
+v4f32 
+AppColourFromConfig(ConfigNode* Config)
+{
+    v4f32 HSVA = AppHSVAFromConfig(Config);
+    v4f32 Result = LinearFromSRGBA(RGBAFromHSVA(HSVA));
+
+    return Result;
+}
+
+b32 
+AppIsDisabled(ConfigNode* Config)
+{
+    TempArena Scratch = GetScratch(NULL, 0);
+    MDNode* ChildSchema = EMPTY_MD_NODE_VALUE;
+    MDNodePtrList Schemas = ConfigSchemasFromName(
+        Scratch.MemPool,
+        APP_STATE->CfgSchemaTable,
+        Config->String
+    );
+
+    for (
+        MDNodePtrNode* N = Schemas.Head;
+        N && ChildSchema == EMPTY_MD_NODE_VALUE;
+        N = N->Next
+    ) {
+        ChildSchema = MDChildFromStr(N->V, "enabled"_s8, 0);
+    }
+
+    MDNode* DefaultTag = MDTagFromStr(ChildSchema, "default"_s8, 0);
+    Str8 ValueString = ConfigNodeChildFromStr(
+        Config, 
+        "enabled"_s8
+    )->Head->String;
+
+    if (!ValueString.Size)
+        ValueString = DefaultTag->Head->String;
+
+    b32 IsEnabled = !!U64FromStr(ValueString);
+    b32 IsDisabled = !IsEnabled;
+
+    if (!ValueString.Size)
+        IsDisabled = FALSE;
+
+    ReleaseScratch(Scratch);
+
+    return IsDisabled;
+}
+
+Str8 
+LabelFromConfig(ConfigNode* Config)
+{
+    ConfigNode* LabelRoot = ConfigNodeChildFromStr(Config, "label"_s8);
+    Str8 Result = LabelRoot->Head->String;
+
+    return Result;
+}
+
+Str8 
+ExpressionFromConfig(ConfigNode* Config)
+{
+    ConfigNode* ExpressionRoot = ConfigNodeChildFromStr(
+        Config, 
+        "expression"_s8
+    );
+    Str8 Result = ExpressionRoot->Head->String;
+
+    return Result;
+}
+
+AppVocabInfo*
+AppVocabInfoFromCodeName(Str8 CodeName)
+{
+    AppVocabInfo* Result = EMPTY_APP_VOCAB_INFO_VALUE;
+
+    if (CodeName.Size) {
+        u64 CodeHash = Hash(CodeName);
+        u64 SlotIndex = CodeHash % APP_STATE->VocabInfoMap.SingleSlotsCount;
+
+        for (
+            AppVocabInfoMapNode* N = APP_STATE->VocabInfoMap.SingleSlots[SlotIndex].Head;
+            N;
+            N = N->SingleNext
+        ) {
+            if (StrMatch(N->V.CodeName, CodeName, 0)) {
+                Result = &N->V;
+                break;
+            }
+        }
+    }
+
+    return Result;
+}
+
+AppVocabInfo*
+AppVocabInfoFromCodeNamePlural(Str8 CodeName)
+{
+    AppVocabInfo* Result = EMPTY_APP_VOCAB_INFO_VALUE;
+
+    if (CodeName.Size) {
+        u64 CodeHash = Hash(CodeName);
+        u64 SlotIndex = CodeHash % APP_STATE->VocabInfoMap.PluralSlotsCount;
+
+        for (
+            AppVocabInfoMapNode* N = APP_STATE->VocabInfoMap.PluralSlots[SlotIndex].Head;
+            N;
+            N = N->SingleNext
+        ) {
+            if (StrMatch(N->V.CodeName, CodeName, 0)) {
+                Result = &N->V;
+                break;
+            }
+        }
+    }
+
+    return Result;
+}
+
+Str8 
+PathFromConfig(ConfigNode* Config)
+{
+    ConfigNode* PathRoot = ConfigNodeChildFromStr(Config, "path"_s8);
+    Str8 Result = PathRoot->Head->String;
+
+    return Result;
+}
+
+MDNodePtrList 
+AppSchemasFromName(Str8 Name)
+{
+    MDNodePtrList Result = {};
+
+    for (
+        u64 Index = 0; 
+        Index < ARRAY_COUNT(APP_NAME_SCHEMA_INFO_TABLE); 
+        ++Index
+    ) {
+        if (StrMatch(Name, APP_NAME_SCHEMA_INFO_TABLE[Index].Name, 0)) {
+            Result = APP_STATE->Schemas[Index];
+            break;
+        }
+    }
+
+    return Result;
+}
+
+Str8 
+AppDefaultSettingFromNames(Str8 SchemaName, Str8 SettingName)
+{
+    Str8 Result = {};
+    TempArena Scratch = GetScratch(NULL, 0);
+    MDNode* SettingSchema = EMPTY_MD_NODE_VALUE;
+    MDNodePtrList Schemas = ConfigSchemasFromName(
+        Scratch.MemPool,
+        APP_STATE->CfgSchemaTable,
+        SchemaName
+    );
+
+    for (
+        MDNodePtrNode* N = Schemas.Head;
+        N && SettingSchema == EMPTY_MD_NODE_VALUE;
+        N = N->Next
+    ) {
+        SettingSchema = MDChildFromStr(N->V, SettingName, 0);
+    }
+
+    if (SettingSchema != EMPTY_MD_NODE_VALUE) {
+        MDNode* DefaultTag = MDTagFromStr(SettingSchema, "default"_s8, 0);
+
+        if (DefaultTag != EMPTY_MD_NODE_VALUE)
+            Result = DefaultTag->Head->String;
+    }
+
+    ReleaseScratch(Scratch);
+
+    return Result;
+}
+
 Arena* 
 AppViewMemPool(void)
 {
@@ -2072,6 +3994,55 @@ AppViewFilePath(void)
     Str8 String = File->Head->String;
 
     return String;
+}
+
+Str8 
+AppViewSettingFromNameStr8(Str8 Name)
+{
+    ConfigNode* View = ConfigNodeFromID(Registers()->View);
+    Str8 Result = ConfigNodeChildFromStr(View, Name)->Head->String;
+
+    if (!Result.Size)
+        Result = AppDefaultSettingFromNames(View->String, Name);
+
+    return Result;
+}
+
+b32 
+AppViewSettingFromNameB32(Str8 Name)
+{
+    Str8 Value = AppViewSettingFromNameStr8(Name);
+    b32 Result = (
+        Value.Size &&
+        (
+            U64FromStr(Value) != 0 ||
+            StrMatch(Value, "true"_s8, STR_MATCH_ALL_CASES)
+        )
+    );
+
+    return Result;
+}
+
+u64 
+AppViewSettingFromNameU64(Str8 Name)
+{
+    Str8 Value = AppViewSettingFromNameStr8(Name);
+    u64 Result = Value.Size 
+        ? U64FromStr(Value) 
+        : 0;
+
+    return Result;
+}
+
+f32 
+AppViewSettingFromNameF32(Str8 Name)
+{
+    Str8 Value = AppViewSettingFromNameStr8(Name);
+    f32 Result = Value.Size 
+        ? (f32) F64FromStr(Value) 
+        : 0.0f;
+
+    return Result;
 }
 
 void* 
@@ -2234,13 +4205,22 @@ AppRegistersFillSlotFromStr(
 
     switch (Slot) {
         default:
-        case APP_REGISTERS_SLOT_STRING: {
-            Registers()->String = ArenaPushStrCpy(AppFrameMemPool(), String);
-        } break;
-
+        case APP_REGISTERS_SLOT_STRING: 
         case APP_REGISTERS_SLOT_FILE_PATH: {
-            Registers()->String = ArenaPushStrCpy(AppFrameMemPool(), String);
-            Registers()->FilePath = Registers()->String;
+            Str8TextPointPair Pair = Str8TextPointPairFromStr(String);
+
+            Registers()->String = ArenaPushStrCpy(
+                AppFrameMemPool(),
+                String
+            );
+
+            if (Pair.Point.Line != 0) {
+                Registers()->FilePath = ArenaPushStrCpy(
+                    AppFrameMemPool(),
+                    Pair.String
+                );
+                Registers()->Cursor = Pair.Point;
+            }
         } break;
 
         case APP_REGISTERS_SLOT_COMMAND_NAME: {
@@ -2248,6 +4228,43 @@ AppRegistersFillSlotFromStr(
                 AppFrameMemPool(), 
                 String
             );
+        } break;
+
+        case APP_REGISTERS_SLOT_CONFIG:
+        case APP_REGISTERS_SLOT_WINDOW:
+        case APP_REGISTERS_SLOT_PANEL:
+        case APP_REGISTERS_SLOT_TAB:
+        case APP_REGISTERS_SLOT_VIEW:
+        case APP_REGISTERS_SLOT_PREV_TAB:
+        case APP_REGISTERS_SLOT_DST_PANEL: {
+            b32 IsOkay = FALSE;
+
+            if (!IsOkay && StrMatch(StrPrefix(String, 1), "$"_s8, 0)) {
+                Str8 NumericPart = StrSkip(String, 1);
+                ConfigID ID = U64FromStr(NumericPart, 16);
+
+                Registers()->Config = ID;
+                IsOkay = TRUE;
+            }
+        } break;
+
+        case APP_REGISTERS_SLOT_CURSOR: {
+            u64 Line = 0;
+            u64 Column = 0;
+            u64 ColonIndex = 0;
+
+            if (StrFindSubStr(String, ":"_s8, 0, 0) != String.Size) {
+                Line = U64FromStr(StrPrefix(String, ColonIndex));
+                Column = U64FromStr(StrSkip(String, ColonIndex + 1));
+            } else {
+                Line = U64FromStr(String);
+                Column = 1;
+            }
+
+            if (Line) {
+                Registers()->Cursor = TxtPt(Line, MAX(1, Column));
+                Registers()->Mark = Registers()->Cursor;
+            }
         } break;
     }
 }
@@ -2443,23 +4460,6 @@ AppTitleFStrFromConfig(Arena* MemPool, ConfigNode* Config)
         ListPush(MemPool, &Result, &Params, NULL, " "_s8);
         ListPush(MemPool, &Result, &Params, NULL, FileName);
     }
-
-    return Result;
-}
-
-AppQueryExpressionKind 
-AppQueryExpressionKindFromStr(Str8 Expression)
-{
-    AppQueryExpressionKind Result = APP_QUERY_EXPR_KIND_NULL;
-
-    if (StrMatch(Expression, "commands"_s8, 0))
-        Result = APP_QUERY_EXPR_KIND_COMMANDS;
-    else if (StrMatch(Expression, "tab_commands"_s8, 0))
-        Result = APP_QUERY_EXPR_KIND_TAB_COMMANDS;
-    else if (StrMatch(Expression, "themes"_s8, 0))
-        Result = APP_QUERY_EXPR_KIND_THEMES;
-    else if (StrMatch(Expression, "file_path"_s8, 0))
-        Result = APP_QUERY_EXPR_KIND_FILE_PATH;
 
     return Result;
 }
@@ -3286,11 +5286,22 @@ AppInit(CommandLine* CLI)
 {
     EMPTY_APP_VIEW_STATE_VALUE->HashNext = EMPTY_APP_VIEW_STATE_VALUE;
     EMPTY_APP_VIEW_STATE_VALUE->HashPrev = EMPTY_APP_VIEW_STATE_VALUE;
+    __EMPTY_APP_VOCAB_INFO_VALUE = {};
 
     Arena* MemPool = ArenaAlloc();
 
     APP_STATE = ArenaPushArrayZero(MemPool, AppState, 1);
     APP_STATE->MemPool = MemPool;
+    APP_STATE->SessionPathMemPool = ArenaAlloc();
+    APP_STATE->ThemePathMemPool = ArenaAlloc();
+    APP_STATE->SessionConfigStringKey = CKeyAlloc(
+        CRootAlloc(),
+        CIDAlloc(0, 0)
+    );
+    APP_STATE->TransientConfigStringKey = CKeyAlloc(
+        CRootAlloc(),
+        CIDAlloc(0, 0)
+    );
 
     for (
         u64 Index = 0; 
@@ -3310,7 +5321,16 @@ AppInit(CommandLine* CLI)
         APP_STATE->CommandMemPools[Index] = ArenaAlloc();
     }
 
+    APP_STATE->CommandOutputMemPool = ArenaAlloc();
     APP_STATE->PopUpMemPool = ArenaAlloc();
+    APP_STATE->ContextMenuKey = UIKeyFromStr(
+        EMPTY_UI_KEY_VALUE, 
+        "top_level_ctx_menu"_s8
+    );
+    APP_STATE->DropCompletionKey = UIKeyFromStr(
+        EMPTY_UI_KEY_VALUE,
+        "drop_completion_ctx_menu"_s8
+    );
     APP_STATE->QueryMemPool = ArenaAlloc();
     APP_STATE->DragDropMemPool = ArenaAlloc();
     APP_STATE->DragDropRegisters = ArenaPushArrayZero(
@@ -3328,12 +5348,30 @@ AppInit(CommandLine* CLI)
             ConfigSchemaTable,
             1
         );
-        APP_STATE->CfgSchemaTable->SlotsCount = 64;
+        APP_STATE->CfgSchemaTable->SlotsCount = 4096;
         APP_STATE->CfgSchemaTable->Slots = ArenaPushArrayZero(
             APP_STATE->MemPool,
             ConfigSchemaNode*,
             APP_STATE->CfgSchemaTable->SlotsCount
         );
+
+        for (
+            u64 Index = 0;
+            Index < ARRAY_COUNT(APP_NAME_SCHEMA_INFO_TABLE);
+            ++Index
+        ) {
+            MDNode* Schema = MDTreeFromStr(
+                APP_STATE->MemPool,
+                APP_NAME_SCHEMA_INFO_TABLE[Index].Schema
+            )->Head;
+
+            ConfigSchemaTableInsert(
+                APP_STATE->MemPool,
+                APP_STATE->CfgSchemaTable,
+                APP_NAME_SCHEMA_INFO_TABLE[Index].Name,
+                Schema
+            );
+        }
     }
 
     {
@@ -3349,18 +5387,77 @@ AppInit(CommandLine* CLI)
         }
     }
 
-    APP_STATE->Config = ConfigStateAlloc();
-    ConfigContextSelect(ConfigContextFromState(APP_STATE->Config));
-
-    ConfigNode* Session = ConfigNodeNew(
-        APP_STATE->Config, 
-        ConfigNodeRoot(), 
-        "session"_s8
+    APP_STATE->VocabInfoMap.SingleSlotsCount = 1024;
+    APP_STATE->VocabInfoMap.SingleSlots = ArenaPushArrayZero(
+        APP_STATE->MemPool,
+        AppVocabInfoMapSlot,
+        APP_STATE->VocabInfoMap.SingleSlotsCount
+    );
+    APP_STATE->VocabInfoMap.PluralSlotsCount = 1024;
+    APP_STATE->VocabInfoMap.PluralSlots = ArenaPushArrayZero(
+        APP_STATE->MemPool,
+        AppVocabInfoMapSlot,
+        APP_STATE->VocabInfoMap.PluralSlotsCount
     );
 
+    for (
+        u64 Index = 0;
+        Index < ARRAY_COUNT(APP_VOCAB_INFO_TABLE);
+        ++Index
+    ) {
+        AppVocabInfoMapNode* N = ArenaPushArrayZero(
+            APP_STATE->MemPool,
+            AppVocabInfoMapNode,
+            1
+        );
+
+        MemCpy(
+            &N->V,
+            &APP_VOCAB_INFO_TABLE[Index],
+            sizeof(N->V)
+        );
+
+        u64 SingleHash = Hash(N->V.CodeName);
+        u64 PluralHash = Hash(N->V.CodeNamePlural);
+
+        if (N->V.CodeName.Size) {
+            SLL_QUEUE_PUSH_EX(
+                APP_STATE->VocabInfoMap.SingleSlots[
+                    SingleHash % APP_STATE->VocabInfoMap.SingleSlotsCount
+                ].Head,
+                APP_STATE->VocabInfoMap.SingleSlots[
+                    SingleHash % APP_STATE->VocabInfoMap.SingleSlotsCount
+                ].Tail,
+                N,
+                SingleNext
+            );
+        }
+
+        if (N->V.CodeNamePlural.Size) {
+            SLL_QUEUE_PUSH_EX(
+                APP_STATE->VocabInfoMap.PluralSlots[
+                    PluralHash % APP_STATE->VocabInfoMap.PluralSlotsCount
+                ].Head,
+                APP_STATE->VocabInfoMap.PluralSlots[
+                    PluralHash % APP_STATE->VocabInfoMap.PluralSlotsCount
+                ].Tail,
+                N,
+                PluralNext
+            );
+        }
+    }
+
+    APP_STATE->ConfigIDSlotsCount = 1024;
+    APP_STATE->ConfigIDSlots = ArenaPushArrayZero(
+        MemPool,
+        ConfigNodePtrSlot,
+        APP_STATE->ConfigIDSlotsCount
+    );
+    APP_STATE->Config = ConfigStateAlloc();
+    ConfigContextSelect(ConfigContextFromState(APP_STATE->Config));
+    ConfigNodeNew(APP_STATE->Config, ConfigNodeRoot(), "session"_s8);
     ConfigNodeNew(APP_STATE->Config, ConfigNodeRoot(), "command_line"_s8);
     ConfigNodeNew(APP_STATE->Config, ConfigNodeRoot(), "transient"_s8);
-
     APP_STATE->ViewStateSlotsCount = 1024;
     APP_STATE->ViewStateSlots = ArenaPushArrayZero(
         MemPool,
@@ -3404,48 +5501,106 @@ AppInit(CommandLine* CLI)
     }
 
     {
-        Str8 ThemeName = CommandLineString(CLI, "theme"_s8);
-        ConfigNode* Theme = ConfigNodeNew(
-            APP_STATE->Config, 
-            Session, 
-            "theme"_s8
+        TempArena Scratch = GetScratch(NULL, 0);
+        Str8 SessionPath = CommandLineString(CLI, "session"_s8);
+
+        if (SessionPath.Size) {
+            SessionPath = PathAbsoluteDstFromRelativeDstSrc(
+                Scratch.MemPool,
+                SessionPath,
+                GetProcessProperties()->InitialPath
+            );
+        }
+
+        Str8 SessionProgramDataPath = GetProcessProperties()->UserProgramDataPath;
+        Str8 SessionDataPath = ArenaPushStrFmt(
+            Scratch.MemPool,
+            "%S/%s",
+            PRINT_STR(SessionProgramDataPath),
+            NC_DATA_DIR
         );
 
-        if (!ThemeName.Size)
-            ThemeName = APP_THEME_PRESET_DISPLAY_STR_TABLE[APP_THEME_PRESET_AYU_DARK];
+        SystemCreateDirectory(SessionDataPath);
 
-        ConfigNodeNew(APP_STATE->Config, Theme, ThemeName);
+        if (!SessionDataPath.Size) {
+            SessionPath = ArenaPushStrFmt(
+                Scratch.MemPool,
+                "%S/default.%s_session",
+                PRINT_STR(SessionDataPath),
+                NC_DATA_DIR
+            );
+        }
+
+        if (SessionPath.Size) {
+            ArenaClear(APP_STATE->SessionPathMemPool);
+            APP_STATE->SessionPath = ArenaPushStrCpy(
+                APP_STATE->SessionPathMemPool,
+                SessionPath
+            );
+        }
+
+        AppCmd(
+            APP_COMMAND_KIND_OPEN_SESSION,
+            __Registers.FilePath = SessionPath
+        );
+        ReleaseScratch(Scratch);
+    }
+}
+
+ConfigNode* 
+AppImmediateConfigFromKey(Str8 String)
+{
+    ConfigNode* Transient = ConfigNodeChildFromStr(
+        ConfigNodeRoot(),
+        "transient"_s8
+    );
+    ConfigNode* Immediate = EMPTY_CFG_NODE_VALUE;
+    ConfigNode* Result = EMPTY_CFG_NODE_VALUE;
+
+    for (
+        ConfigNode* Child = Transient->Head;
+        Child != EMPTY_CFG_NODE_VALUE;
+        Child = Child->Next
+    ) {
+        if (StrMatch(Child->String, "immediate"_s8, 0)) {
+            Result = ConfigNodeChildFromStr(Child, String);
+
+            if (Result != EMPTY_CFG_NODE_VALUE) {
+                Immediate = Child;
+                break;
+            }
+        }
     }
 
-    {
-        ConfigNode* Window = ConfigNodeNew(
-            APP_STATE->Config, 
-            Session, 
-            "window"_s8
-        );
-        ConfigNode* Panels = ConfigNodeNew(
-            APP_STATE->Config, 
-            Window, 
-            "panels"_s8
-        );
-        ConfigNode* Tab = ConfigNodeNew(
+    if (Result == EMPTY_CFG_NODE_VALUE) {
+        Immediate = ConfigNodeNew(
             APP_STATE->Config,
-            Panels,
-            APP_TAB_FAST_PATH_VIEW_NAME_TABLE[0]
+            Transient,
+            "immediate"_s8
         );
-
-        ConfigNodeNew(APP_STATE->Config, Panels, "selected"_s8);
-        ConfigNodeNew(APP_STATE->Config, Tab, "selected"_s8);
-        BaseRegisters()->Window = Window->ID;
-        BaseRegisters()->Panel = Panels->ID;
-        BaseRegisters()->Tab = Tab->ID;
-        BaseRegisters()->View = Tab->ID;
+        Result = ConfigNodeNew(APP_STATE->Config, Immediate, String);
     }
 
-    AppCmd(APP_COMMAND_KIND_RESET_TO_DEFAULT_BINDINGS);
+    ConfigNodeChildFromStrOrAlloc(APP_STATE->Config, Immediate, "hot"_s8);
 
-    for (Str8Node* Node = CLI->Inputs.Head; Node; Node = Node->Next)
-        AppCmd(APP_COMMAND_KIND_OPEN, __Registers.FilePath = Node->String);
+    return Result;
+}
+
+ConfigNode* 
+AppImmediateConfigFromKey(char* Fmt, ...)
+{
+    TempArena Scratch = GetScratch(NULL, 0);
+    va_list Args;
+
+    va_start(Args, Fmt);
+
+    Str8 Key = ArenaPushStrFmtV(Scratch.MemPool, Fmt, Args);
+    ConfigNode* Result = AppImmediateConfigFromKey(Key);
+
+    va_end(Args);
+    ReleaseScratch(Scratch);
+
+    return Result;
 }
 
 INTERNAL Str8
@@ -3594,9 +5749,34 @@ AppFrame(void)
         &APP_STATE->HeadRegisters->V
     );
 
+    if (APP_STATE->NextHoverRegisters) {
+        APP_STATE->HoverRegisters = CopyRegisters(
+            AppFrameMemPool(),
+            APP_STATE->NextHoverRegisters
+        );
+        APP_STATE->HoverRegistersSlot = APP_STATE->NextHoverRegistersSlot;
+        APP_STATE->NextHoverRegisters = NULL;
+    } else {
+        APP_STATE->HoverRegisters = ArenaPushArrayZero(
+            AppFrameMemPool(),
+            AppRegisters,
+            1
+        );
+        APP_STATE->HoverRegistersSlot = APP_REGISTERS_SLOT_NULL;
+    }
+
     b32 AllowTextHotkeys = !APP_STATE->TextEditMode;
 
     APP_STATE->TextEditMode = FALSE;
+
+    if (APP_STATE->FrameDepth == 1) {
+        ArenaClear(APP_STATE->CommandOutputMemPool);
+        MemSet(
+            &APP_STATE->CommandOutputs, 
+            0, 
+            sizeof(APP_STATE->CommandOutputs)
+        );
+    }
 
     if (APP_STATE->FrameDepth == 1) {
         TempArena Scratch = GetScratch(NULL, 0);
@@ -3632,6 +5812,45 @@ AppFrame(void)
         }
 
         ReleaseScratch(Scratch);
+    }
+
+    if (APP_STATE->FrameDepth == 1) {
+        ConfigNode* Transient = ConfigNodeChildFromStr(
+            ConfigNodeRoot(), 
+            "transient"_s8
+        );
+
+        for (
+            ConfigNode* TLN = Transient->Head, *Next = EMPTY_CFG_NODE_VALUE;
+            TLN != EMPTY_CFG_NODE_VALUE;
+            TLN = Next
+        ) {
+            Next = TLN->Next;
+
+            if (StrMatch(TLN->String, "immediate"_s8, 0)) {
+                if (ConfigNodeChildFromStr(TLN, "hot"_s8) == EMPTY_CFG_NODE_VALUE)
+                    ConfigNodeRelease(APP_STATE->Config, TLN);
+            }
+        }
+
+        for (
+            ConfigNode* TLN = Transient->Head; 
+            TLN != EMPTY_CFG_NODE_VALUE; 
+            TLN = TLN->Next
+        ) {
+            if (StrMatch(TLN->String, "immediate"_s8, 0)) {
+                for (
+                    ConfigNode* Child = TLN->Head, *Next = EMPTY_CFG_NODE_VALUE; 
+                    Child != EMPTY_CFG_NODE_VALUE; 
+                    Child = Next
+                ) {
+                    Next = Child->Next;
+
+                    if (StrMatch(Child->String, "hot"_s8, 0))
+                        ConfigNodeRelease(APP_STATE->Config, Child);
+                }
+            }
+        }
     }
 
     if (APP_STATE->FrameDepth == 1) {
@@ -3835,12 +6054,15 @@ AppFrame(void)
                 if (Event->Modifier & INPUT_MOD_KIND_ALT)
                     ConfigNodeNew(APP_STATE->Config, Binding, "alt"_s8);
 
-                Text(
-                    &Events,
-                    CodePointFromInput(Event->Modifier, Event->Input)
+                u32 CodePoint = CodePointFromInput(
+                    Event->Modifier, 
+                    Event->Input
                 );
+
+                Text(&Events, CodePoint);
                 ConsumeEvent(&Events, Event);
                 AppRequestFrame();
+                break;
             }
         }
     }
@@ -3875,14 +6097,14 @@ AppFrame(void)
                 APP_STATE->MenuBarFocusPressStarted = FALSE;
             }
 
-            if (
-                Event->Kind == EVENT_KIND_PRESS &&
-                APP_STATE->ErrorStrSize &&
-                APP_STATE->ErrorFrameIndex < APP_STATE->FrameIndex
-            ) {
-                APP_STATE->ErrorStrSize = 0;
-                AppRequestFrame();
-            }
+            // if (
+            //     Event->Kind == EVENT_KIND_PRESS &&
+            //     APP_STATE->ErrorStrSize &&
+            //     APP_STATE->ErrorFrameIndex < APP_STATE->FrameIndex
+            // ) {
+            //     APP_STATE->ErrorStrSize = 0;
+            //     AppRequestFrame();
+            // }
 
             if (APP_STATE->AltMenuBarEnabled) {
                 if (
@@ -4019,6 +6241,10 @@ AppFrame(void)
     APP_STATE->AltMenuBarEnabled = AppSettingFromNameB32(
         "focus_menu_bar_with_alt"_s8
     );
+    APP_STATE->ViewUIRuleMap = AppViewUIRuleMapAlloc(
+        Scratch.MemPool,
+        512
+    );
 
     AppCommand* Command = NULL;
 
@@ -4068,6 +6294,7 @@ AppFrame(void)
                     } break;
 
                     case APP_COMMAND_KIND_EXIT: {
+                        AppCmd(APP_COMMAND_KIND_WRITE_SESSION_DATA);
                         APP_STATE->ShouldQuit = TRUE;
                     } break;
 
