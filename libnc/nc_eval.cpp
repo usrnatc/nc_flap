@@ -3695,6 +3695,22 @@ ListPushSetSpace(Arena* MemPool, EvalOpList* List, EvalSpace Space)
 }
 
 void 
+ListPushStrLit(Arena* MemPool, EvalOpList* List, Str8 String)
+{
+    EvalEvalOp OpCode = EVAL_EVAL_OP_CONST_STR;
+    u16 CtrlBits = EVAL_EVAL_OP_CTRL_BITS_TABLE[OpCode];
+    u32 Size = EVAL_DECODE_FROM_CTRL_BITS(CtrlBits);
+    EvalOp* Node = ArenaPushArray(MemPool, EvalOp, 1);
+
+    Node->OpCode = OpCode;
+    Node->String = String;
+    Node->Value.U64 = MIN(String.Size, 64);
+    SLL_QUEUE_PUSH(List->Head, List->Tail, Node);
+    ++List->OpCount;
+    List->EncodedSize += Size + Node->Value.U64 + 1;
+}
+
+void 
 ListCat(EvalOpList* Dst, EvalOpList* Src)
 {
     if (Src->Head && Dst->Head) {

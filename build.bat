@@ -71,7 +71,7 @@ set SharedCompilerFlags=^
     /DUNICODE /D_NO_CRT_STDIO_INLINE /D_CRT_SECURE_NO_WARNINGS ^
     /wd4018 /wd4100 /wd4189 /wd4200 /wd4201 /wd4211 /wd4244 ^
     /wd4245 /wd4334 /wd4456 /wd4505 /wd4714 /wd4146 /wd4716 ^
-    /wd4389 /wd4310 /we4715 /we4701 /we4703 /we4702
+    /wd4389 /wd4310 /wd4065 /we4715 /we4701 /we4703 /we4702
 
 set SharedLinkerFlags=^
     /MANIFEST:EMBED %SubSystem% /NOEXP /NODEFAULTLIB ^

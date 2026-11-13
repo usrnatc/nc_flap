@@ -43,8 +43,9 @@
 #include "nc_config.h"
 #include "nc_metadesk.h"
 #include "nc_sort.h"
-#include "nc_application.h"
 #include "nc_eval.h"
+#include "nc_application_eval.h"
+#include "nc_application.h"
 
 #include "nc_math.cpp"
 #include "nc_memory.cpp"
@@ -73,8 +74,9 @@
 #include "nc_http.cpp"
 #include "nc_config.cpp"
 #include "nc_metadesk.cpp"
-#include "nc_application.cpp"
 #include "nc_eval.cpp"
+#include "nc_application_eval.cpp"
+#include "nc_application.cpp"
 
 #if defined(NC_OS_WIN)
     #include "win32/win32_platform.h"

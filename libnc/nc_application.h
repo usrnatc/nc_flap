@@ -8,12 +8,22 @@
 #include "nc_content.h"
 #include "nc_metadesk.h"
 #include "nc_config.h"
+#include "nc_eval.h"
 
 #if !defined(NC_DATA_DIR)
     #define NC_DATA_DIR "flap"
 #endif
 
 // @defines____________________________________________________________________
+typedef u64 AppEvalSpaceKind;
+enum : u64 {
+    APP_EVAL_SPACE_KIND_META_QUERY = EVAL_SPACE_KIND_FIRST_USER_DEFINED,
+    APP_EVAL_SPACE_KIND_META_CFG,
+    APP_EVAL_SPACE_KIND_META_CMD,
+    APP_EVAL_SPACE_KIND_META_THEME,
+    APP_EVAL_SPACE_KIND_META_VIEW
+};
+
 enum AppRegistersSlot {
     APP_REGISTERS_SLOT_NULL,
     APP_REGISTERS_SLOT_WINDOW,
@@ -546,6 +556,8 @@ struct AppState {
     Arena*                    ThemePathMemPool;
     b32                       AltMenuBarEnabled;
     AppViewUIRuleMap*         ViewUIRuleMap;
+    EvalCache*                ECache;
+    EvalStr2TypeKeyMap*       MetaName2TypeMap;
 
     u64                       FramesAlive;
     UIState*                  UI;
@@ -652,12 +664,12 @@ extern Str8 APP_ICON_KIND_TEXT_TABLE[APP_ICON_KIND_COUNT];
 extern Str8 APP_THEME_PRESET_DISPLAY_STR_TABLE[APP_THEME_PRESET_COUNT];
 extern Str8 APP_THEME_PRESET_CODE_STR_TABLE[APP_THEME_PRESET_COUNT];
 extern Str8 APP_THEME_PRESET_CONFIG_STR_TABLE[APP_THEME_PRESET_COUNT];
-extern AppNameSchemaInfo APP_NAME_SCHEMA_INFO_TABLE[27];
+extern AppNameSchemaInfo APP_NAME_SCHEMA_INFO_TABLE[8];
 extern Str8 APP_REGISTERS_SLOT_CODE_NAME_TABLE[APP_REGISTERS_SLOT_COUNT];
 extern r1u64 APP_REGISTERS_SLOT_RANGE_TABLE[APP_REGISTERS_SLOT_COUNT];
 extern Str8 APP_TAB_FAST_PATH_VIEW_NAME_TABLE[APP_COMMAND_KIND_COUNT - APP_COMMAND_KIND_FIRST_TAB_FAST_PATH_CMD];
 extern Str8 APP_TAB_FAST_PATH_QUERY_NAME[APP_COMMAND_KIND_COUNT - APP_COMMAND_KIND_FIRST_TAB_FAST_PATH_CMD];
-extern AppVocabInfo APP_VOCAB_INFO_TABLE[232];
+extern AppVocabInfo APP_VOCAB_INFO_TABLE[162];
 EXTERN_C_LINK_END
 
 APP_VIEW_UI_FUNC_DEF(Null);
@@ -705,6 +717,23 @@ Str8 AppViewSettingFromNameStr8(Str8 Name);
 b32 AppViewSettingFromNameB32(Str8 Name);
 u64 AppViewSettingFromNameU64(Str8 Name);
 f32 AppViewSettingFromNameF32(Str8 Name);
+
+ConfigNode* AppConfigFromEvalSpace(EvalSpace Space);
+EvalSpace AppEvalSpaceFromConfig(ConfigNode* Cfg);
+Str8 AppCommandNameFromEval(EvalEval Eval);
+u64 AppEvalSpaceGen(EvalSpace Space);
+b32 AppEvalSpaceRead(EvalSpace Space, OUT void* Data, OUT EvalSpaceRangeInfo* RangeInfo, r1u64 Range);
+b32 AppEvalSpaceWrite(EvalSpace Space, IN void* Data, r1u64 Range);
+CKey AppKeyFromEvalSpaceRange(EvalSpace Space, r1u64 Range, b32 IsZeroTerminated);
+r1u64 AppWholeRangeFromEvalSpace(EvalSpace Space);
+b32 AppCommitEvalValueStr(EvalEval Eval, Str8 String);
+Str8 AppFilePathFromEval(Arena* MemPool, EvalEval Eval);
+Str8 AppFilePathFromEvalStr(Arena* MemPool, Str8 String);
+Str8 AppQueryFromEvalStr(Arena* MemPool, Str8 String);
+r1u64 AppSpaceRangeFromEval(EvalEval Eval);
+EvalValue AppViewSettingValueFromName(Str8 String);
+Str8 AppFilePathFromConfig(ConfigNode* Config);
+Str8 AppNameFromConfig(ConfigNode* Config);
 
 Str8 AppViewFilePath(void);     // NOTE(nc): may not need this, just use string query via name 'file'
 

@@ -1,6 +1,7 @@
 #include <stdarg.h>
 
 #include "nc_application.h"
+#include "nc_application_eval.h"
 #include "nc_memory.h"
 #include "nc_arena.h"
 #include "nc_config.h"
@@ -8,16 +9,19 @@
 #include "nc_content.h"
 #include "nc_defines.h"
 #include "nc_draw.h"
+#include "nc_eval.h"
 #include "nc_file.h"
 #include "nc_file_stream.h"
 #include "nc_log.h"
 #include "nc_math.h"
 #include "nc_metadesk.h"
+#include "nc_profile.h"
 #include "nc_render.h"
 #include "nc_string.h"
 #include "nc_system.h"
 #include "nc_thread.h"
 #include "nc_time.h"
+#include "nc_tls.h"
 #include "nc_ui.h"
 #include "nc_ui_components.h"
 
@@ -1948,7 +1952,7 @@ Str8 APP_THEME_PRESET_CONFIG_STR_TABLE[APP_THEME_PRESET_COUNT] = {
     )
 };
 
-AppNameSchemaInfo APP_NAME_SCHEMA_INFO_TABLE[27] = {
+AppNameSchemaInfo APP_NAME_SCHEMA_INFO_TABLE[8] = {
     {
         Str8Lit("session"),
         FALSE,
@@ -2109,7 +2113,7 @@ Str8 APP_TAB_FAST_PATH_QUERY_NAME[APP_COMMAND_KIND_COUNT - APP_COMMAND_KIND_FIRS
     Str8Lit("")
 };
 
-AppVocabInfo APP_VOCAB_INFO_TABLE[232] = {
+AppVocabInfo APP_VOCAB_INFO_TABLE[162] = {
     { 
         Str8Lit("view"),
         Str8Lit("views"),
@@ -3201,6 +3205,48 @@ AppVocabInfo APP_VOCAB_INFO_TABLE[232] = {
         Str8Lit("Colour"),
         Str8Lit(""),
         APP_ICON_KIND_NULL
+    },
+    { 
+        Str8Lit("change_file"),
+        Str8Lit(""),
+        Str8Lit("Change File"),
+        Str8Lit(""),
+        APP_ICON_KIND_FILE
+    },
+    { 
+        Str8Lit("goto_time"),
+        Str8Lit(""),
+        Str8Lit("Go To Time"),
+        Str8Lit(""),
+        APP_ICON_KIND_FIND
+    },
+    { 
+        Str8Lit("filter"),
+        Str8Lit(""),
+        Str8Lit("Filter"),
+        Str8Lit(""),
+        APP_ICON_KIND_FIND
+    },
+    { 
+        Str8Lit("set_theme"),
+        Str8Lit(""),
+        Str8Lit("Set Theme"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL
+    },
+    { 
+        Str8Lit("set_tab_view"),
+        Str8Lit(""),
+        Str8Lit("Set Tab View"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL
+    },
+    { 
+        Str8Lit("query"),
+        Str8Lit(""),
+        Str8Lit("Query"),
+        Str8Lit(""),
+        APP_ICON_KIND_NULL
     }
 };
 EXTERN_C_LINK_END
@@ -3247,6 +3293,648 @@ global QueryTypeMapping Mappings[] = {
 
 APP_VIEW_UI_FUNC_DEF(Null)
 {}
+
+INTERNAL AppQueryExpressionKind
+AppQueryExpressionKindFromStr(Str8 Expression)
+{
+    AppQueryExpressionKind Result = APP_QUERY_EXPR_KIND_NULL;
+    Str8 Name = Expression;
+
+    if (StrMatch(StrPrefix(Name, 6), "query:"_s8, 0))
+        Name = StrSkip(Name, 6);
+
+    if (StrMatch(StrPrefix(Name, 7), "folder:"_s8, 0)) {
+        Result = APP_QUERY_EXPR_KIND_FILE_PATH;
+    } else if (StrMatch(StrPrefix(Name, 8), "config.$"_s8, 0)) {
+        Result = (StrFindSubStr(Name, "."_s8, 8, 0) < Name.Size)
+            ? APP_QUERY_EXPR_KIND_CONFIG_CHILD
+            : APP_QUERY_EXPR_KIND_CONFIG;
+    } else {
+        for (u64 Index = 0; Index < ARRAY_COUNT(Mappings); ++Index) {
+            if (StrMatch(Name, Mappings[Index].Name, 0)) {
+                Result = Mappings[Index].Kind;
+                break;
+            }
+        }
+    }
+
+    return Result;
+}
+
+ConfigNode* 
+AppConfigFromEvalSpace(EvalSpace Space)
+{
+    ConfigNode* Result = EMPTY_CFG_NODE_VALUE;
+
+    if (Space.Kind == APP_EVAL_SPACE_KIND_META_CFG) {
+        ConfigID ID = Space.U64s[0];
+
+        Result = ConfigNodeFromID(ID);
+    }
+
+    return Result;
+}
+
+EvalSpace 
+AppEvalSpaceFromConfig(ConfigNode* Cfg)
+{
+    EvalSpace Result = EvalSpaceAlloc(APP_EVAL_SPACE_KIND_META_CFG);
+
+    Result.U64s[0] = Cfg->ID;
+
+    return Result;
+}
+
+Str8 
+AppCommandNameFromEval(EvalEval Eval)
+{
+    Str8 Result = {};
+
+    if (Eval.Space.Kind == APP_EVAL_SPACE_KIND_META_CMD)
+        Result = EvalStrFromID(Eval.Value.U64);
+
+    return Result;
+}
+
+u64 
+AppEvalSpaceGen(EvalSpace Space)
+{
+    u64 Result = 0;
+
+    switch (Space.Kind) {
+        default: {
+            Result = ConfigChangeGeneration();
+        } break;
+    }
+
+    return Result;
+}
+
+b32 
+AppEvalSpaceRead(
+    EvalSpace Space, 
+    OUT void* Data, 
+    OUT EvalSpaceRangeInfo* RangeInfo, 
+    r1u64 Range
+) {
+
+    TempArena Scratch = GetScratch(NULL, 0);
+    b32 Result = FALSE;
+
+    switch (Space.Kind) {
+        default: {} break;
+
+        case APP_EVAL_SPACE_KIND_META_CFG: {
+            ConfigNode* RootCfg = AppConfigFromEvalSpace(Space);
+            Str8 ChildKey = EvalStrFromID(Space.U64s[1]);
+            ConfigNode* Cfg = RootCfg;
+
+            if (ChildKey.Size)
+                Cfg = ConfigNodeChildFromStr(RootCfg, ChildKey);
+
+            Str8 ReadData = {};
+
+            if (ChildKey.Size) {
+                MDNode* ChildSchema = EMPTY_MD_NODE_VALUE;
+                MDNode* ExprChildSchema = EMPTY_MD_NODE_VALUE;
+
+                {
+                    MDNodePtrList Schemas = ConfigSchemasFromName(
+                        Scratch.MemPool,
+                        APP_STATE->CfgSchemaTable,
+                        RootCfg->String
+                    );
+
+                    for (
+                        MDNodePtrNode* N = Schemas.Head;
+                        N && ChildSchema == EMPTY_MD_NODE_VALUE;
+                        N = N->Next
+                    ) {
+                        ChildSchema = MDChildFromStr(N->V, ChildKey, 0);
+
+                        if (ChildSchema != EMPTY_MD_NODE_VALUE) {
+                            ExprChildSchema = MDChildFromStr(
+                                N->V,
+                                "expression"_s8,
+                                0
+                            );
+                        }
+                    }
+                }
+
+                Str8 ChildTypeName = ChildSchema->Head->String;
+                Str8 ValueString = Cfg->Head->String;
+
+                if (!ValueString.Size) {
+                    ValueString = MDTagFromStr(
+                        ChildSchema,
+                        "default"_s8,
+                        0
+                    )->Head->String;
+                }
+
+                if (
+                    !ValueString.Size &&
+                    !MDNodeIsEmpty(
+                        MDTagFromStr(
+                            ChildSchema, 
+                            "override"_s8, 
+                            0
+                        )
+                    )
+                ) {
+                    for (
+                        ConfigNode* Parent = RootCfg->Parent; 
+                        Parent != EMPTY_CFG_NODE_VALUE; 
+                        Parent = Parent->Parent
+                    ) {
+                        ConfigNode* ParentChildWithKey = ConfigNodeChildFromStr(
+                            Parent,
+                            ChildKey
+                        );
+
+                        if (ParentChildWithKey != EMPTY_CFG_NODE_VALUE) {
+                            ValueString = ParentChildWithKey->Head->String;
+                            break;
+                        }
+
+                        ValueString = AppDefaultSettingFromNames(
+                            Parent->String,
+                            ChildKey
+                        );
+
+                        if (ValueString.Size)
+                            break;
+                    }
+                }
+
+                if (
+                    StrMatch(ChildTypeName, "path"_s8, 0) ||
+                    StrMatch(ChildTypeName, "path_pt"_s8, 0) ||
+                    StrMatch(ChildTypeName, "code_string"_s8, 0) ||
+                    StrMatch(ChildTypeName, "expr_string"_s8, 0) ||
+                    StrMatch(ChildTypeName, "string"_s8, 0)
+                ) {
+                    ReadData = ValueString;
+                } else {
+                    EvalKey ParentKey = {};
+
+                    if (
+                        ExprChildSchema != EMPTY_MD_NODE_VALUE && 
+                        ChildSchema != ExprChildSchema
+                    ) {
+                        ParentKey = EvalKeyFromStr(
+                            ConfigNodeChildFromStr(
+                                RootCfg,
+                                ExprChildSchema->String
+                            )->Head->String
+                        );
+                    }
+
+                    EvalParentKey(ParentKey) {
+                        if (StrMatch(ChildTypeName, "bool"_s8, 0)) {
+                            b32 Value = !!EvalValueFromStrFmt(
+                                "(bool)(%S)",
+                                PRINT_STR(ValueString)
+                            ).U64;
+
+                            ReadData = ArenaPushStrCpy(
+                                Scratch.MemPool,
+                                Str8Struct(&Value)
+                            );
+                        } else if (StrMatch(ChildTypeName, "u64"_s8, 0)) {
+                            u64 Value = EvalValueFromStrFmt(
+                                "(uint64)(%S)",
+                                PRINT_STR(ValueString)
+                            ).U64;
+
+                            ReadData = ArenaPushStrCpy(
+                                Scratch.MemPool,
+                                Str8Struct(&Value)
+                            );
+                        } else if (StrMatch(ChildTypeName, "u32"_s8, 0)) {
+                            u64 Value = EvalValueFromStrFmt(
+                                "(uint32)(%S)",
+                                PRINT_STR(ValueString)
+                            ).U64;
+
+                            ReadData = ArenaPushStrCpy(
+                                Scratch.MemPool,
+                                Str8Struct(&Value)
+                            );
+                        } else if (StrMatch(ChildTypeName, "f32"_s8, 0)) {
+                            f32 Value = EvalValueFromStrFmt(
+                                "(float32)(%S)",
+                                PRINT_STR(ValueString)
+                            ).F32;
+
+                            ReadData = ArenaPushStrCpy(
+                                Scratch.MemPool,
+                                Str8Struct(&Value)
+                            );
+                        }
+                    }
+                }
+            }
+
+            if (!ChildKey.Size)
+                ReadData = Cfg->Head->String;
+
+            r1u64 LegalRange = Rng(0ULL, ReadData.Size);
+            r1u64 ReadRange = Intersect(Range, LegalRange);
+
+            if (ReadRange.Min < ReadRange.Max) {
+                Result = TRUE;
+                MemCpy(
+                    Data, 
+                    ReadData.Str + ReadRange.Min,
+                    Length(ReadRange)
+                );
+            }
+        } break;
+    }
+
+    ReleaseScratch(Scratch);
+
+    return Result;
+}
+
+b32 
+AppEvalSpaceWrite(
+    EvalSpace Space, 
+    IN void* Data, 
+    r1u64 Range
+) {
+    b32 Result = FALSE;
+
+    switch (Space.Kind) {
+        default: {} break;
+
+        case APP_EVAL_SPACE_KIND_META_CFG: {
+            Result = TRUE;
+
+            Str8 WriteString = StrRange(
+                (u8*) Data,
+                (u8*) Data + Length(Range)
+            );
+            ConfigNode* RootCfg = AppConfigFromEvalSpace(Space);
+            Str8 ChildKey = EvalStrFromID(Space.U64s[1]);
+
+            if (!ChildKey.Size) {
+                ConfigNodeNewReplace(
+                    APP_STATE->Config,
+                    RootCfg,
+                    WriteString
+                );
+            } else {
+                if (StrMatch(ChildKey, "label"_s8, 0)) {
+                    Str8 PreEditLabel = AppLabelFromConfig(RootCfg);
+
+                    if (!StrMatch(PreEditLabel, WriteString, 0)) {
+                        EvalExpr* Expr = EvalStr2ExprMapLookup(
+                            GetTLS()->EVAL_IR_CTX->MacroMap,
+                            PreEditLabel
+                        );
+
+                        if (Expr != EMPTY_EVAL_EXPR_VALUE) {
+                            EvalStr2ExprMapPoisonIncrement(
+                                GetTLS()->EVAL_IR_CTX->MacroMap,
+                                PreEditLabel
+                            );
+                            MapInsert(
+                                GetTLS()->EVAL_CACHE->MemPool,
+                                GetTLS()->EVAL_IR_CTX->MacroMap,
+                                WriteString,
+                                Expr
+                            );
+                        }
+                    }
+                }
+
+                if (Range.Min == Range.Max) {
+                    ConfigNodeRelease(
+                        APP_STATE->Config,
+                        ConfigNodeChildFromStr(RootCfg, ChildKey)
+                    );
+                } else {
+                    ConfigNode* ChildCfg = ConfigNodeChildFromStrOrAlloc(
+                        APP_STATE->Config,
+                        RootCfg,
+                        ChildKey
+                    );
+
+                    ConfigNodeNewReplace(
+                        APP_STATE->Config,
+                        ChildCfg,
+                        WriteString
+                    );
+                }
+            }
+        } break;
+    }
+
+    return Result;
+}
+
+b32 
+AppCommitEvalValueStr(EvalEval Eval, Str8 String)
+{
+    b32 Result = FALSE;
+
+    if (Eval.IRTree.Mode == EVAL_MODE_OFFSET) {
+        TempArena Scratch = GetScratch(NULL, 0);
+        EvalTypeKey TypeKey = EvalTypeKeyUnwrap(
+            Eval.IRTree.TypeKey,
+            EVAL_TYPE_UNWRAP_FLAG_ALL_DECORATIVE
+        );
+        EvalTypeKind TypeKind = EvalTypeKindFromKey(TypeKey);
+        EvalTypeKey DirectTypeKey = EvalTypeKeyUnwrap(
+            Eval.IRTree.TypeKey,
+            EVAL_TYPE_UNWRAP_FLAG_ALL
+        );
+        EvalTypeKind DirectTypeKind = EvalTypeKindFromKey(DirectTypeKey);
+        b32 GotCommitData = FALSE;
+        Str8 CommitData = {};
+        b32 CommitAtPtrDst = FALSE;
+
+        if (TypeKey != EMPTY_EVAL_TYPE_KEY_VALUE) {
+            if (
+                !GotCommitData && 
+                Eval.Space.Kind == APP_EVAL_SPACE_KIND_META_CFG
+            ) {
+                GotCommitData = TRUE;
+                CommitData = String;
+            }
+
+            if (
+                !GotCommitData &&
+                (
+                    (
+                        TypeKind >= EVAL_TYPE_KIND_FIRST_BASIC &&
+                        TypeKind <= EVAL_TYPE_KIND_LAST_BASIC
+                    ) ||
+                    TypeKind == EVAL_TYPE_KIND_ENUM
+                )
+            ) {
+                GotCommitData = TRUE;
+
+                EvalEval SrcEval = EvalEvalFromStrFmt(
+                    "(%S)(%S)",
+                    PRINT_STR(EvalTypeStrFromKey(Scratch.MemPool, TypeKey)),
+                    PRINT_STR(String)
+                );
+
+                CommitData = ArenaPushStrCpy(
+                    Scratch.MemPool,
+                    Str8Struct(&SrcEval.Value)
+                );
+                CommitData.Size = MIN(
+                    CommitData.Size, 
+                    EvalByteSizeFromKey(TypeKey)
+                );
+            }
+
+            b32 IsQuoted = FALSE;
+
+            if (String.Size && String.Str[0] == '"') {
+                String = StrSkip(String, 1);
+                IsQuoted = TRUE;
+            }
+
+            if (
+                !GotCommitData &&
+                (
+                    (
+                        (IsQuoted && TypeKind == EVAL_TYPE_KIND_PTR) ||
+                        TypeKind == EVAL_TYPE_KIND_ARRAY
+                    ) &&
+                    (
+                        DirectTypeKind == EVAL_TYPE_KIND_CHAR8 ||
+                        DirectTypeKind == EVAL_TYPE_KIND_CHAR16 ||
+                        DirectTypeKind == EVAL_TYPE_KIND_CHAR32 ||
+                        DirectTypeKind == EVAL_TYPE_KIND_UCHAR8 ||
+                        DirectTypeKind == EVAL_TYPE_KIND_UCHAR16 ||
+                        DirectTypeKind == EVAL_TYPE_KIND_UCHAR32 ||
+                        EvalTypeKindIsInteger(DirectTypeKind)
+                    )
+                )
+            ) {
+                GotCommitData = TRUE;
+
+                if (String.Size && String.Str[String.Size - 1] == '"') {
+                    String = StrChop(String, 1);
+                }
+
+                if (IsQuoted) {
+                    CommitData = RawFromEscapedStr8(
+                        Scratch.MemPool,
+                        String
+                    );
+                } else {
+                    CommitData = ArenaPushStrCpy(Scratch.MemPool, String);
+                }
+
+                ++CommitData.Size;
+
+                if (TypeKind == EVAL_TYPE_KIND_PTR)
+                    CommitAtPtrDst = TRUE;
+
+                switch (DirectTypeKind) {
+                    default: {}  break;
+
+                    case EVAL_TYPE_KIND_I16:
+                    case EVAL_TYPE_KIND_U16:
+                    case EVAL_TYPE_KIND_CHAR16:
+                    case EVAL_TYPE_KIND_UCHAR16: {
+                        Str16 Data16 = Str16FromStr8(
+                            Scratch.MemPool,
+                            CommitData
+                        );
+
+                        CommitData = Str(
+                            (u8*) Data16.Str,
+                            Data16.Size * sizeof(u16)
+                        );
+                    } break;
+
+                    case EVAL_TYPE_KIND_I32:
+                    case EVAL_TYPE_KIND_U32:
+                    case EVAL_TYPE_KIND_CHAR32:
+                    case EVAL_TYPE_KIND_UCHAR32: {
+                        Str32 Data32 = Str32FromStr8(
+                            Scratch.MemPool,
+                            CommitData
+                        );
+
+                        CommitData = Str(
+                            (u8*) Data32.Str,
+                            Data32.Size * sizeof(u32)
+                        );
+                    } break;
+                }
+            }
+
+            if (!GotCommitData && TypeKind == EVAL_TYPE_KIND_PTR) {
+                EvalEval SrcEval = EvalEvalFromStr(String);
+                EvalEval SrcEvalValue = EvalValueEvalFromEval(SrcEval);
+                EvalTypeKind SrcEvalValueTypeKind = EvalTypeKindFromKey(
+                    SrcEvalValue.IRTree.TypeKey
+                );
+
+                if (
+                    (
+                        EvalTypeKindIsPtrOrRef(SrcEvalValueTypeKind) || 
+                        EvalTypeKindIsInteger(SrcEvalValueTypeKind)
+                    ) &&
+                    SrcEvalValue.IRTree.Mode == EVAL_MODE_VALUE
+                ) {
+                    GotCommitData = TRUE;
+                    CommitData = ArenaPushStrCpy(
+                        Scratch.MemPool,
+                        Str8Struct(&SrcEval.Value)
+                    );
+                    CommitData.Size = MAX(
+                        CommitData.Size, 
+                        EvalByteSizeFromKey(SrcEval.IRTree.TypeKey)
+                    );
+                    CommitData.Size = MAX(
+                        CommitData.Size, 
+                        EvalByteSizeFromKey(TypeKey)
+                    );
+                }
+            }
+        }
+
+        u64 DstOffset = Eval.Value.U64;
+
+        if (GotCommitData && CommitAtPtrDst) {
+            EvalEval DstValueEval = EvalValueEvalFromEval(Eval);
+
+            DstOffset = DstValueEval.Value.U64;
+        }
+
+        if (GotCommitData) {
+            Result = EvalSpaceWrite(
+                Eval.Space,
+                CommitData.Str,
+                Rng(DstOffset, DstOffset + CommitData.Size)
+            );
+        }
+
+        ReleaseScratch(Scratch);
+    }
+
+    return Result;
+}
+
+CKey 
+AppKeyFromEvalSpaceRange(
+    EvalSpace Space, 
+    r1u64 Range, 
+    b32 IsZeroTerminated
+) {}
+
+r1u64 
+AppWholeRangeFromEvalSpace(EvalSpace Space)
+{}
+
+Str8 
+AppFilePathFromEval(Arena* MemPool, EvalEval Eval)
+{
+    Str8 Result = {};
+
+    switch (Eval.Space.Kind) {
+        default: {} break;
+
+        case EVAL_SPACE_KIND_FILE: {
+            Result = ArenaPushStrCpy(
+                MemPool,
+                EvalStrFromID(Eval.Space.U64)
+            );
+        } break;
+
+        case EVAL_SPACE_KIND_FILESYSTEM: {
+            Result = ArenaPushStrCpy(
+                MemPool,
+                EvalStrFromID(Eval.Value.U64)
+            );
+        } break;
+    }
+
+    return Result;
+}
+
+Str8 
+AppFilePathFromEvalStr(Arena* MemPool, Str8 String)
+{
+    Str8 Result = {};
+    TempArena Scratch = GetScratch(&MemPool, 1);
+    EvalEval Eval = EvalEvalFromStr(String);
+
+    Result = AppFilePathFromEval(MemPool, Eval);
+    ReleaseScratch(Scratch);
+
+    return Result;
+}
+
+Str8 
+AppQueryFromEvalStr(Arena* MemPool, Str8 String)
+{
+    Str8 Result = {};
+    TempArena Scratch = GetScratch(&MemPool, 1);
+    EvalExpr* Expr = EvalParseFromStr(String).Expr;
+
+    if (
+        Expr->Kind == EVAL_EXPR_KIND_LEAF_IDENT &&
+        StrMatch(Expr->Qualifier, "query"_s8, 0)
+    ) {
+        Result = Expr->String;
+    }
+
+    ReleaseScratch(Scratch);
+
+    return Result;
+}
+
+r1u64 
+AppSpaceRangeFromEval(EvalEval Eval)
+{
+    r1u64 Result = EvalRangeFromEval(Eval);
+    u64 SizeSetting = AppViewSettingValueFromName("size"_s8).U64;
+
+    if (SizeSetting)
+        Result.Max = Result.Min + SizeSetting;
+
+    return Result;
+}
+
+EvalValue 
+AppViewSettingValueFromName(Str8 String)
+{
+    Str8 Expr = AppViewSettingFromNameStr8(String);
+    EvalEval Eval = EvalEvalFromStr(Expr);
+    EvalValue Result = EvalValueEvalFromEval(Eval).Value;
+
+    return Result;
+}
+
+Str8 
+AppFilePathFromConfig(ConfigNode* Config)
+{
+    ConfigNode* Root = ConfigNodeChildFromStr(Config, "path"_s8);
+    Str8 Result = Root->Head->String;
+
+    return Result;
+}
+
+Str8 
+AppNameFromConfig(ConfigNode* Config)
+{
+    ConfigNode* NameRoot = ConfigNodeChildFromStr(Config, "name"_s8);
+    Str8 Result = NameRoot->Head->String;
+
+    return Result;
+}
 
 AppRegisters*
 AppGetHoverRegisters(void)
@@ -3467,14 +4155,27 @@ AppExpressionFromConfig(ConfigNode* Cfg)
     return Result;
 }
 
+Str8
+AppLabelFromConfig(ConfigNode *Config)
+{
+    ConfigNode* LabelRoot = ConfigNodeChildFromStr(Config, "label"_s8);
+    Str8 Result = LabelRoot->Head->String;
+
+    return Result;
+}
+
 void 
 CopyRegisters(Arena* MemPool, AppRegisters* Dst, AppRegisters* Src)
 {
     MemCpy(Dst, Src, sizeof(AppRegisters));
+    Dst->ConfigList = ListCpy(MemPool, &Src->ConfigList);
     Dst->FilePath = ArenaPushStrCpy(MemPool, Src->FilePath);
     Dst->Expression = ArenaPushStrCpy(MemPool, Src->Expression);
     Dst->String = ArenaPushStrCpy(MemPool, Src->String);
     Dst->CommandName = ArenaPushStrCpy(MemPool, Src->CommandName);
+
+    if (!Dst->ConfigList.Count && Dst->Config)
+        ListPush(MemPool, &Dst->ConfigList, Dst->Config);
 }
 
 AppRegisters* 
@@ -3578,6 +4279,37 @@ AppSetHoverEval(v2i32 Position, Str8 String)
 
         APP_STATE->HoverEvalSpawnPosition = Position;
         APP_STATE->HoverEvalLastTimeUSecs = APP_STATE->TimeUSecs;
+    }
+}
+
+void
+__AppSetAutoCompleteRegisters(Str8 Expr, AppRegisters *Regs)
+{
+    if (
+        APP_STATE->AutoCompletePrevFrameIndex < APP_STATE->FrameIndex &&
+        AppSettingFromNameB32("autocompletion_lister"_s8)
+    ) {
+        AppAutoCompleteCursorInfo CursorInfo = {};
+
+        ArenaClear(APP_STATE->AutoCompleteMemPool);
+        CursorInfo.ListExpr = ArenaPushStrCpy(
+            APP_STATE->AutoCompleteMemPool,
+            Expr
+        );
+        CursorInfo.Filter = ArenaPushStrCpy(
+            APP_STATE->AutoCompleteMemPool,
+            Regs->String
+        );
+        CursorInfo.ReplacedRanged = Rng(
+            (u64) 0ULL,
+            Regs->String.Size
+        );
+        APP_STATE->AutoCompletePrevFrameIndex = APP_STATE->FrameIndex;
+        APP_STATE->AutoCompleteRegs = CopyRegisters(
+            APP_STATE->AutoCompleteMemPool,
+            Regs
+        );
+        APP_STATE->AutoCompleteCursorInfo = CursorInfo;
     }
 }
 
@@ -4070,6 +4802,19 @@ AppPushViewMemPool(void)
     return Ext->MemPool;
 }
 
+void
+AppStoreViewExprStr(Str8 String)
+{
+    ConfigNode* View = ConfigNodeFromID(Registers()->View);
+    ConfigNode* Expr = ConfigNodeChildFromStrOrAlloc(
+        APP_STATE->Config,
+        View,
+        "expression"_s8
+    );
+
+    ConfigNodeNewReplace(APP_STATE->Config, Expr, String);
+}
+
 void 
 AppStoreViewLoadingInfo(b32 IsLoading, u64 Progress, u64 ProgressTarget)
 {
@@ -4131,6 +4876,19 @@ AppStoreViewParameter(Str8 Key, char* Fmt, ...)
     AppStoreViewParameter(Key, String);
     va_end(Args);
     ReleaseScratch(Scratch);
+}
+
+Str8
+AppPushConsoleTitle(Arena *MemPool)
+{
+    Str8 Result = ArenaPushStrFmt(
+        MemPool,
+        "%S - %s",
+        PRINT_STR(StrSkipLastSlash(APP_STATE->SessionPath)),
+        NC_DATA_DIR
+    );
+
+    return Result;
 }
 
 void 
@@ -4421,21 +5179,22 @@ AppThemeTreeFromName(Arena* MemPool, Access* Acc, Str8 Name)
 }
 
 FancyStrList
-AppTitleFStrFromConfig(Arena* MemPool, ConfigNode* Config)
+AppTitleFStrFromConfig(Arena* MemPool, ConfigNode* Config, b32 IncludeExtras)
 {
     FancyStrList Result = {};
     FancyStrParams Params = {};
     Str8 DisplayName = Config->String;
-    Str8 FileName = StrSkipLastSlash(
-        ConfigNodeChildFromStr(
-            Config, 
-            "file"_s8
-        )->Head->String
-    );
+    Str8 FileName = ConfigNodeChildFromStr(
+        Config,
+        "file"_s8
+    )->Head->String;
+
+    if (!IncludeExtras)
+        FileName = StrSkipLastSlash(FileName);
 
     for (
-        u64 Index = 0; 
-        Index < ARRAY_COUNT(APP_TAB_FAST_PATH_VIEW_NAME_TABLE); 
+        u64 Index = 0;
+        Index < ARRAY_COUNT(APP_TAB_FAST_PATH_VIEW_NAME_TABLE);
         ++Index
     ) {
         if (
@@ -4445,9 +5204,11 @@ AppTitleFStrFromConfig(Arena* MemPool, ConfigNode* Config)
                 0
             )
         ) {
-            DisplayName = APP_COMMAND_KIND_INFO_TABLE[
-                APP_COMMAND_KIND_FIRST_TAB_FAST_PATH_CMD + Index
-            ].DisplayName;
+            DisplayName = AppVocabInfoFromCodeName(
+                APP_COMMAND_KIND_INFO_TABLE[
+                    APP_COMMAND_KIND_FIRST_TAB_FAST_PATH_CMD + Index
+                ].String
+            )->DisplayName;
             break;
         }
     }
@@ -4464,96 +5225,183 @@ AppTitleFStrFromConfig(Arena* MemPool, ConfigNode* Config)
     return Result;
 }
 
+INTERNAL void
+AppQueryPushSessionPaths(
+    Arena* MemPool,
+    AppQueryResultList* List,
+    Str8 ListName,
+    b32 PathIsChild
+) {
+    ConfigNode* Session = ConfigNodeChildFromStr(
+        ConfigNodeRoot(),
+        "session"_s8
+    );
+
+    for (
+        ConfigNode* Child = Session->Head;
+        Child != EMPTY_CFG_NODE_VALUE;
+        Child = Child->Next
+    ) {
+        if (!StrMatch(Child->String, ListName, 0))
+            continue;
+
+        Str8 Path = PathIsChild
+            ? PathFromConfig(Child)
+            : Child->Head->String;
+
+        AppQueryResult Entry = {};
+
+        Entry.String = Path;
+        Entry.DisplayString = StrSkipLastSlash(Path);
+        Entry.Description = StrChopLastSlash(Path);
+        Entry.IconKind = APP_ICON_KIND_FILE;
+        Entry.CfgID = Child->ID;
+        ListPush(MemPool, List, Entry);
+    }
+}
+
 AppQueryResultList 
 AppQueryResultsFromExpression(Arena* MemPool, Str8 Expression, Str8 Input)
 {
     AppQueryResultList Result = {};
-    AppQueryExpressionKind Kind = AppQueryExpressionKindFromStr(Expression);
+    u8 SplitChars[] = {
+        ',',
+        ' '
+    };
+    Str8List Terms = StrSplit(
+        MemPool,
+        Expression,
+        SplitChars,
+        ARRAY_COUNT(SplitChars),
+        FALSE
+    );
 
-    switch (Kind) {
-        default: {} break;
+    for (Str8Node* Term = Terms.Head; Term; Term = Term->Next) {
+        AppQueryExpressionKind Kind = AppQueryExpressionKindFromStr(
+            Term->String
+        );
 
-        case APP_QUERY_EXPR_KIND_COMMANDS:
-        case APP_QUERY_EXPR_KIND_TAB_COMMANDS: {
-            u64 HeadIndex = (Kind == APP_QUERY_EXPR_KIND_TAB_COMMANDS)
-                ? APP_COMMAND_KIND_FIRST_TAB_FAST_PATH_CMD
-                : 1;
+        switch (Kind) {
+            default: {} break;
 
-            for (
-                u64 Index = HeadIndex; 
-                Index < APP_COMMAND_KIND_COUNT; 
-                ++Index
-            ) {
-                AppCommandKindInfo* Info = &APP_COMMAND_KIND_INFO_TABLE[Index];
+            case APP_QUERY_EXPR_KIND_COMMANDS:
+            case APP_QUERY_EXPR_KIND_TAB_COMMANDS: {
+                u64 HeadIndex = (Kind == APP_QUERY_EXPR_KIND_TAB_COMMANDS)
+                    ? APP_COMMAND_KIND_FIRST_TAB_FAST_PATH_CMD
+                    : 1;
 
-                if (!(Info->Flags & APP_COMMAND_KIND_FLAG_LIST_IN_UI))
-                    continue;
+                for (
+                    u64 Index = HeadIndex;
+                    Index < APP_COMMAND_KIND_COUNT;
+                    ++Index
+                ) {
+                    AppCommandKindInfo* Info = &APP_COMMAND_KIND_INFO_TABLE[Index];
 
-                AppQueryResult Entry = {};
+                    if (!(Info->Flags & APP_COMMAND_KIND_FLAG_LIST_IN_UI))
+                        continue;
 
-                Entry.String = Info->String;
-                Entry.DisplayString = Info->DisplayName;
-                Entry.Description = Info->Description;
-                Entry.SearchTags = Info->SearchTags;
-                Entry.IconKind = Info->IconKind;
-                Entry.CommandInfo = Info;
-                ListPush(MemPool, &Result, Entry);
-            }
-        } break;
-
-        case APP_QUERY_EXPR_KIND_THEMES: {
-            for (u32 Index = 0; Index < APP_THEME_PRESET_COUNT; ++Index) {
-                AppQueryResult Entry = {};
-
-                Entry.String = APP_THEME_PRESET_DISPLAY_STR_TABLE[Index];
-                Entry.DisplayString = APP_THEME_PRESET_DISPLAY_STR_TABLE[Index];
-                ListPush(MemPool, &Result, Entry);
-            }
-        } break;
-
-        case APP_QUERY_EXPR_KIND_FILE_PATH: {
-            Str8 Folder = StrChopLastSlash(Input);
-            FileIter* Iter = SystemFileIterBegin(MemPool, Folder, 0);
-            FileInfo Info = {};
-
-            while (SystemFileIterNext(MemPool, Iter, &Info)) {
-                b32 IsFolder = !!(Info.Properties.Kind & SYS_FILE_IS_DIR);
-                Str8 Ext = StrSkipLastDot(Info.Name);
-                b32 IsWanted = (
-                    IsFolder ||
-                    StrMatch(Ext, "fli"_s8, STR_MATCH_ALL_CASES) ||
-                    StrMatch(Ext, "bin"_s8, STR_MATCH_ALL_CASES) ||
-                    StrMatch(Ext, "flv"_s8, STR_MATCH_ALL_CASES)
-                );
-
-                // NOTE(nc): we only care about folders and *.fli or *.BIN files
-                if (!IsWanted)
-                    continue;
-
-                AppQueryResult Entry = {};
-
-                Entry.String = ArenaPushStrFmt(
-                    MemPool,
-                    "%S/%S",
-                    PRINT_STR(Folder),
-                    PRINT_STR(Info.Name)
-                );
-                Entry.DisplayString = StrSkipLastSlash(Entry.String);
-                Entry.IconKind = IsFolder 
-                    ? APP_ICON_KIND_FOLDER 
-                    : APP_ICON_KIND_FILE;
-                Entry.Description = IsFolder
-                    ? "Folder"_s8
-                    : ArenaPushStrFmt(
-                        MemPool, 
-                        "%llu bytes", 
-                        Info.Properties.Size
+                    AppVocabInfo* Vocab = AppVocabInfoFromCodeName(
+                        Info->String
                     );
-                ListPush(MemPool, &Result, Entry);
-            }
+                    AppQueryResult Entry = {};
 
-            SystemFileIterEnd(Iter);
-        } break;
+                    Entry.String = Info->String;
+                    Entry.DisplayString = Vocab->DisplayName;
+                    Entry.Description = Info->Description;
+                    Entry.SearchTags = Info->SearchTags;
+                    Entry.IconKind = Vocab->IconKind;
+                    Entry.CommandInfo = Info;
+                    ListPush(MemPool, &Result, Entry);
+                }
+            } break;
+
+            case APP_QUERY_EXPR_KIND_RECENT_FILES: {
+                AppQueryPushSessionPaths(
+                    MemPool,
+                    &Result,
+                    "file"_s8,
+                    FALSE
+                );
+            } break;
+
+            case APP_QUERY_EXPR_KIND_FLV_FILES: {
+                AppQueryPushSessionPaths(
+                    MemPool,
+                    &Result,
+                    "view"_s8,
+                    FALSE
+                );
+            } break;
+
+            case APP_QUERY_EXPR_KIND_RECENT_SESSIONS: {
+                AppQueryPushSessionPaths(
+                    MemPool,
+                    &Result,
+                    "recent_session"_s8,
+                    TRUE
+                );
+            } break;
+
+            case APP_QUERY_EXPR_KIND_SESSION_SETTINGS: {} break;
+            case APP_QUERY_EXPR_KIND_CONFIG: {} break;
+            case APP_QUERY_EXPR_KIND_CONFIG_CHILD: {} break;
+
+            case APP_QUERY_EXPR_KIND_THEMES: {
+                for EACH_ENUM(AppThemePreset, T, APP_THEME_PRESET_COUNT) {
+                    AppQueryResult Entry = {};
+
+                    Entry.String = APP_THEME_PRESET_DISPLAY_STR_TABLE[T];
+                    Entry.DisplayString = APP_THEME_PRESET_DISPLAY_STR_TABLE[T];
+                    ListPush(MemPool, &Result, Entry);
+                }
+            } break;
+
+            case APP_QUERY_EXPR_KIND_FILE_PATH: {
+                Str8 Folder = StrChopLastSlash(Input);
+                FileIter* Iter = SystemFileIterBegin(MemPool, Folder, 0);
+
+                for (
+                    FileInfo Info = {};
+                    SystemFileIterNext(MemPool, Iter, &Info);
+                ) {
+                    b32 IsFolder = !!(Info.Properties.Kind & SYS_FILE_IS_DIR);
+                    Str8 Ext = StrSkipLastDot(Info.Name);
+                    b32 IsWanted = (
+                        IsFolder ||
+                        StrMatch(Ext, "fli"_s8, STR_MATCH_ALL_CASES) ||
+                        StrMatch(Ext, "bin"_s8, STR_MATCH_ALL_CASES) ||
+                        StrMatch(Ext, "flv"_s8, STR_MATCH_ALL_CASES)
+                    );
+
+                    // NOTE(nc): we only care about folders and *.fli or *.BIN files
+                    if (!IsWanted)
+                        continue;
+
+                    AppQueryResult Entry = {};
+
+                    Entry.String = ArenaPushStrFmt(
+                        MemPool,
+                        "%S/%S",
+                        PRINT_STR(Folder),
+                        PRINT_STR(Info.Name)
+                    );
+                    Entry.DisplayString = StrSkipLastSlash(Entry.String);
+                    Entry.IconKind = IsFolder 
+                        ? APP_ICON_KIND_FOLDER 
+                        : APP_ICON_KIND_FILE;
+                    Entry.Description = IsFolder
+                        ? "Folder"_s8
+                        : ArenaPushStrFmt(
+                            MemPool, 
+                            "%llu bytes", 
+                            Info.Properties.Size
+                        );
+                    ListPush(MemPool, &Result, Entry);
+                }
+
+                SystemFileIterEnd(Iter);
+            } break;
+        }
     }
 
     return Result;
@@ -4566,8 +5414,12 @@ AppQueryViewUI(r2f32 Rect)
     AppRegisters* QueryRegs = APP_STATE->QueryRegs;
     Str8 CommandName = QueryRegs->CommandName;
     AppCommandKindInfo* Info = AppCommandKindInfoFromStr(CommandName);
-    b32 IsFilePath = (Info->Query.Slot == APP_REGISTERS_SLOT_FILE_PATH);
-    Str8 Expression = IsFilePath ? "file_path"_s8 : QueryRegs->Expression;
+    Str8 Expression = QueryRegs->Expression;
+    b32 IsFilePath = (
+        AppQueryExpressionKindFromStr(
+            Expression
+        ) == APP_QUERY_EXPR_KIND_FILE_PATH
+    );
     Str8 Input = Str(APP_STATE->QueryBuffer, APP_STATE->QueryStringSize);
     Str8 Needle = IsFilePath ? StrSkipLastSlash(Input) : Input;
     AppQueryResultList Results = AppQueryResultsFromExpression(
@@ -4652,8 +5504,13 @@ AppQueryViewUI(r2f32 Rect)
                             UITag("weak"_s8) {
                                 UILabel(APP_ICON_KIND_TEXT_TABLE[APP_ICON_KIND_FIND]);
 
-                                if (CommandName.Size)
-                                    UILabel(Info->DisplayName);
+                                if (CommandName.Size) {
+                                    UILabel(
+                                        AppVocabInfoFromCodeName(
+                                            Info->String
+                                        )->DisplayName
+                                    );
+                                }
                             }
                         }
 
@@ -4872,6 +5729,21 @@ AppQueryViewUI(r2f32 Rect)
                     Expression, 
                     Value
                 );
+
+                if (Accepted && Accepted->CfgID)
+                    Registers()->Config = Accepted->CfgID;
+
+                if (
+                    Accepted &&
+                    !IsFilePath &&
+                    Info->Query.Slot == APP_REGISTERS_SLOT_FILE_PATH
+                ) {
+                    Registers()->FilePath = ArenaPushStrCpy(
+                        AppFrameMemPool(),
+                        Accepted->String
+                    );
+                }
+
                 Registers()->Expression = ""_s8;
                 AppPushCmd(CommandName, Registers());
             }
@@ -5094,8 +5966,13 @@ AppCommandBindingButtons(
                     N2;
                     N2 = N2->Next
                 ) {
-                    if (!StrMatch(N2->V->Name, N->V->Name, 0))
-                        UILabel(AppCommandKindInfoFromStr(N2->V->Name)->DisplayName);
+                    if (!StrMatch(N2->V->Name, N->V->Name, 0)) {
+                        UILabel(
+                            AppVocabInfoFromCodeName(
+                                N2->V->Name
+                            )->DisplayName
+                        );
+                    }
                 }
             }
         }
@@ -5209,7 +6086,11 @@ AppCommandSpecButton(Str8 Name)
         UIPreferredWidth(UI_TEXT_DIM(2.0f, 1.0f)) {
             UIFlags(UI_BOX_KIND_DRAW_TEXT_FASTPATH_CODEPOINT) {
                 UIFastpathCodepoint(Box->FastpathCodepoint) {
-                    UILabel(Info->DisplayName);
+                    UILabel(
+                        AppVocabInfoFromCodeName(
+                            Info->String
+                        )->DisplayName
+                    );
                 }
             }
 
@@ -5312,6 +6193,7 @@ AppInit(CommandLine* CLI)
     }
 
     APP_STATE->NumFramesRequested = 2;
+    APP_STATE->ECache = EvalCacheAlloc();
 
     for (
         u64 Index = 0; 
@@ -5332,6 +6214,7 @@ AppInit(CommandLine* CLI)
         "drop_completion_ctx_menu"_s8
     );
     APP_STATE->QueryMemPool = ArenaAlloc();
+    APP_STATE->AutoCompleteMemPool = ArenaAlloc();
     APP_STATE->DragDropMemPool = ArenaAlloc();
     APP_STATE->DragDropRegisters = ArenaPushArrayZero(
         APP_STATE->DragDropMemPool,
@@ -5455,7 +6338,13 @@ AppInit(CommandLine* CLI)
     );
     APP_STATE->Config = ConfigStateAlloc();
     ConfigContextSelect(ConfigContextFromState(APP_STATE->Config));
-    ConfigNodeNew(APP_STATE->Config, ConfigNodeRoot(), "session"_s8);
+    
+    ConfigNode* Session = ConfigNodeNew(
+        APP_STATE->Config, 
+        ConfigNodeRoot(), 
+        "session"_s8
+    );
+
     ConfigNodeNew(APP_STATE->Config, ConfigNodeRoot(), "command_line"_s8);
     ConfigNodeNew(APP_STATE->Config, ConfigNodeRoot(), "transient"_s8);
     APP_STATE->ViewStateSlotsCount = 1024;
@@ -5480,6 +6369,10 @@ AppInit(CommandLine* CLI)
             },
             {
                 Str8Lit("scrolling_animations"),
+                Str8Lit("1")
+            },
+            {
+                Str8Lit("autocompletion_lister"),
                 Str8Lit("1")
             }
         };
@@ -5522,7 +6415,7 @@ AppInit(CommandLine* CLI)
 
         SystemCreateDirectory(SessionDataPath);
 
-        if (!SessionDataPath.Size) {
+        if (!SessionPath.Size) {
             SessionPath = ArenaPushStrFmt(
                 Scratch.MemPool,
                 "%S/default.%s_session",
@@ -5733,6 +6626,79 @@ AppPushLogPathsFromDir(Arena* MemPool, Str8List* Paths, Str8 Dir)
         if (!HasBIN)
             ListPush(MemPool, Paths, Node->String);
     }
+}
+
+INTERNAL void
+AppWriteSessionData(void)
+{
+    TempArena Scratch = GetScratch(NULL, 0);
+    Str8 DstPath = APP_STATE->SessionPath;
+    Str8 BucketName = "session"_s8;
+
+    if (DstPath.Size) {
+        b32 DstExists = !!(SystemGetFileProperties(DstPath).Created);
+        Str8 TempPath = ArenaPushStrFmt(
+            Scratch.MemPool,
+            "%S.temp",
+            PRINT_STR(DstPath)
+        );
+        Str8 OverwrittenPath = ArenaPushStrFmt(
+            Scratch.MemPool,
+            "%S.old",
+            PRINT_STR(DstPath)
+        );
+
+        ConfigNode* TreeRoot = ConfigNodeChildFromStr(
+            ConfigNodeRoot(),
+            BucketName
+        );
+        Str8List Strings = {};
+
+        ListPush(
+            Scratch.MemPool,
+            &Strings,
+            ArenaPushStrFmt(
+                Scratch.MemPool,
+                "// %s %S file\n\n",
+                NC_DATA_DIR,
+                PRINT_STR(BucketName)
+            )
+        );
+
+        for (
+            ConfigNode* Child = TreeRoot->Head;
+            Child != EMPTY_CFG_NODE_VALUE;
+            Child = Child->Next
+        ) {
+            ListPush(
+                Scratch.MemPool,
+                &Strings,
+                ConfigStrFromTree(
+                    Scratch.MemPool,
+                    APP_STATE->CfgSchemaTable,
+                    StrChopLastSlash(DstPath),
+                    Child
+                )
+            );
+        }
+
+        b32 TempWriteOkay = WriteFileContents(
+            TempPath,
+            Strings
+        );
+        b32 OldMoveOkay = (
+            TempWriteOkay &&
+            (!DstExists || SystemMoveFile(OverwrittenPath, DstPath))
+        );
+        b32 NewMoveOkay = (OldMoveOkay && SystemMoveFile(DstPath, TempPath));
+
+        if (NewMoveOkay && DstExists)
+            SystemDeleteFile(OverwrittenPath);
+        else if (!NewMoveOkay && OldMoveOkay && DstExists)
+            SystemMoveFile(DstPath, OverwrittenPath);
+    }
+
+    ReleaseScratch(Scratch);
 }
 
 void 
@@ -6238,12 +7204,616 @@ AppFrame(void)
         }
     }
 
-    APP_STATE->AltMenuBarEnabled = AppSettingFromNameB32(
-        "focus_menu_bar_with_alt"_s8
+    EvalCacheSelect(APP_STATE->ECache);
+
+    EvalBaseContext* EvalBaseCtx = ArenaPushArrayZero(
+        Scratch.MemPool,
+        EvalBaseContext,
+        1
     );
+
+    {
+        EvalBaseContext* Ctx = EvalBaseCtx;
+
+        Ctx->SpaceGenFunc = AppEvalSpaceGen;
+        Ctx->SpaceReadFunc = AppEvalSpaceRead;
+        Ctx->SpaceWriteFunc = AppEvalSpaceWrite;
+    }
+
+    EvalBaseContextSelect(EvalBaseCtx);
+
+    EvalStr2ExprMap* MacroMap = ArenaPushArrayZero(
+        Scratch.MemPool,
+        EvalStr2ExprMap,
+        1
+    );
+
+    *MacroMap = EvalStr2ExprMapAlloc(Scratch.MemPool, 512);
+    APP_STATE->MetaName2TypeMap = ArenaPushArrayZero(
+        AppFrameMemPool(),
+        EvalStr2TypeKeyMap,
+        1
+    );
+    APP_STATE->MetaName2TypeMap[0] = EvalStr2TypeKeyMapAlloc(
+        AppFrameMemPool(),
+        256
+    );
+
+    EVExpandRuleTable* ExpandRuleTable = ArenaPushArrayZero(
+        Scratch.MemPool,
+        EVExpandRuleTable,
+        1
+    );
+
     APP_STATE->ViewUIRuleMap = AppViewUIRuleMapAlloc(
         Scratch.MemPool,
         512
+    );
+
+    PROFILE(BuildExtraTypesAndMapsTimer) {
+        {
+            Str8 Names[] = {
+                "commands"_s8,
+                "tab_commands"_s8
+            };
+
+            for (u64 Index = 0; Index < ARRAY_COUNT(Names); ++Index) {
+                Str8 Name = Names[Index];
+                EvalTypeKey TypeKey = EvalTypeKeyConstruct(
+                    __Params.Kind = EVAL_TYPE_KIND_SET,
+                    __Params.Flags = EVAL_TYPE_FLAG_STUB_SINGLE_LINE_EXPANSION,
+                    __Params.Name = Name,
+                    __Params.AccessFunc = EVAL_TYPE_ACCESS_FUNC_NAME(Commands),
+                    __Params.ExpandRule.ExpandInfoFunc = EVAL_TYPE_EXPAND_INFO_FUNC_NAME(Commands),
+                    __Params.ExpandRule.ExpandRangeFunc = EVAL_TYPE_EXPAND_RANGE_FUNC_NAME(Commands)
+                );
+                EvalExpr* Expr = EvalPushExpr(
+                    Scratch.MemPool,
+                    EVAL_EXPR_KIND_LEAF_OFFSET,
+                    Rng((u64) 0, (u64) 0)
+                );
+
+                Expr->TypeKey = TypeKey;
+                Expr->Space = EvalSpaceAlloc(APP_EVAL_SPACE_KIND_META_QUERY);
+                MapInsert(Scratch.MemPool, MacroMap, Name, Expr);
+            }
+        }
+
+        {
+            Str8 Names[] = {
+                "themes"_s8
+            };
+
+            for (u64 Index = 0; Index < ARRAY_COUNT(Names); ++Index) {
+                Str8 Name = Names[Index];
+                EvalTypeKey TypeKey = EvalTypeKeyConstruct(
+                    __Params.Kind = EVAL_TYPE_KIND_SET,
+                    __Params.Flags = EVAL_TYPE_FLAG_STUB_SINGLE_LINE_EXPANSION,
+                    __Params.Name = Name,
+                    __Params.AccessFunc = EVAL_TYPE_ACCESS_FUNC_NAME(Themes),
+                    __Params.ExpandRule.ExpandInfoFunc = EVAL_TYPE_EXPAND_INFO_FUNC_NAME(Themes),
+                    __Params.ExpandRule.ExpandRangeFunc = EVAL_TYPE_EXPAND_RANGE_FUNC_NAME(Themes)
+                );
+                EvalExpr* Expr = EvalPushExpr(
+                    Scratch.MemPool,
+                    EVAL_EXPR_KIND_LEAF_OFFSET,
+                    Rng((u64) 0, (u64) 0)
+                );
+
+                Expr->TypeKey = TypeKey;
+                Expr->Space = EvalSpaceAlloc(
+                    APP_EVAL_SPACE_KIND_META_QUERY
+                );
+                MapInsert(Scratch.MemPool, MacroMap, Name, Expr);
+            }
+        }
+
+        {
+            Str8 Names[] = {
+                "views"_s8
+            };
+
+            for (u64 Index = 0; Index < ARRAY_COUNT(Names); ++Index) {
+                Str8 Name = Names[Index];
+                EvalTypeKey TypeKey = EvalTypeKeyConstruct(
+                    __Params.Kind = EVAL_TYPE_KIND_SET,
+                    __Params.Flags = EVAL_TYPE_FLAG_STUB_SINGLE_LINE_EXPANSION,
+                    __Params.Name = Name,
+                    __Params.AccessFunc = EVAL_TYPE_ACCESS_FUNC_NAME(Views),
+                    __Params.ExpandRule.ExpandInfoFunc = EVAL_TYPE_EXPAND_INFO_FUNC_NAME(Views),
+                    __Params.ExpandRule.ExpandRangeFunc = EVAL_TYPE_EXPAND_RANGE_FUNC_NAME(Views)
+                );
+                EvalExpr* Expr = EvalPushExpr(
+                    Scratch.MemPool,
+                    EVAL_EXPR_KIND_LEAF_OFFSET,
+                    Rng((u64) 0, (u64) 0)
+                );
+
+                Expr->TypeKey = TypeKey;
+                Expr->Space = EvalSpaceAlloc(
+                    APP_EVAL_SPACE_KIND_META_QUERY
+                );
+                MapInsert(Scratch.MemPool, MacroMap, Name, Expr);
+            }
+        }
+
+        for (
+            u64 Index = 0; 
+            Index < ARRAY_COUNT(APP_NAME_SCHEMA_INFO_TABLE); 
+            ++Index
+        ) {
+            Str8 Name = APP_NAME_SCHEMA_INFO_TABLE[Index].Name;
+            EvalTypeKey TypeKey = EvalTypeKeyConstruct(
+                __Params.Name = Name,
+                __Params.Kind = EVAL_TYPE_KIND_SET,
+                __Params.IRExtFunc = EVAL_TYPE_IR_EXT_FUNC_NAME(Schema),
+                __Params.AccessFunc = EVAL_TYPE_ACCESS_FUNC_NAME(Schema),
+                __Params.ExpandRule.ExpandInfoFunc = EVAL_TYPE_EXPAND_INFO_FUNC_NAME(Schema),
+                __Params.ExpandRule.ExpandRangeFunc = EVAL_TYPE_EXPAND_RANGE_FUNC_NAME(Schema)
+            );
+
+            MapInsert(
+                AppFrameMemPool(),
+                APP_STATE->MetaName2TypeMap,
+                Name,
+                TypeKey
+            );
+        }
+
+        {
+            Str8 Name = "config"_s8;
+            EvalTypeKey TypeKey = EvalTypeKeyConstruct(
+                __Params.Name = Name,
+                __Params.Kind = EVAL_TYPE_KIND_SET,
+                __Params.AccessFunc = EVAL_TYPE_ACCESS_FUNC_NAME(Configs)
+            );
+            EvalExpr* Expr = EvalPushExpr(
+                Scratch.MemPool,
+                EVAL_EXPR_KIND_LEAF_OFFSET,
+                Rng((u64) 0, (u64) 0)
+            );
+
+            Expr->TypeKey = TypeKey;
+            Expr->Space = EvalSpaceAlloc(APP_EVAL_SPACE_KIND_META_QUERY);
+            MapInsert(Scratch.MemPool, MacroMap, Name, Expr);
+            MapInsert(
+                AppFrameMemPool(), 
+                APP_STATE->MetaName2TypeMap, 
+                Name, 
+                TypeKey
+            );
+        }
+
+        Str8 EvalCfgNames[] = {
+            "recent_session"_s8
+        };
+
+        for (u64 Index = 0; Index < ARRAY_COUNT(EvalCfgNames); ++Index) {
+            Str8 CfgName = EvalCfgNames[Index];
+            Str8 CollectionName = AppPluralFromCodeName(CfgName);
+            EvalTypeKey CollectionTypeKey = EvalTypeKeyConstruct(
+                __Params.Kind = EVAL_TYPE_KIND_SET,
+                __Params.IRExtFunc = EVAL_TYPE_IR_EXT_FUNC_NAME(ConfigsSlice),
+                __Params.AccessFunc = EVAL_TYPE_ACCESS_FUNC_NAME(ConfigsSlice),
+                __Params.ExpandRule.ExpandInfoFunc = EVAL_TYPE_EXPAND_INFO_FUNC_NAME(ConfigsSlice),
+                __Params.ExpandRule.ExpandRangeFunc = EVAL_TYPE_EXPAND_RANGE_FUNC_NAME(ConfigsSlice),
+                __Params.ExpandRule.ExpandIDFromNumFunc = EVAL_TYPE_EXPAND_ID_FROM_NUM_FUNC_NAME(ConfigsSlice),
+                __Params.ExpandRule.ExpandNumFromIDFunc = EVAL_TYPE_EXPAND_NUM_FROM_ID_FUNC_NAME(ConfigsSlice)
+            );
+            EvalExpr* Expr = EvalPushExpr(
+                Scratch.MemPool, 
+                EVAL_EXPR_KIND_LEAF_OFFSET, 
+                Rng((u64) 0, (u64) 0)
+            );
+
+            Expr->TypeKey = CollectionTypeKey;
+            Expr->Space = EvalSpaceAlloc(APP_EVAL_SPACE_KIND_META_QUERY);
+            MapInsert(Scratch.MemPool, MacroMap, CollectionName, Expr);
+            MapInsert(
+                AppFrameMemPool(), 
+                APP_STATE->MetaName2TypeMap, 
+                CollectionName, 
+                CollectionTypeKey
+            );
+        }
+
+        for (
+            u64 Index = 0; 
+            Index < ARRAY_COUNT(APP_NAME_SCHEMA_INFO_TABLE); 
+            ++Index
+        ) {
+            Str8 Name = APP_NAME_SCHEMA_INFO_TABLE[Index].Name;
+            MDNodePtrList Schemas = ConfigSchemasFromName(
+                Scratch.MemPool,
+                APP_STATE->CfgSchemaTable,
+                Name
+            );
+            b32 IsIndividuallyEvallable = FALSE;
+
+            for (
+                MDNodePtrNode* N = Schemas.Head;
+                N;
+                N = N->Next
+            ) {
+                if (
+                    MDNodeHasChild(N->V, "label"_s8, 0) ||
+                    MDNodeHasChild(N->V, "executable"_s8, 0)
+                ) {
+                    IsIndividuallyEvallable = TRUE;
+                    break;
+                }
+            }
+
+            if (IsIndividuallyEvallable) {
+                EvalTypeKey TypeKey = EvalStr2TypeKeyMapLookup(
+                    APP_STATE->MetaName2TypeMap, 
+                    Name
+                );
+                ConfigNodePtrList Cfgs = ConfigNodeTopLevelListFromStr(
+                    Scratch.MemPool,
+                    Name
+                );
+
+                for (
+                    ConfigNodePtrNode* N = Cfgs.Head;
+                    N;
+                    N = N->Next
+                ) {
+                    ConfigNode* Cfg = N->V;
+                    Str8 Label = AppLabelFromConfig(Cfg);
+
+                    if (Label.Size) {
+                        EvalSpace Space = AppEvalSpaceFromConfig(Cfg);
+                        EvalExpr* Expr = EvalPushExpr(
+                            Scratch.MemPool,
+                            EVAL_EXPR_KIND_LEAF_OFFSET,
+                            Rng((u64) 0, (u64) 0)
+                        );
+
+                        Expr->Space = Space;
+                        Expr->Mode = EVAL_MODE_OFFSET;
+                        Expr->TypeKey = TypeKey;
+                        MapInsert(
+                            Scratch.MemPool,
+                            MacroMap,
+                            Label,
+                            Expr
+                        );
+                    }
+                }
+            }
+        }
+
+
+        {
+            ConfigNodePtrList Windows = ConfigNodeTopLevelListFromStr(
+                Scratch.MemPool,
+                "window"_s8
+            );
+
+            for (
+                ConfigNodePtrNode* N = Windows.Head;
+                N;
+                N = N->Next
+            ) {
+                ConfigNode* Window = N->V;
+
+                {
+                    EvalTypeKey TypeKey = EvalStr2TypeKeyMapLookup(
+                        APP_STATE->MetaName2TypeMap,
+                        Window->String
+                    );
+                    EvalSpace Space = AppEvalSpaceFromConfig(Window);
+                    EvalExpr* Expr = EvalPushExpr(
+                        Scratch.MemPool,
+                        EVAL_EXPR_KIND_LEAF_OFFSET,
+                        Rng((u64) 0, (u64) 0)
+                    );
+
+                    Expr->Space = Space;
+                    Expr->Mode = EVAL_MODE_OFFSET;
+                    Expr->TypeKey = TypeKey;
+                    MapInsert(
+                        Scratch.MemPool,
+                        MacroMap,
+                        ArenaPushStrFmt(
+                            Scratch.MemPool,
+                            "query:config.$%llx",
+                            Window->ID
+                        ),
+                        Expr
+                    );
+                }
+
+                ConfigPanelTree PanelTree = ConfigPanelTreeFromConfig(
+                    Scratch.MemPool,
+                    Window
+                );
+
+                for (
+                    ConfigPanelNode* P = PanelTree.Root;
+                    P != EMPTY_CFG_PANEL_NODE_VALUE;
+                    P = ConfigPanelNodeRecDepthFirstPre(PanelTree.Root, P).Next
+                ) {
+                    for (
+                        ConfigNodePtrNode* TabNode = P->Tabs.Head;
+                        TabNode;
+                        TabNode = TabNode->Next
+                    ) {
+                        ConfigNode* Tab = TabNode->V;
+                        EvalTypeKey TypeKey = EvalStr2TypeKeyMapLookup(
+                            APP_STATE->MetaName2TypeMap,
+                            Tab->String
+                        );
+                        EvalSpace Space = AppEvalSpaceFromConfig(Tab);
+                        EvalExpr* Expr = EvalPushExpr(
+                            Scratch.MemPool,
+                            EVAL_EXPR_KIND_LEAF_OFFSET,
+                            Rng((u64) 0, (u64) 0)
+                        );
+
+                        Expr->Space = Space;
+                        Expr->Mode = EVAL_MODE_OFFSET;
+                        Expr->TypeKey = TypeKey;
+                        MapInsert(
+                            Scratch.MemPool,
+                            MacroMap,
+                            ArenaPushStrFmt(
+                                Scratch.MemPool,
+                                "query:config.$%llx",
+                                Tab->ID
+                            ),
+                            Expr
+                        );
+
+                    }
+                }
+            }
+        }
+
+        {
+            EvalTypeKey TypeKey = EvalStr2TypeKeyMapLookup(
+                APP_STATE->MetaName2TypeMap,
+                "session"_s8
+            );
+            EvalSpace Space = AppEvalSpaceFromConfig(
+                ConfigNodeChildFromStr(ConfigNodeRoot(), "session"_s8)
+            );
+            EvalExpr* Expr = EvalPushExpr(
+                Scratch.MemPool,
+                EVAL_EXPR_KIND_LEAF_OFFSET,
+                Rng((u64) 0, (u64) 0)
+            );
+
+            Expr->Space = Space;
+            Expr->Mode = EVAL_MODE_OFFSET;
+            Expr->TypeKey = TypeKey;
+            MapInsert(
+                Scratch.MemPool,
+                MacroMap,
+                "session_settings"_s8,
+                Expr
+            );
+        }
+
+        {
+            MapInsert(
+                AppFrameMemPool(),
+                APP_STATE->MetaName2TypeMap,
+                "theme_colours"_s8,
+                EvalTypeKeyConstruct(
+                    __Params.Kind = EVAL_TYPE_KIND_SET,
+                    __Params.Flags = EVAL_TYPE_FLAG_STUB_SINGLE_LINE_EXPANSION,
+                    __Params.Name = "theme_colours"_s8,
+                    __Params.IRExtFunc = EVAL_TYPE_IR_EXT_FUNC_NAME(ConfigsSlice),
+                    __Params.AccessFunc = EVAL_TYPE_ACCESS_FUNC_NAME(ConfigsSlice),
+                    __Params.ExpandRule.ExpandInfoFunc = EVAL_TYPE_EXPAND_INFO_FUNC_NAME(ConfigsQuery),
+                    __Params.ExpandRule.ExpandRangeFunc = EVAL_TYPE_EXPAND_RANGE_FUNC_NAME(ConfigsSlice),
+                    __Params.ExpandRule.ExpandIDFromNumFunc = EVAL_TYPE_EXPAND_ID_FROM_NUM_FUNC_NAME(ConfigsSlice),
+                    __Params.ExpandRule.ExpandNumFromIDFunc = EVAL_TYPE_EXPAND_NUM_FROM_ID_FUNC_NAME(ConfigsSlice)
+                )
+            );
+        }
+
+        struct {
+            Str8                          Name;
+            b32                           InheritedByMembers;
+            b32                           InheritedByElements;
+            b32                           ArrayLike;
+            EvalTypeIRExtFuncType*        IRExtFunc;
+            EvalTypeAccessFuncType*       AccessFunc;
+            EvalTypeExpandRule            ExpandRule;
+            AppViewUIFuncType*            ViewUIFunc;
+            EVExpandRuleInfoHookFuncType* ExpandInfoHookFunc;
+        } LensTable[] = {
+            {
+                "raw"_s8,
+                FALSE,
+                FALSE,
+                FALSE,
+                NULL,
+                NULL,
+                {}
+            },
+            {
+                "bin"_s8,
+                TRUE,
+                TRUE,
+                FALSE,
+                NULL,
+                NULL,
+                {}
+            },
+            {
+                "oct"_s8,
+                TRUE,
+                TRUE,
+                FALSE,
+                NULL,
+                NULL,
+                {}
+            },
+            {
+                "dec"_s8,
+                TRUE,
+                TRUE,
+                FALSE,
+                NULL,
+                NULL,
+                {}
+            },
+            {
+                "hex"_s8,
+                TRUE,
+                TRUE,
+                FALSE,
+                NULL,
+                NULL,
+                {}
+            },
+            {
+                "digits"_s8,
+                TRUE,
+                TRUE,
+                FALSE,
+                NULL,
+                NULL,
+                {}
+            },
+            {
+                "no_string"_s8,
+                TRUE,
+                TRUE,
+                FALSE,
+                NULL,
+                NULL,
+                {}
+            },
+            {
+                "no_char"_s8,
+                TRUE,
+                TRUE,
+                FALSE,
+                NULL,
+                NULL,
+                {}
+            },
+            {
+                "no_addr"_s8,
+                TRUE,
+                TRUE,
+                FALSE,
+                NULL,
+                NULL,
+                {}
+            },
+            {
+                "columns"_s8,
+                FALSE,
+                FALSE,
+                FALSE,
+                NULL,
+                NULL,
+                {}
+            },
+            {
+                "flatten"_s8,
+                FALSE,
+                FALSE,
+                FALSE,
+                NULL,
+                NULL,
+                {}
+            },
+            {
+                "range1"_s8,
+                FALSE,
+                FALSE,
+                FALSE,
+                NULL,
+                NULL,
+                {}
+            }
+        };
+
+        {
+            for (u64 Index = 0; Index < ARRAY_COUNT(LensTable); ++Index) {
+                if (LensTable[Index].ViewUIFunc) {
+                    MapInsert(
+                        Scratch.MemPool,
+                        APP_STATE->ViewUIRuleMap,
+                        LensTable[Index].Name,
+                        LensTable[Index].ViewUIFunc
+                    );
+                }
+
+                if (LensTable[Index].ExpandInfoHookFunc) {
+                    TablePushNew(
+                        Scratch.MemPool,
+                        ExpandRuleTable,
+                        __Rule.String = LensTable[Index].Name,
+                        __Rule.InfoHookFunc = LensTable[Index].ExpandInfoHookFunc
+                    );
+                }
+            }
+        }
+
+        for (u64 Index = 0; Index < ARRAY_COUNT(LensTable); ++Index) {
+            EvalTypeFlag TypeFlags = 0;
+
+            if (LensTable[Index].InheritedByMembers)
+                TypeFlags |= EVAL_TYPE_FLAG_INHERITED_BY_MEMBERS;
+
+            if (LensTable[Index].InheritedByElements)
+                TypeFlags |= EVAL_TYPE_FLAG_INHERITED_BY_ELEMENTS;
+
+            if (LensTable[Index].ArrayLike)
+                TypeFlags |= EVAL_TYPE_FLAG_ARRAY_LIKE_EXPANSION;
+
+            EvalExpr* Expr = EvalPushExpr(
+                Scratch.MemPool,
+                EVAL_EXPR_KIND_LEAF_OFFSET,
+                Rng((u64) 0, (u64) 0)
+            );
+
+            Expr->TypeKey = EvalTypeKeyConstruct(
+                __Params.Kind = EVAL_TYPE_KIND_LENS_SPEC,
+                __Params.Flags = TypeFlags,
+                __Params.Name = LensTable[Index].Name,
+                __Params.IRExtFunc = LensTable[Index].IRExtFunc,
+                __Params.AccessFunc = LensTable[Index].AccessFunc,
+                __Params.ExpandRule = LensTable[Index].ExpandRule
+            );
+            MapInsert(
+                Scratch.MemPool,
+                MacroMap,
+                LensTable[Index].Name,
+                Expr
+            );
+        }
+    }
+
+    EVSelectExpandRuleTable(ExpandRuleTable);
+
+    EvalIRContext* IRCtx = ArenaPushArrayZero(
+        Scratch.MemPool,
+        EvalIRContext,
+        1
+    );
+
+    IRCtx->MacroMap = MacroMap;
+    EvalIRContextSelect(IRCtx);
+
+    EvalInterpretContext* InterpCtx = ArenaPushArrayZero(
+        Scratch.MemPool,
+        EvalInterpretContext,
+        1
+    );
+
+    InterpCtx->PrimarySpace = EvalSpaceAlloc(APP_EVAL_SPACE_KIND_META_VIEW);
+    EvalInterpContextSelect(InterpCtx);
+    APP_STATE->AltMenuBarEnabled = AppSettingFromNameB32(
+        "focus_menu_bar_with_alt"_s8
     );
 
     AppCommand* Command = NULL;
@@ -6294,7 +7864,7 @@ AppFrame(void)
                     } break;
 
                     case APP_COMMAND_KIND_EXIT: {
-                        AppCmd(APP_COMMAND_KIND_WRITE_SESSION_DATA);
+                        AppWriteSessionData();
                         APP_STATE->ShouldQuit = TRUE;
                     } break;
 
@@ -7684,6 +9254,337 @@ AppFrame(void)
                         }
                     } break;
 
+                    case APP_COMMAND_KIND_COPY_TAB_FULL_PATH: {
+                        ConfigNode* Tab = ConfigNodeFromID(Registers()->Tab);
+                        Str8 Path = ConfigNodeChildFromStr(
+                            Tab, 
+                            "file"_s8
+                        )->Head->String;
+
+                        if (Path.Size)
+                            SetClipboardText(Path);
+                    } break;
+
+                    case APP_COMMAND_KIND_RECORD_FILE_IN_SESSION: {
+                        Str8 Path = Registers()->FilePath;
+
+                        if (Path.Size && AppSessionRecordPath(Path))
+                            AppFileRecorded(Path);
+                    } break;
+
+                    case APP_COMMAND_KIND_NEW_SESSION:
+                    case APP_COMMAND_KIND_SAVE_SESSION: {
+                        Str8 NewPath = Registers()->FilePath;
+                        b32 FileWillBeOverWritten = !!(
+                            SystemGetFileProperties(NewPath).Created
+                        );
+                        UIKey Key = UIKeyFromStr(
+                            EMPTY_UI_KEY_VALUE, 
+                            "new_config_overwrite_confirm"_s8
+                        );
+
+                        if (!NewPath.Size)
+                            break;
+
+                        if (
+                            FileWillBeOverWritten &&
+                            !Registers()->ForceConfirm &&
+                            APP_STATE->PopUpKey != Key
+                        ) {
+                            APP_STATE->PopUpKey = Key;
+                            APP_STATE->PopUpActive = TRUE;
+                            ArenaClear(APP_STATE->PopUpMemPool);
+                            MemSet(
+                                &APP_STATE->PopUpCommands, 
+                                0, 
+                                sizeof(APP_STATE->PopUpCommands)
+                            );
+                            APP_STATE->PopUpTitle = ArenaPushStrCpy(
+                                APP_STATE->PopUpMemPool,
+                                "Are you sure you want to save to this path?"_s8
+                            );
+                            APP_STATE->PopUpDescription = ArenaPushStrFmt(
+                                APP_STATE->PopUpMemPool,
+                                "The existing file at '%S' will be overwritten.",
+                                PRINT_STR(NewPath)
+                            );
+
+                            AppRegisters* Regs = CopyRegisters(
+                                AppFrameMemPool(), 
+                                Registers()
+                            );
+
+                            Regs->ForceConfirm = TRUE;
+                            ListPush(
+                                APP_STATE->PopUpMemPool,
+                                &APP_STATE->PopUpCommands,
+                                APP_COMMAND_KIND_INFO_TABLE[Kind].String,
+                                Regs
+                            );
+                        } else if (Kind == APP_COMMAND_KIND_NEW_SESSION) {
+                            SystemDeleteFile(NewPath);
+                            AppCmd(
+                                APP_COMMAND_KIND_OPEN_SESSION, 
+                                __Registers.FilePath = NewPath
+                            );
+                        } else {
+                            ArenaClear(APP_STATE->SessionPathMemPool);
+                            APP_STATE->SessionPath = ArenaPushStrCpy(
+                                APP_STATE->SessionPathMemPool, 
+                                NewPath
+                            );
+                            AppCmd(APP_COMMAND_KIND_WRITE_SESSION_DATA);
+                            AppCmd(
+                                APP_COMMAND_KIND_RECORD_SESSION_AS_LAST_OPENED,
+                                __Registers.FilePath = NewPath
+                            );
+                        }
+                    } break;
+
+                    case APP_COMMAND_KIND_OPEN_SESSION: {
+                        ConfigNode* FileRoot = ConfigNodeChildFromStr(
+                            ConfigNodeRoot(), 
+                            "session"_s8
+                        );
+                        Str8 FilePath = Registers()->FilePath;
+                        Str8 FileContents = ReadFileContents(Scratch.MemPool, FilePath);
+                        FileProperties FileProps = SystemGetFileProperties(FilePath);
+                        Str8 StoredPath = APP_STATE->SessionPath;
+                        Str8 FileExpectedHeader = ArenaPushStrFmt(
+                            Scratch.MemPool,
+                            "// %s",
+                            NC_DATA_DIR
+                        );
+                        b32 FileIsOkay = (
+                            (!FileProps.Size && !FileProps.Created) ||
+                            StrMatch(FilePath, StoredPath, 0) ||
+                            !StoredPath.Size ||
+                            StrMatch(
+                                StrPrefix(FileContents, FileExpectedHeader.Size),
+                                FileExpectedHeader,
+                                0
+                            )
+                        );
+
+                        if (!FileIsOkay) {
+                            Str8 Error = ArenaPushStrFmt(
+                                Scratch.MemPool,
+                                "FLAP cannot open \"%S\". It is not a session file.",
+                                PRINT_STR(FilePath)
+                            );
+
+                            APP_STATE->ErrorStrSize = MIN(
+                                sizeof(APP_STATE->ErrorBuffer),
+                                Error.Size
+                            );
+                            MemCpy(
+                                APP_STATE->ErrorBuffer,
+                                Error.Str,
+                                APP_STATE->ErrorStrSize
+                            );
+                            APP_STATE->ErrorFrameIndex = APP_STATE->FrameIndex;
+                            break;
+                        }
+
+                        // NOTE(nc): a file with no contents (the first run) keeps the
+                        //         : defaults that AppInit made
+                        if (FileContents.Size) {
+                            ConfigNodeReleaseAllChildren(
+                                APP_STATE->Config, 
+                                FileRoot
+                            );
+
+                            ConfigNodePtrList FileConfigs = ConfigNodePtrListFromStr(
+                                Scratch.MemPool,
+                                APP_STATE->Config,
+                                APP_STATE->CfgSchemaTable,
+                                StrChopLastSlash(FilePath),
+                                FileContents
+                            );
+
+                            for (
+                                ConfigNodePtrNode* N = FileConfigs.Head;
+                                N;
+                                N = N->Next
+                            ) {
+                                ConfigNodeInsertChild(
+                                    APP_STATE->Config,
+                                    FileRoot,
+                                    FileRoot->Tail,
+                                    N->V
+                                );
+                            }
+                        }
+
+                        ArenaClear(APP_STATE->SessionPathMemPool);
+                        APP_STATE->SessionPath = ArenaPushStrCpy(
+                            APP_STATE->SessionPathMemPool, 
+                            FilePath
+                        );
+
+                        ConfigNode* Window = ConfigNodeChildFromStr(
+                            FileRoot, 
+                            "window"_s8
+                        );
+
+                        if (Window == EMPTY_CFG_NODE_VALUE) {
+                            Window = ConfigNodeNew(
+                                APP_STATE->Config, 
+                                FileRoot, 
+                                "window"_s8
+                            );
+
+                            ConfigNode* Panels = ConfigNodeNew(
+                                APP_STATE->Config, 
+                                Window, 
+                                "panels"_s8
+                            );
+
+                            ConfigNodeNew(
+                                APP_STATE->Config, 
+                                Panels, 
+                                "selected"_s8
+                            );
+                            AppCmd(
+                                APP_COMMAND_KIND_OPEN_FILES,
+                                __Registers.Window = Window->ID,
+                                __Registers.Panel = Panels->ID
+                            );
+                        }
+
+                        BaseRegisters()->Window = Window->ID;
+
+                        if (
+                            ConfigNodeChildFromStr(
+                                FileRoot, 
+                                "keybindings"_s8
+                            ) == EMPTY_CFG_NODE_VALUE
+                        ) {
+                            AppCmd(APP_COMMAND_KIND_RESET_TO_DEFAULT_BINDINGS);
+                        }
+
+                        for (
+                            ConfigNode* Child = FileRoot->Head;
+                            Child != EMPTY_CFG_NODE_VALUE;
+                            Child = Child->Next
+                        ) {
+                            if (
+                                StrMatch(Child->String, "file"_s8, 0) ||
+                                StrMatch(Child->String, "view"_s8, 0)
+                            ) {
+                                AppFileRecorded(Child->Head->String);
+                            }
+                        }
+
+                        AppCmd(
+                            APP_COMMAND_KIND_RECORD_SESSION_AS_LAST_OPENED,
+                            __Registers.FilePath = FilePath
+                        );
+                    } break;
+
+                    case APP_COMMAND_KIND_OPEN_RECENT_SESSION: {
+                        ConfigNode* Config = ConfigNodeFromID(
+                            Registers()->Config
+                        );
+                        ConfigNode* Path = ConfigNodeChildFromStr(
+                            Config, 
+                            "path"_s8
+                        );
+
+                        if (
+                            StrMatch(
+                                Config->String, 
+                                "recent_session"_s8, 
+                                0
+                            ) &&
+                            Path->Head->String.Size
+                        ) {
+                            AppCmd(
+                                APP_COMMAND_KIND_OPEN_SESSION,
+                                __Registers.FilePath = Path->Head->String
+                            );
+                        }
+                    } break;
+
+                    case APP_COMMAND_KIND_WRITE_SESSION_DATA: {
+                        AppWriteSessionData();
+                    } break;
+
+                    case APP_COMMAND_KIND_RECORD_SESSION_AS_LAST_OPENED: {
+                        Str8 FilePath = Registers()->FilePath;
+                        ConfigNode* Session = ConfigNodeChildFromStr(
+                            ConfigNodeRoot(), 
+                            "session"_s8
+                        );
+                        ConfigNodePtrList RecentSessions = ConfigNodeChildListFromStr(
+                            Scratch.MemPool,
+                            Session,
+                            "recent_session"_s8
+                        );
+                        ConfigNode* RecentSession = EMPTY_CFG_NODE_VALUE;
+
+                        for (
+                            ConfigNodePtrNode* N = RecentSessions.Head;
+                            N;
+                            N = N->Next
+                        ) {
+                            if (
+                                PathMatchNormalised(
+                                    PathFromConfig(N->V), 
+                                    FilePath
+                                )
+                            ) {
+                                RecentSession = N->V;
+                                break;
+                            }
+                        }
+
+                        if (RecentSession == EMPTY_CFG_NODE_VALUE) {
+                            RecentSession = ConfigNodeNew(
+                                APP_STATE->Config,
+                                Session,
+                                "recent_session"_s8
+                            );
+
+                            ConfigNode* PathRoot = ConfigNodeNew(
+                                APP_STATE->Config,
+                                RecentSession,
+                                "path"_s8
+                            );
+
+                            ConfigNodeNew(
+                                APP_STATE->Config, 
+                                PathRoot, 
+                                FilePath
+                            );
+                        }
+
+                        ConfigNodeUnhook(
+                            APP_STATE->Config, 
+                            Session, 
+                            RecentSession
+                        );
+                        ConfigNodeInsertChild(
+                            APP_STATE->Config,
+                            Session,
+                            EMPTY_CFG_NODE_VALUE,
+                            RecentSession
+                        );
+                        RecentSessions = ConfigNodeChildListFromStr(
+                            Scratch.MemPool,
+                            Session,
+                            "recent_session"_s8
+                        );
+
+                        if (RecentSessions.Count > 32) {
+                            ConfigNodeRelease(
+                                APP_STATE->Config,
+                                RecentSessions.Tail->V
+                            );
+                        }
+                    } break;
+
+
                     case APP_COMMAND_KIND_EDIT: {
                         Event.Kind = UI_EVENT_KIND_PRESS;
                         Event.Slot = UI_EVENT_ACTION_SLOT_EDIT;
@@ -7701,56 +9602,84 @@ AppFrame(void)
 
                     case APP_COMMAND_KIND_MOVE_LEFT: {
                         Event.Kind = UI_EVENT_KIND_NAVIGATE;
-                        Event.Flags = UI_EVENT_FLAG_PICK_SELECT_SIDE | UI_EVENT_FLAG_ZERO_DELTA_ON_SELECT | UI_EVENT_FLAG_EXPLICIT_DIRECTIONAL;
+                        Event.Flags = (
+                            UI_EVENT_FLAG_PICK_SELECT_SIDE | 
+                            UI_EVENT_FLAG_ZERO_DELTA_ON_SELECT | 
+                            UI_EVENT_FLAG_EXPLICIT_DIRECTIONAL
+                        );
                         Event.DeltaStride = UI_EVENT_DELTA_STRIDE_CHAR;
                         Event.DeltaI32 = Vec(-1, 0);
                     } break;
 
                     case APP_COMMAND_KIND_MOVE_RIGHT: {
                         Event.Kind = UI_EVENT_KIND_NAVIGATE;
-                        Event.Flags = UI_EVENT_FLAG_PICK_SELECT_SIDE | UI_EVENT_FLAG_ZERO_DELTA_ON_SELECT | UI_EVENT_FLAG_EXPLICIT_DIRECTIONAL;
+                        Event.Flags = (
+                            UI_EVENT_FLAG_PICK_SELECT_SIDE | 
+                            UI_EVENT_FLAG_ZERO_DELTA_ON_SELECT | 
+                            UI_EVENT_FLAG_EXPLICIT_DIRECTIONAL
+                        );
                         Event.DeltaStride = UI_EVENT_DELTA_STRIDE_CHAR;
                         Event.DeltaI32 = Vec(1, 0);
                     } break;
 
                     case APP_COMMAND_KIND_MOVE_UP: {
                         Event.Kind = UI_EVENT_KIND_NAVIGATE;
-                        Event.Flags = UI_EVENT_FLAG_EXPLICIT_DIRECTIONAL | UI_EVENT_FLAG_SECONDARY;
+                        Event.Flags = (
+                            UI_EVENT_FLAG_EXPLICIT_DIRECTIONAL | 
+                            UI_EVENT_FLAG_SECONDARY
+                        );
                         Event.DeltaStride = UI_EVENT_DELTA_STRIDE_CHAR;
                         Event.DeltaI32 = Vec(0, -1);
                     } break;
 
                     case APP_COMMAND_KIND_MOVE_DOWN: {
                         Event.Kind = UI_EVENT_KIND_NAVIGATE;
-                        Event.Flags = UI_EVENT_FLAG_EXPLICIT_DIRECTIONAL | UI_EVENT_FLAG_SECONDARY;
+                        Event.Flags = (
+                            UI_EVENT_FLAG_EXPLICIT_DIRECTIONAL | 
+                            UI_EVENT_FLAG_SECONDARY
+                        );
                         Event.DeltaStride = UI_EVENT_DELTA_STRIDE_CHAR;
                         Event.DeltaI32 = Vec(0, 1);
                     } break;
 
                     case APP_COMMAND_KIND_MOVE_LEFT_SELECT: {
                         Event.Kind = UI_EVENT_KIND_NAVIGATE;
-                        Event.Flags = UI_EVENT_FLAG_SECONDARY | UI_EVENT_FLAG_KEEP_MARK;
+                        Event.Flags = (
+                            UI_EVENT_FLAG_SECONDARY | 
+                            UI_EVENT_FLAG_KEEP_MARK
+                        );
                         Event.DeltaStride = UI_EVENT_DELTA_STRIDE_CHAR;
                         Event.DeltaI32 = Vec(-1, 0);
                     } break;
 
                     case APP_COMMAND_KIND_MOVE_RIGHT_SELECT: {
                         Event.Kind = UI_EVENT_KIND_NAVIGATE;
-                        Event.Flags = UI_EVENT_FLAG_SECONDARY | UI_EVENT_FLAG_KEEP_MARK;
+                        Event.Flags = (
+                            UI_EVENT_FLAG_SECONDARY | 
+                            UI_EVENT_FLAG_KEEP_MARK
+                        );
                         Event.DeltaStride = UI_EVENT_DELTA_STRIDE_CHAR;
                         Event.DeltaI32 = Vec(1, 0);
                     } break;
 
                     case APP_COMMAND_KIND_MOVE_UP_SELECT: {
                         Event.Kind = UI_EVENT_KIND_NAVIGATE;
-                        Event.Flags = UI_EVENT_FLAG_EXPLICIT_DIRECTIONAL | UI_EVENT_FLAG_SECONDARY | UI_EVENT_FLAG_KEEP_MARK;
+                        Event.Flags = (
+                            UI_EVENT_FLAG_EXPLICIT_DIRECTIONAL | 
+                            UI_EVENT_FLAG_SECONDARY | 
+                            UI_EVENT_FLAG_KEEP_MARK
+                        );
                         Event.DeltaStride = UI_EVENT_DELTA_STRIDE_CHAR;
                         Event.DeltaI32 = Vec(0, -1);
                     } break;
 
                     case APP_COMMAND_KIND_MOVE_DOWN_SELECT: {
                         Event.Kind = UI_EVENT_KIND_NAVIGATE;
-                        Event.Flags = UI_EVENT_FLAG_EXPLICIT_DIRECTIONAL | UI_EVENT_FLAG_SECONDARY | UI_EVENT_FLAG_KEEP_MARK;
+                        Event.Flags = (
+                            UI_EVENT_FLAG_EXPLICIT_DIRECTIONAL | 
+                            UI_EVENT_FLAG_SECONDARY | 
+                            UI_EVENT_FLAG_KEEP_MARK
+                        );
                         Event.DeltaStride = UI_EVENT_DELTA_STRIDE_CHAR;
                         Event.DeltaI32 = Vec(0, 1);
                     } break;
@@ -7771,42 +9700,60 @@ AppFrame(void)
 
                     case APP_COMMAND_KIND_MOVE_UP_CHUNK: {
                         Event.Kind = UI_EVENT_KIND_NAVIGATE;
-                        Event.Flags = UI_EVENT_FLAG_EXPLICIT_DIRECTIONAL | UI_EVENT_FLAG_SECONDARY;
+                        Event.Flags = (
+                            UI_EVENT_FLAG_EXPLICIT_DIRECTIONAL | 
+                            UI_EVENT_FLAG_SECONDARY
+                        );
                         Event.DeltaStride = UI_EVENT_DELTA_STRIDE_WORD;
                         Event.DeltaI32 = Vec(0, -1);
                     } break;
 
                     case APP_COMMAND_KIND_MOVE_DOWN_CHUNK: {
                         Event.Kind = UI_EVENT_KIND_NAVIGATE;
-                        Event.Flags = UI_EVENT_FLAG_EXPLICIT_DIRECTIONAL | UI_EVENT_FLAG_SECONDARY;
+                        Event.Flags = (
+                            UI_EVENT_FLAG_EXPLICIT_DIRECTIONAL | 
+                            UI_EVENT_FLAG_SECONDARY
+                        );
                         Event.DeltaStride = UI_EVENT_DELTA_STRIDE_WORD;
                         Event.DeltaI32 = Vec(0, 1);
                     } break;
 
                     case APP_COMMAND_KIND_MOVE_LEFT_CHUNK_SELECT: {
                         Event.Kind = UI_EVENT_KIND_NAVIGATE;
-                        Event.Flags = UI_EVENT_FLAG_KEEP_MARK | UI_EVENT_FLAG_EXPLICIT_DIRECTIONAL;
+                        Event.Flags = (
+                            UI_EVENT_FLAG_KEEP_MARK | 
+                            UI_EVENT_FLAG_EXPLICIT_DIRECTIONAL
+                        );
                         Event.DeltaStride = UI_EVENT_DELTA_STRIDE_WORD;
                         Event.DeltaI32 = Vec(-1, 0);
                     } break;
 
                     case APP_COMMAND_KIND_MOVE_RIGHT_CHUNK_SELECT: {
                         Event.Kind = UI_EVENT_KIND_NAVIGATE;
-                        Event.Flags = UI_EVENT_FLAG_KEEP_MARK | UI_EVENT_FLAG_EXPLICIT_DIRECTIONAL;
+                        Event.Flags = (
+                            UI_EVENT_FLAG_KEEP_MARK | 
+                            UI_EVENT_FLAG_EXPLICIT_DIRECTIONAL
+                        );
                         Event.DeltaStride = UI_EVENT_DELTA_STRIDE_WORD;
                         Event.DeltaI32 = Vec(1, 0);
                     } break;
 
                     case APP_COMMAND_KIND_MOVE_UP_CHUNK_SELECT: {
                         Event.Kind = UI_EVENT_KIND_NAVIGATE;
-                        Event.Flags = UI_EVENT_FLAG_KEEP_MARK | UI_EVENT_FLAG_EXPLICIT_DIRECTIONAL;
+                        Event.Flags = (
+                            UI_EVENT_FLAG_KEEP_MARK | 
+                            UI_EVENT_FLAG_EXPLICIT_DIRECTIONAL
+                        );
                         Event.DeltaStride = UI_EVENT_DELTA_STRIDE_WORD;
                         Event.DeltaI32 = Vec(0, -1);
                     } break;
 
                     case APP_COMMAND_KIND_MOVE_DOWN_CHUNK_SELECT: {
                         Event.Kind = UI_EVENT_KIND_NAVIGATE;
-                        Event.Flags = UI_EVENT_FLAG_KEEP_MARK | UI_EVENT_FLAG_EXPLICIT_DIRECTIONAL;
+                        Event.Flags = (
+                            UI_EVENT_FLAG_KEEP_MARK | 
+                            UI_EVENT_FLAG_EXPLICIT_DIRECTIONAL
+                        );
                         Event.DeltaStride = UI_EVENT_DELTA_STRIDE_WORD;
                         Event.DeltaI32 = Vec(0, 1);
                     } break;
@@ -7895,7 +9842,11 @@ AppFrame(void)
                         MoveEvent.Kind = UI_EVENT_KIND_NAVIGATE;
                         MoveEvent.DeltaStride = UI_EVENT_DELTA_STRIDE_WHOLE;
                         MoveEvent.DeltaI32 = Vec(-1, 0);
-                        ListPush(Scratch.MemPool, &APP_STATE->UIEvents, &MoveEvent);
+                        ListPush(
+                            Scratch.MemPool, 
+                            &APP_STATE->UIEvents, 
+                            &MoveEvent
+                        );
                         Event.Kind = UI_EVENT_KIND_NAVIGATE;
                         Event.Flags = UI_EVENT_FLAG_KEEP_MARK;
                         Event.DeltaStride = UI_EVENT_DELTA_STRIDE_WHOLE;
@@ -7904,40 +9855,58 @@ AppFrame(void)
 
                     case APP_COMMAND_KIND_DELETE_SINGLE: {
                         Event.Kind = UI_EVENT_KIND_EDIT;
-                        Event.Flags = UI_EVENT_FLAG_DELETE | UI_EVENT_FLAG_ZERO_DELTA_ON_SELECT;
+                        Event.Flags = (
+                            UI_EVENT_FLAG_DELETE | 
+                            UI_EVENT_FLAG_ZERO_DELTA_ON_SELECT
+                        );
                         Event.DeltaStride = UI_EVENT_DELTA_STRIDE_CHAR;
                         Event.DeltaI32 = Vec(1, 0);
                     } break;
 
                     case APP_COMMAND_KIND_DELETE_CHUNK: {
                         Event.Kind = UI_EVENT_KIND_EDIT;
-                        Event.Flags = UI_EVENT_FLAG_DELETE | UI_EVENT_FLAG_ZERO_DELTA_ON_SELECT;
+                        Event.Flags = (
+                            UI_EVENT_FLAG_DELETE | 
+                            UI_EVENT_FLAG_ZERO_DELTA_ON_SELECT
+                        );
                         Event.DeltaStride = UI_EVENT_DELTA_STRIDE_WORD;
                         Event.DeltaI32 = Vec(1, 0);
                     } break;
 
                     case APP_COMMAND_KIND_BACKSPACE_SINGLE: {
                         Event.Kind = UI_EVENT_KIND_EDIT;
-                        Event.Flags = UI_EVENT_FLAG_DELETE | UI_EVENT_FLAG_ZERO_DELTA_ON_SELECT;
+                        Event.Flags = (
+                            UI_EVENT_FLAG_DELETE | 
+                            UI_EVENT_FLAG_ZERO_DELTA_ON_SELECT
+                        );
                         Event.DeltaStride = UI_EVENT_DELTA_STRIDE_CHAR;
                         Event.DeltaI32 = Vec(-1, 0);
                     } break;
 
                     case APP_COMMAND_KIND_BACKSPACE_CHUNK: {
                         Event.Kind = UI_EVENT_KIND_EDIT;
-                        Event.Flags = UI_EVENT_FLAG_DELETE | UI_EVENT_FLAG_ZERO_DELTA_ON_SELECT;
+                        Event.Flags = (
+                            UI_EVENT_FLAG_DELETE | 
+                            UI_EVENT_FLAG_ZERO_DELTA_ON_SELECT
+                        );
                         Event.DeltaStride = UI_EVENT_DELTA_STRIDE_WORD;
                         Event.DeltaI32 = Vec(-1, 0);
                     } break;
 
                     case APP_COMMAND_KIND_COPY: {
                         Event.Kind = UI_EVENT_KIND_EDIT;
-                        Event.Flags = UI_EVENT_FLAG_COPY | UI_EVENT_FLAG_KEEP_MARK;
+                        Event.Flags = (
+                            UI_EVENT_FLAG_COPY | 
+                            UI_EVENT_FLAG_KEEP_MARK
+                        );
                     } break;
 
                     case APP_COMMAND_KIND_CUT: {
                         Event.Kind = UI_EVENT_KIND_EDIT;
-                        Event.Flags = UI_EVENT_FLAG_COPY | UI_EVENT_FLAG_DELETE;
+                        Event.Flags = (
+                            UI_EVENT_FLAG_COPY | 
+                            UI_EVENT_FLAG_DELETE
+                        );
                     } break;
 
                     case APP_COMMAND_KIND_PASTE: {
@@ -7964,6 +9933,14 @@ AppFrame(void)
                         Event.DeltaI32 = Vec(0, -1);
                     } break;
 
+                    // TODO(nc): implement these
+                    case APP_COMMAND_KIND_UNDO:
+                    case APP_COMMAND_KIND_REDO:
+                    case APP_COMMAND_KIND_CENTRE_CURSOR:
+                    case APP_COMMAND_KIND_CONTAIN_CURSOR:
+                    case APP_COMMAND_KIND_PICK_FILE:
+                    case APP_COMMAND_KIND_PICK_FOLDER:
+                    case APP_COMMAND_KIND_PICK_FILE_OR_FOLDER:
                     case APP_COMMAND_KIND_GO_BACK:
                     case APP_COMMAND_KIND_GO_FORWARD:
                     case APP_COMMAND_KIND_GOTO_TIME:
@@ -7971,7 +9948,316 @@ AppFrame(void)
                     case APP_COMMAND_KIND_SEARCH_BACKWARDS:
                     case APP_COMMAND_KIND_FIND_NEXT:
                     case APP_COMMAND_KIND_FIND_PREV:
-                    case APP_COMMAND_KIND_FILTER: {} break;
+                    case APP_COMMAND_KIND_FILTER:
+                    case APP_COMMAND_KIND_SWITCH:
+                    case APP_COMMAND_KIND_SHOW_FILE_IN_EXPLORER:
+                    case APP_COMMAND_KIND_SESSION_SETTINGS:
+                    case APP_COMMAND_KIND_EDIT_SESSION_THEME:
+                    case APP_COMMAND_KIND_RECORD_RECENT_SESSION: {} break;
+
+                    case APP_COMMAND_KIND_SELECT_CONFIG: {
+                        ConfigNode* Cfg = ConfigNodeFromID(Registers()->Config);
+                        ConfigNodePtrList AllOfTheSameKind = ConfigNodeTopLevelListFromStr(
+                            Scratch.MemPool,
+                            Cfg->String
+                        );
+
+                        for (
+                            ConfigNodePtrNode* N = AllOfTheSameKind.Head;
+                            N;
+                            N = N->Next
+                        ) {
+                            ConfigNodeRelease(
+                                APP_STATE->Config,
+                                ConfigNodeChildFromStr(N->V, "enabled"_s8)
+                            );
+                        }
+
+                        ConfigNode* EnabledRoot = ConfigNodeChildFromStrOrAlloc(
+                            APP_STATE->Config,
+                            Cfg,
+                            "enabled"_s8
+                        );
+
+                        ConfigNodeNewReplace(
+                            APP_STATE->Config, 
+                            EnabledRoot, 
+                            "1"_s8
+                        );
+                    } break;
+
+                    case APP_COMMAND_KIND_ENABLE_CONFIG:
+                    case APP_COMMAND_KIND_DISABLE_CONFIG:
+                    case APP_COMMAND_KIND_DESELECT_CONFIG: {
+                        ConfigNode* Cfg = ConfigNodeFromID(Registers()->Config);
+                        ConfigNode* EnabledRoot = ConfigNodeChildFromStrOrAlloc(
+                            APP_STATE->Config,
+                            Cfg,
+                            "enabled"_s8
+                        );
+
+                        ConfigNodeNewReplace(
+                            APP_STATE->Config,
+                            EnabledRoot,
+                            (Kind == APP_COMMAND_KIND_ENABLE_CONFIG) 
+                                ? "1"_s8 
+                                : "0"_s8
+                        );
+                    } break;
+
+                    case APP_COMMAND_KIND_REMOVE_CONFIG: {
+                        ConfigNode* Cfg = ConfigNodeFromID(Registers()->Config);
+
+                        ConfigNodeRelease(APP_STATE->Config, Cfg);
+                    } break;
+
+                    case APP_COMMAND_KIND_NAME_CONFIG: {
+                        ConfigNode* Cfg = ConfigNodeFromID(Registers()->Config);
+
+                        if (Registers()->String.Size) {
+                            ConfigNode* Label = ConfigNodeChildFromStrOrAlloc(
+                                APP_STATE->Config,
+                                Cfg,
+                                "label"_s8
+                            );
+
+                            ConfigNodeNewReplace(
+                                APP_STATE->Config,
+                                Label,
+                                Registers()->String
+                            );
+                        } else {
+                            ConfigNodeRelease(
+                                APP_STATE->Config,
+                                ConfigNodeChildFromStr(Cfg, "label"_s8)
+                            );
+                        }
+                    } break;
+
+                    case APP_COMMAND_KIND_DUPLICATE_CONFIG: {
+                        ConfigNode* Source = ConfigNodeFromID(
+                            Registers()->Config
+                        );
+                        ConfigNode* Destination = ConfigNodeCpy(
+                            APP_STATE->Config, 
+                            Source
+                        );
+
+                        ConfigNodeInsertChild(
+                            APP_STATE->Config,
+                            Source->Parent,
+                            Source,
+                            Destination
+                        );
+                    } break;
+
+                    case APP_COMMAND_KIND_SAVE_TO_SESSION: {
+                        ConfigNode* Cfg = ConfigNodeFromID(
+                            Registers()->Config
+                        );
+                        ConfigNode* Session = ConfigNodeChildFromStr(
+                            ConfigNodeRoot(),
+                            "session"_s8
+                        );
+
+                        ConfigNodeUnhook(APP_STATE->Config, Cfg->Parent, Cfg);
+                        ConfigNodeInsertChild(
+                            APP_STATE->Config,
+                            Session,
+                            Session->Tail,
+                            Cfg
+                        );
+                    } break;
+
+                    case APP_COMMAND_KIND_ADD_THEME_COLOUR: {
+                        ConfigNode* Parent = ConfigNodeFromID(
+                            Registers()->Config
+                        );
+
+                        // NOTE(nc): the theme colours are in the session if no config is given
+                        if (Parent == EMPTY_CFG_NODE_VALUE) {
+                            Parent = ConfigNodeChildFromStr(
+                                ConfigNodeRoot(), 
+                                "session"_s8
+                            );
+                        }
+
+                        ConfigNode* Colour = ConfigNodeNew(
+                            APP_STATE->Config,
+                            Parent,
+                            "theme_colour"_s8
+                        );
+
+                        ConfigNodeNew(APP_STATE->Config, Colour, "tags"_s8);
+
+                        ConfigNode* Value = ConfigNodeNew(
+                            APP_STATE->Config,
+                            Colour,
+                            "value"_s8
+                        );
+
+                        ConfigNodeNew(
+                            APP_STATE->Config, 
+                            Value, 
+                            "0xFFFFFFFF"_s8
+                        );
+                    } break;
+
+                    case APP_COMMAND_KIND_FORK_THEME: {
+                        Access* Acc = AccessOpen();
+                        ConfigNode* Parent = ConfigNodeFromID(
+                            Registers()->Config
+                        );
+
+                        if (Parent == EMPTY_CFG_NODE_VALUE) {
+                            Parent = ConfigNodeChildFromStr(
+                                ConfigNodeRoot(), 
+                                "session"_s8
+                            );
+                        }
+
+                        ConfigNodePtrList Colours = ConfigNodeChildListFromStr(
+                            Scratch.MemPool,
+                            Parent,
+                            "theme_colour"_s8
+                        );
+
+                        for (
+                            ConfigNodePtrNode* N = Colours.Head;
+                            N;
+                            N = N->Next
+                        ) {
+                            ConfigNodeRelease(APP_STATE->Config, N->V);
+                        }
+
+                        ConfigNode* ThemeConfig = ConfigNodeChildFromStr(
+                            Parent, 
+                            "theme"_s8
+                        );
+                        MDNode* ThemeTree = AppThemeTreeFromName(
+                            Scratch.MemPool,
+                            Acc,
+                            ThemeConfig->Head->String
+                        );
+
+                        for (
+                            MDNode* N = ThemeTree;
+                            !MDNodeIsEmpty(N);
+                            N = MDNodeRecordDepthFirstPreOrder(N, ThemeTree).Next
+                        ) {
+                            if (StrMatch(N->String, "theme_colour"_s8, 0)) {
+                                ConfigNode* Colour = ConfigNodeNew(
+                                    APP_STATE->Config,
+                                    Parent,
+                                    "theme_colour"_s8
+                                );
+                                ConfigNode* Tags = ConfigNodeNew(
+                                    APP_STATE->Config,
+                                    Colour,
+                                    "tags"_s8
+                                );
+                                ConfigNode* Value = ConfigNodeNew(
+                                    APP_STATE->Config,
+                                    Colour,
+                                    "value"_s8
+                                );
+
+                                ConfigNodeNew(
+                                    APP_STATE->Config,
+                                    Tags,
+                                    MDChildFromStr(
+                                        N, 
+                                        "tags"_s8, 
+                                        0
+                                    )->Head->String
+                                );
+                                ConfigNodeNew(
+                                    APP_STATE->Config,
+                                    Value,
+                                    MDChildFromStr(
+                                        N, 
+                                        "value"_s8, 
+                                        0
+                                    )->Head->String
+                                );
+                            }
+                        }
+
+                        ConfigNodeRelease(APP_STATE->Config, ThemeConfig);
+                        AccessClose(Acc);
+                    } break;
+
+                    case APP_COMMAND_KIND_SAVE_THEME:
+                    case APP_COMMAND_KIND_SAVE_AND_SET_THEME: {
+                        Str8 Name = StrSkipLastSlash(Registers()->String);
+                        Str8 ThemesFolder = ArenaPushStrFmt(
+                            Scratch.MemPool,
+                            "%S/%s/themes",
+                            PRINT_STR(GetProcessProperties()->UserProgramDataPath),
+                            NC_DATA_DIR
+                        );
+
+                        if (Name.Size && SystemCreateDirectory(ThemesFolder)) {
+                            Str8 DstPath = ArenaPushStrFmt(
+                                Scratch.MemPool,
+                                "%S/%S",
+                                PRINT_STR(ThemesFolder),
+                                PRINT_STR(Name)
+                            );
+                            ConfigNode* Parent = ConfigNodeFromID(
+                                Registers()->Config
+                            );
+
+                            if (Parent == EMPTY_CFG_NODE_VALUE) {
+                                Parent = ConfigNodeChildFromStr(
+                                    ConfigNodeRoot(), 
+                                    "session"_s8
+                                );
+                            }
+
+                            ConfigNodePtrList Colours = ConfigNodeChildListFromStr(
+                                Scratch.MemPool,
+                                Parent,
+                                "theme_colour"_s8
+                            );
+                            Str8List Strings = {};
+
+                            ListPush(Scratch.MemPool, &Strings, "theme:\n{\n"_s8);
+
+                            for (
+                                ConfigNodePtrNode* N = Colours.Head;
+                                N;
+                                N = N->Next
+                            ) {
+                                ListPush(
+                                    Scratch.MemPool,
+                                    &Strings,
+                                    ConfigStrFromTree(
+                                        Scratch.MemPool,
+                                        APP_STATE->CfgSchemaTable,
+                                        ThemesFolder,
+                                        N->V
+                                    )
+                                );
+                            }
+
+                            ListPush(Scratch.MemPool, &Strings, "}\n"_s8);
+
+                            if (
+                                WriteFileContents(DstPath, Strings) &&
+                                Kind == APP_COMMAND_KIND_SAVE_AND_SET_THEME
+                            ) {
+                                ConfigNode* Theme = ConfigNodeChildFromStrOrAlloc(
+                                    APP_STATE->Config,
+                                    Parent,
+                                    "theme"_s8
+                                );
+
+                                ConfigNodeNewReplace(APP_STATE->Config, Theme, Name);
+                            }
+                        }
+                    } break;
+
 
                     case APP_COMMAND_KIND_SET_THEME: {
                         ConfigNode* Session = ConfigNodeChildFromStr(
@@ -8004,6 +10290,11 @@ AppFrame(void)
                             !CommandName.Size || 
                             Info->Query.Kind & APP_QUERY_KIND_FLOATING
                         );
+                        b32 IsFilePath = (
+                            AppQueryExpressionKindFromStr(
+                                Registers()->Expression
+                            ) == APP_QUERY_EXPR_KIND_FILE_PATH
+                        );
 
                         UIContextMenuClose();
                         APP_STATE->MenuBarFocused = FALSE;
@@ -8011,7 +10302,7 @@ AppFrame(void)
                         if (IsFloating) {
                             Str8 InitialInput = ""_s8;
 
-                            if (Info->Query.Slot == APP_REGISTERS_SLOT_FILE_PATH) {
+                            if (IsFilePath) {
                                 ConfigNode* Session = ConfigNodeChildFromStr(
                                     ConfigNodeRoot(), 
                                     "session"_s8
@@ -8058,7 +10349,7 @@ AppFrame(void)
                             APP_STATE->QueryMark = APP_STATE->QueryCursor;
                             APP_STATE->QueryScroll = {};
                             APP_STATE->QueryListCursor = {};
-                            APP_STATE->QueryListCursor.Y = (Info->Query.Slot != APP_REGISTERS_SLOT_FILE_PATH);
+                            APP_STATE->QueryListCursor.Y = IsFilePath;
                             APP_STATE->QueryListMark = APP_STATE->QueryListCursor;
                         } else if (
                             ConfigNodeFromID(
@@ -8128,6 +10419,7 @@ AppFrame(void)
                         }
                     } break;
 
+                    case APP_COMMAND_KIND_QUERY:
                     case APP_COMMAND_KIND_COMPLETE_QUERY: {
                         ConfigNode* View = ConfigNodeFromID(Registers()->View);
                         Str8 CommandName = AppViewQueryCommand();
@@ -8480,7 +10772,8 @@ AppWindowFrame(void)
             UITooltip() {
                 FancyStrList Title = AppTitleFStrFromConfig(
                     Scratch.MemPool,
-                    DragTab
+                    DragTab,
+                    FALSE
                 );
                 UIBox* Box = UIBuildBoxFromKey(UI_BOX_KIND_DRAW_TEXT, {});
 
@@ -8878,7 +11171,11 @@ AppWindowFrame(void)
                                             : APP_ICON_KIND_RADIO_HOLLOW,
                                         NULL,
                                         "%S###tab_view_%S",
-                                        PRINT_STR(ViewInfo->DisplayName),
+                                        PRINT_STR(
+                                            AppVocabInfoFromCodeName(
+                                                ViewInfo->String
+                                            )->DisplayName
+                                        ),
                                         PRINT_STR(ViewName)
                                     );
 
@@ -9181,7 +11478,11 @@ AppWindowFrame(void)
                     );
                     UISignal Sig = UIButton(
                         "%S###bar_cmd_%S",
-                        PRINT_STR(BarInfo->DisplayName),
+                        PRINT_STR(
+                            AppVocabInfoFromCodeName(
+                                BarInfo->String
+                            )->DisplayName
+                        ),
                         PRINT_STR(BarInfo->String)
                     );
 
@@ -9796,7 +12097,8 @@ AppWindowFrame(void)
                                         ) {
                                             FancyStrList String = AppTitleFStrFromConfig(
                                                 Scratch.MemPool, 
-                                                Tab
+                                                Tab,
+                                                FALSE
                                             );
                                             f32 TabWidth = DDimensionsFromFancyStrList(
                                                 UIHeadTabSize(), 

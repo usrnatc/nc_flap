@@ -125,12 +125,16 @@ AppViewUI(r2f32 Rect)
             UIParent(SearchRow) {
                 UIPreferredWidth(UI_TEXT_DIM(2.0f, 1.0f)) {
                     UITag("weak"_s8) {
-                        if (CommandInfo->IconKind != APP_ICON_KIND_NULL)
-                            UILabel(APP_ICON_KIND_TEXT_TABLE[CommandInfo->IconKind]);
+                        AppVocabInfo* CommandVocab = AppVocabInfoFromCodeName(
+                            CommandInfo->String
+                        );
+
+                        if (CommandVocab->IconKind != APP_ICON_KIND_NULL)
+                            UILabel(APP_ICON_KIND_TEXT_TABLE[CommandVocab->IconKind]);
 
                         if (CommandName.Size)
                         UIPreferredWidth(UI_TEXT_DIM(2.0f, 1.0f)) {
-                            UILabel(CommandInfo->DisplayName);
+                            UILabel(CommandVocab->DisplayName);
                         }
                     }
                 }
@@ -375,6 +379,7 @@ FLAPInteractive(CommandLine* CLI)
         );
     }
  
+    EvalInit();
     AppInit(CLI);
  
     for (; !APP_STATE->ShouldQuit; )
