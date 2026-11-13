@@ -693,6 +693,31 @@ StrSkipChopEmpty(Str8 String)
 }
 
 API_INTERNAL Str8 
+StrSkipChopSlashes(Str8 String)
+{
+    u8* Head = String.Str;
+    u8* End = Head + String.Size;
+
+    for ( ; Head < End; ++Head) {
+        if (!IsSlash(*Head))
+            break;
+    }
+
+    for ( ; End > Head; ) {
+        --End;
+
+        if (!IsSlash(*End)){
+            ++End;
+            break;
+        }
+    }
+
+    Str8 Result = StrRange(Head, End);
+
+    return Result;
+}
+
+API_INTERNAL Str8 
 StrSkipChopWhitespace(Str8 String)
 {
     u8* Head = String.Str;
@@ -1020,6 +1045,145 @@ F64FromStr(Str8 String)
     }
 
     Result = Sign * (ExpNegative ? (Value / Scale) : (Value * Scale));
+
+    return Result;
+}
+
+Str8 
+StrFromU64(
+    Arena* MemPool, 
+    u64 Value, 
+    u32 Radix, 
+    u8 MinDigits, 
+    u8 DigitGroupSeparator
+) {
+    Str8 Result = {};
+    Str8 Prefix = {};
+
+    switch (Radix) {
+        case 16: {
+            Prefix = "0x"_s8;
+        } break;
+
+        case 8: {
+            Prefix = "0o"_s8;
+        } break;
+
+        case 2: {
+            Prefix = "0b"_s8;
+        } break;
+    }
+
+    u8 DigitGroupSize = 3;
+
+    switch (Radix) {
+        default: {} break;
+
+        case 2:
+        case 8:
+        case 16: {
+            DigitGroupSize = 4;
+        } break;
+    }
+
+    u64 RequiredLeadingZeroes = 0;
+    u64 RequiredDigits = 1;
+    u64 ValueReduce = Value;
+
+    for (;;) {
+        ValueReduce /= Radix;
+
+        if (!ValueReduce)
+            break;
+
+        ++RequiredDigits;
+    }
+
+    RequiredLeadingZeroes = (MinDigits > RequiredDigits)
+        ? MinDigits - RequiredDigits
+        : 0;
+    u64 RequiredSeparators = 0;
+
+    if (DigitGroupSeparator) {
+        RequiredSeparators = (RequiredDigits + RequiredLeadingZeroes) / DigitGroupSize;
+
+        if (
+            RequiredSeparators && 
+            !((RequiredDigits + RequiredLeadingZeroes) % DigitGroupSize)
+        ) {
+            --RequiredSeparators;
+        }
+    }
+
+    Result.Size = Prefix.Size + RequiredLeadingZeroes + RequiredSeparators + RequiredDigits;
+    Result.Str = ArenaPushArray(MemPool, u8, Result.Size + 1);
+    Result.Str[Result.Size] = 0;
+    ValueReduce = Value;
+
+    u64 DigitsUntilSeparator = DigitGroupSize;
+
+    for (u64 Index = 0; Index < Result.Size; ++Index) {
+        if (!DigitsUntilSeparator && DigitGroupSeparator) {
+            Result.Str[Result.Size - Index - 1] = DigitGroupSeparator;
+            DigitsUntilSeparator = DigitGroupSize + 1;
+        } else {
+            Result.Str[Result.Size - Index - 1] = ToLower(
+                INTEGER_SYMBOLS[ValueReduce % Radix]
+            );
+            ValueReduce /= Radix;
+        }
+
+        --DigitsUntilSeparator;
+
+        if (!ValueReduce)
+            break;
+    }
+
+    for (
+        u64 LeadingZero = 0; 
+        LeadingZero < RequiredLeadingZeroes; 
+        ++LeadingZero
+    ) {
+        Result.Str[Prefix.Size + LeadingZero] = '0';
+    }
+
+    if (Prefix.Size)
+        MemCpy(Result.Str, Prefix.Str, Prefix.Size);
+
+    return Result;
+}
+
+Str8 
+StrFromI64(
+    Arena* MemPool, 
+    i64 Value, 
+    u32 Radix, 
+    u8 MinDigits, 
+    u8 DigitGroupSeparator
+) {
+    Str8 Result = {};
+
+    if (Value < 0) {
+        TempArena Scratch = GetScratch(&MemPool, 1);
+        Str8 NumericPart = StrFromU64(
+            Scratch.MemPool,
+            (u64) -Value,
+            Radix,
+            MinDigits,
+            DigitGroupSeparator
+        );
+
+        Result = ArenaPushStrFmt(MemPool, "-%S", PRINT_STR(NumericPart));
+        ReleaseScratch(Scratch);
+    } else {
+        Result = StrFromU64(
+            MemPool,
+            (u64) Value,
+            Radix,
+            MinDigits,
+            DigitGroupSeparator
+        );
+    }
 
     return Result;
 }

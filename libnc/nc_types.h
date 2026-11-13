@@ -517,8 +517,19 @@ enum Direction2D {
 
 #define Axis2DFromDir2D(X) (((X) & 1) ? AXIS_2D_Y : AXIS_2D_X)
 #define SideFromDir2D(X) (((X) < DIR_2D_RIGHT) ? SIDE_MIN : SIDE_MAX)
-// @types______________________________________________________________________
 
+enum EvalTypeKeyKind {
+    EVAL_TYPE_KEY_KIND_NULL,
+    EVAL_TYPE_KEY_KIND_BASIC,
+    EVAL_TYPE_KEY_KIND_CONSTRUCTED,
+    EVAL_TYPE_KEY_KIND_EXT
+};
+
+// @types______________________________________________________________________
+struct EvalTypeKey {
+    EvalTypeKeyKind Kind;
+    u64             U64[3];
+};
 
 // @runtime____________________________________________________________________
 

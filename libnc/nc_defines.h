@@ -1024,6 +1024,15 @@
         (Head) = (Node);                            \
     }                                               \
 } while (FALSE)
+#define SLL_QUEUE_PUSH_FRONT_EX(Head, Tail, Node, _Next) do { \
+    if (!(Head)) {                                            \
+        (Head) = (Tail) = (Node);                             \
+        (Node)->_Next = NULL;                                 \
+    } else {                                                  \
+        (Node)->_Next = (Head);                               \
+        (Head) = (Node);                                      \
+    }                                                         \
+} while (FALSE)
 #define SLL_QUEUE_POP(Head, Tail) do {  \
     if ((Head) == (Tail)) {             \
         (Head) = (Tail) = NULL;         \

@@ -6,31 +6,36 @@
 #include "nc_math.h"
 
 struct ThreadLocalStorage {
-    u32                      ASYNC_WORK_THREAD_DEPTH;
-    u64                      ASYNC_WORK_THREAD_INDEX;
-    b32                      ARENA_THREAD_SCRATCH_INIT;
-    b32                      IS_ASYNC_THREAD;
-    u64                      UITableSizeColumnPercentsCount;
-    u64                      UITableSizeVectorIndex;
-    u64                      UITableSizeCellIndex;
-    f32                      UIScrollListScrollBarDimensionsPX;
-    i32                      UITreeNodeDepth;
-    i64                      UIRadioGroupOptionCount;
-    i64                      UIBreadCrumbCount;
-    i64                      UIBreadCrumbCurrentIndex;
-    i64*                     UIRadioGroupSelectedIndex;
-    f32*                     UITableSizeColumnPercentsStable;
-    v2f32                    UIScrollListDimensionsPX;
-    r1u64                    UIScrollListScrollIndexRange;
-    struct UIBox*            UIBreadCrumbContainer;
-    struct UIScrollPoint*    UIScrollListScrollPointPtr;
-    struct ThreadContext*    LOCAL_THREAD_CTX;
-    struct UIState*          UI_STATE;
-    struct ConfigContext*    CFG_CTX;
-    struct SymTab*           SYMBOL_TABLE;
-    struct FLVCompiler*      FLV_COMPILER;
-    struct ParserState*      PARSER_STATE;
-    Arena*                   ARENA_THREAD_SCRATCH_POOL[ARENA_SCRATCH_COUNT];
+    u32                          ASYNC_WORK_THREAD_DEPTH;
+    u64                          ASYNC_WORK_THREAD_INDEX;
+    b32                          ARENA_THREAD_SCRATCH_INIT;
+    b32                          IS_ASYNC_THREAD;
+    u64                          UITableSizeColumnPercentsCount;
+    u64                          UITableSizeVectorIndex;
+    u64                          UITableSizeCellIndex;
+    f32                          UIScrollListScrollBarDimensionsPX;
+    i32                          UITreeNodeDepth;
+    i64                          UIRadioGroupOptionCount;
+    i64                          UIBreadCrumbCount;
+    i64                          UIBreadCrumbCurrentIndex;
+    i64*                         UIRadioGroupSelectedIndex;
+    f32*                         UITableSizeColumnPercentsStable;
+    v2f32                        UIScrollListDimensionsPX;
+    r1u64                        UIScrollListScrollIndexRange;
+    struct UIBox*                UIBreadCrumbContainer;
+    struct UIScrollPoint*        UIScrollListScrollPointPtr;
+    struct ThreadContext*        LOCAL_THREAD_CTX;
+    struct UIState*              UI_STATE;
+    struct ConfigContext*        CFG_CTX;
+    struct SymTab*               SYMBOL_TABLE;
+    struct FLVCompiler*          FLV_COMPILER;
+    struct ParserState*          PARSER_STATE;
+    struct EvalBaseContext*      EVAL_BASE_CTX;
+    struct EvalIRContext*        EVAL_IR_CTX;
+    struct EvalCache*            EVAL_CACHE;
+    struct EvalInterpretContext* EVAL_INTERP_CTX;
+    struct EVExpandRuleTable*    EV_VIEW_RULE_INFO_TABLE;
+    Arena*                       ARENA_THREAD_SCRATCH_POOL[ARENA_SCRATCH_COUNT];
 };
 
 #if defined(NC_CC_MSVC)
