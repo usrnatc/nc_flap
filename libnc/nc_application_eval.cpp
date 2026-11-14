@@ -50,7 +50,7 @@ EVAL_TYPE_EXPAND_INFO_FUNC_DEF(Commands)
                 Info->Flags & APP_COMMAND_KIND_FLAG_LIST_IN_UI &&
                 (
                     !StrMatch(__Type->Name, "tab_commands"_s8, 0) ||
-                    Info->Flags & APP_COMMAND_KIND_FLAG_LIST_IN_TAB
+                    K >= APP_COMMAND_KIND_FIRST_TAB_FAST_PATH_CMD
                 )
             ) {
                 Str8 CodeName = Info->String;
@@ -927,7 +927,7 @@ EVAL_TYPE_IR_EXT_FUNC_DEF(ConfigsSlice)
         TempArena Scratch = GetScratch(&MemPool, 1);
         EvalTypeKey TypeKey = IRTree->TypeKey;
         EvalType* __Type = EvalTypeFromKey(TypeKey);
-        Str8 ConfigName = AppSingularFromCodeNamePlural(__Type->Name);
+        Str8 ConfigName = AppConfigNameFromCollectionName(__Type->Name);
         ConfigNodePtrList ConfigsList = {};
 
         {

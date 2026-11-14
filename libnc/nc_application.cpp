@@ -786,7 +786,7 @@ AppCommandKindInfo APP_COMMAND_KIND_INFO_TABLE[APP_COMMAND_KIND_COUNT] = {
         Str8Lit("Edits the current session theme."),
         Str8Lit("colour"),
         Str8Lit(""),
-        0,
+        APP_COMMAND_KIND_FLAG_LIST_IN_UI,
         {
             0,
             APP_REGISTERS_SLOT_STRING,
@@ -1952,7 +1952,7 @@ Str8 APP_THEME_PRESET_CONFIG_STR_TABLE[APP_THEME_PRESET_COUNT] = {
     )
 };
 
-AppNameSchemaInfo APP_NAME_SCHEMA_INFO_TABLE[8] = {
+AppNameSchemaInfo APP_NAME_SCHEMA_INFO_TABLE[10] = {
     {
         Str8Lit("session"),
         FALSE,
@@ -1968,7 +1968,6 @@ AppNameSchemaInfo APP_NAME_SCHEMA_INFO_TABLE[8] = {
         FALSE,
         Str8Lit("@row_commands(@file copy_tab_full_path, @file show_file_in_explorer, duplicate_tab, close_tab)")
     },
-    // TODO(nc): implement schema for time. can show as timestamp or as relative to start time and in different units
     {
         Str8Lit("flv"),
         TRUE,
@@ -1993,8 +1992,23 @@ AppNameSchemaInfo APP_NAME_SCHEMA_INFO_TABLE[8] = {
         Str8Lit("recent_file"),
         FALSE,
         Str8Lit("x:{'path':path}")
+    },
+    {
+        Str8Lit("file"),
+        FALSE,
+        Str8Lit("x:\n{\n}\n")
+    },
+    {
+        Str8Lit("view"),
+        FALSE,
+        Str8Lit("x:\n{\n}\n")
     }
-    // TODO(nc): implement schema for views (add view(s)/folder, remove view(s)), files (add file(s)/folder, remove file(s)), and just view (switch flv file, edit flv file).
+    // TODO(nc): implement schema for views (add view(s)/folder, remove view(s)), 
+    //         : files (add file(s)/folder, remove file(s)), and just view 
+    //         : (switch flv file, edit flv file).
+
+    // TODO(nc): implement schema for time. can show as timestamp or 
+    //         : as relative to start time and also in different units
 };
 
 Str8 APP_REGISTERS_SLOT_CODE_NAME_TABLE[APP_REGISTERS_SLOT_COUNT] = {
@@ -3251,71 +3265,67 @@ AppVocabInfo APP_VOCAB_INFO_TABLE[162] = {
 };
 EXTERN_C_LINK_END
 
-struct QueryTypeMapping {
-    Str8                   Name;
-    AppQueryExpressionKind Kind;
-};
-
-global QueryTypeMapping Mappings[] = {
-    {
-        Str8Lit("commands"),
-        APP_QUERY_EXPR_KIND_COMMANDS
-    },
-    {
-        Str8Lit("tab_commands"),
-        APP_QUERY_EXPR_KIND_TAB_COMMANDS
-    },
-    {
-        Str8Lit("recent_files"),
-        APP_QUERY_EXPR_KIND_RECENT_FILES
-    },
-    {
-        Str8Lit("flv_files"),
-        APP_QUERY_EXPR_KIND_FLV_FILES
-    },
-    {
-        Str8Lit("recent_sessions"),
-        APP_QUERY_EXPR_KIND_RECENT_SESSIONS
-    },
-    {
-        Str8Lit("themes"),
-        APP_QUERY_EXPR_KIND_THEMES
-    },
-    {
-        Str8Lit("session_settings"),
-        APP_QUERY_EXPR_KIND_SESSION_SETTINGS
-    },
-    {
-        Str8Lit("file_path"),
-        APP_QUERY_EXPR_KIND_FILE_PATH
-    }
-};
-
 APP_VIEW_UI_FUNC_DEF(Null)
 {}
 
-INTERNAL AppQueryExpressionKind
-AppQueryExpressionKindFromStr(Str8 Expression)
+struct AppConfigCollectionInfo {
+    Str8 Name;
+    Str8 ConfigName;
+};
+
+global readonly AppConfigCollectionInfo APP_CONFIG_COLLECTION_TABLE[] = {
+    {
+        Str8Lit("recent_sessions"),
+        Str8Lit("recent_session")
+    },
+    {
+        Str8Lit("recent_files"),
+        Str8Lit("file")
+    },
+    {
+        Str8Lit("flv_files"),
+        Str8Lit("view")
+    }
+};
+
+Str8
+AppConfigNameFromCollectionName(Str8 Name)
 {
-    AppQueryExpressionKind Result = APP_QUERY_EXPR_KIND_NULL;
-    Str8 Name = Expression;
+    Str8 Result = {};
 
-    if (StrMatch(StrPrefix(Name, 6), "query:"_s8, 0))
-        Name = StrSkip(Name, 6);
-
-    if (StrMatch(StrPrefix(Name, 7), "folder:"_s8, 0)) {
-        Result = APP_QUERY_EXPR_KIND_FILE_PATH;
-    } else if (StrMatch(StrPrefix(Name, 8), "config.$"_s8, 0)) {
-        Result = (StrFindSubStr(Name, "."_s8, 8, 0) < Name.Size)
-            ? APP_QUERY_EXPR_KIND_CONFIG_CHILD
-            : APP_QUERY_EXPR_KIND_CONFIG;
-    } else {
-        for (u64 Index = 0; Index < ARRAY_COUNT(Mappings); ++Index) {
-            if (StrMatch(Name, Mappings[Index].Name, 0)) {
-                Result = Mappings[Index].Kind;
-                break;
-            }
+    for (
+        u64 Index = 0;
+        Index < ARRAY_COUNT(APP_CONFIG_COLLECTION_TABLE);
+        ++Index
+    ) {
+        if (StrMatch(Name, APP_CONFIG_COLLECTION_TABLE[Index].Name, 0)) {
+            Result = APP_CONFIG_COLLECTION_TABLE[Index].ConfigName;
+            break;
         }
+    }
+
+    if (!Result.Size)
+        Result = AppSingularFromCodeNamePlural(Name);
+
+    return Result;
+}
+
+// NOTE(nc): the path of a config that is a path: a `path` child, or the
+//         : value of a session `file` or `view` config
+INTERNAL Str8
+AppPathFromConfig(ConfigNode* Config)
+{
+    Str8 Result = AppFilePathFromConfig(Config);
+
+    if (
+        !Result.Size &&
+        (
+            StrMatch(Config->String, "file"_s8, 0) ||
+            StrMatch(Config->String, "view"_s8, 0)
+        ) &&
+        Config->Parent == ConfigNodeChildFromStr(ConfigNodeRoot(), "session"_s8)
+    ) {
+        Result = Config->Head->String;
     }
 
     return Result;
@@ -3993,20 +4003,12 @@ AppTitleFStrFromCodeName(Arena* MemPool, Str8 CodeName)
                 "  "_s8
             );
         }
-
-        if (Info->DisplayName.Size) {
-            ListPush(MemPool, &Result, &Params, NULL, Info->DisplayName);
-        } else {
-            Overrides.Colour = Vec(0.0f, 0.0f, 0.0f, 0.0f);
-            ListPush(
-                MemPool,
-                &Result,
-                &Params,
-                &Overrides,
-                CodeName
-            );
-        }
     }
+
+    if (Info->DisplayName.Size)
+        ListPush(MemPool, &Result, &Params, NULL, Info->DisplayName);
+    else
+        ListPush(MemPool, &Result, &Params, NULL, CodeName);
 
     return Result;
 }
@@ -4237,20 +4239,6 @@ ListPush(Arena* MemPool, AppCommandList* List, Str8 Name, AppRegisters* Regs)
 
     Node->Command.Name = ArenaPushStrCpy(MemPool, Name);
     Node->Command.Registers = CopyRegisters(MemPool, Regs);
-    DLL_PUSH_BACK(List->Head, List->Tail, Node);
-    ++List->Count;
-}
-
-void 
-ListPush(Arena* MemPool, AppQueryResultList* List, AppQueryResult Entry)
-{
-    AppQueryResultNode* Node = ArenaPushArrayZero(
-        MemPool, 
-        AppQueryResultNode, 
-        1
-    );
-
-    Node->V = Entry;
     DLL_PUSH_BACK(List->Head, List->Tail, Node);
     ++List->Count;
 }
@@ -5181,6 +5169,11 @@ AppThemeTreeFromName(Arena* MemPool, Access* Acc, Str8 Name)
 FancyStrList
 AppTitleFStrFromConfig(Arena* MemPool, ConfigNode* Config, b32 IncludeExtras)
 {
+    Str8 Path = AppPathFromConfig(Config);
+
+    if (Path.Size)
+        return AppTitleFStrFromFilePath(MemPool, Path, TRUE);
+
     FancyStrList Result = {};
     FancyStrParams Params = {};
     Str8 DisplayName = Config->String;
@@ -5225,234 +5218,2676 @@ AppTitleFStrFromConfig(Arena* MemPool, ConfigNode* Config, b32 IncludeExtras)
     return Result;
 }
 
-INTERNAL void
-AppQueryPushSessionPaths(
-    Arena* MemPool,
-    AppQueryResultList* List,
-    Str8 ListName,
-    b32 PathIsChild
-) {
-    ConfigNode* Session = ConfigNodeChildFromStr(
-        ConfigNodeRoot(),
-        "session"_s8
-    );
+EVView*
+AppViewEvalView(void)
+{
+    ConfigNode* View = ConfigNodeFromID(Registers()->View);
+    AppViewState* VS = AppViewStateFromConfig(View);
 
-    for (
-        ConfigNode* Child = Session->Head;
-        Child != EMPTY_CFG_NODE_VALUE;
-        Child = Child->Next
-    ) {
-        if (!StrMatch(Child->String, ListName, 0))
-            continue;
+    if (!VS->EvalView && VS != EMPTY_APP_VIEW_STATE_VALUE)
+        VS->EvalView = EVViewAlloc();
 
-        Str8 Path = PathIsChild
-            ? PathFromConfig(Child)
-            : Child->Head->String;
-
-        AppQueryResult Entry = {};
-
-        Entry.String = Path;
-        Entry.DisplayString = StrSkipLastSlash(Path);
-        Entry.Description = StrChopLastSlash(Path);
-        Entry.IconKind = APP_ICON_KIND_FILE;
-        Entry.CfgID = Child->ID;
-        ListPush(MemPool, List, Entry);
-    }
+    return VS->EvalView;
 }
 
-AppQueryResultList 
-AppQueryResultsFromExpression(Arena* MemPool, Str8 Expression, Str8 Input)
+AppRegistersSlot
+AppRegistersFillSlotFromCtxEval(EvalEval Eval)
 {
-    AppQueryResultList Result = {};
-    u8 SplitChars[] = {
-        ',',
-        ' '
-    };
-    Str8List Terms = StrSplit(
-        MemPool,
-        Expression,
-        SplitChars,
-        ARRAY_COUNT(SplitChars),
-        FALSE
-    );
+    AppRegistersSlot Result = APP_REGISTERS_SLOT_NULL;
+    ConfigNode* Cfg = AppConfigFromEvalSpace(Eval.Space);
 
-    for (Str8Node* Term = Terms.Head; Term; Term = Term->Next) {
-        AppQueryExpressionKind Kind = AppQueryExpressionKindFromStr(
-            Term->String
+    if (Cfg != EMPTY_CFG_NODE_VALUE) {
+        TempArena Scratch = GetScratch(NULL, 0);
+        ConfigPanelTree Panels = ConfigPanelTreeFromConfig(
+            Scratch.MemPool,
+            ConfigNodeFromID(Registers()->Window)
+        );
+        ConfigPanelNode* ParentPanelNode = ConfigPanelNodeFromConfigTree(
+            Panels.Root,
+            Cfg->Parent
         );
 
-        switch (Kind) {
-            default: {} break;
+        Registers()->Config = Cfg->ID;
+        Result = APP_REGISTERS_SLOT_CONFIG;
 
-            case APP_QUERY_EXPR_KIND_COMMANDS:
-            case APP_QUERY_EXPR_KIND_TAB_COMMANDS: {
-                u64 HeadIndex = (Kind == APP_QUERY_EXPR_KIND_TAB_COMMANDS)
-                    ? APP_COMMAND_KIND_FIRST_TAB_FAST_PATH_CMD
-                    : 1;
+        if (ParentPanelNode != EMPTY_CFG_PANEL_NODE_VALUE) {
+            Registers()->Tab = Cfg->ID;
+            Registers()->View = Cfg->ID;
+        }
 
-                for (
-                    u64 Index = HeadIndex;
-                    Index < APP_COMMAND_KIND_COUNT;
-                    ++Index
-                ) {
-                    AppCommandKindInfo* Info = &APP_COMMAND_KIND_INFO_TABLE[Index];
+        ReleaseScratch(Scratch);
+    }
 
-                    if (!(Info->Flags & APP_COMMAND_KIND_FLAG_LIST_IN_UI))
-                        continue;
+    return Result;
+}
 
-                    AppVocabInfo* Vocab = AppVocabInfoFromCodeName(
-                        Info->String
-                    );
-                    AppQueryResult Entry = {};
+AppRegistersSlot
+AppRegistersFillSlotFromCellCtx(EVRow* Row)
+{
+    AppRegistersSlot Result = AppRegistersFillSlotFromCtxEval(Row->Eval);
 
-                    Entry.String = Info->String;
-                    Entry.DisplayString = Vocab->DisplayName;
-                    Entry.Description = Info->Description;
-                    Entry.SearchTags = Info->SearchTags;
-                    Entry.IconKind = Vocab->IconKind;
-                    Entry.CommandInfo = Info;
-                    ListPush(MemPool, &Result, Entry);
-                }
-            } break;
+    for (
+        EVBlock* Block = Row->Block;
+        Block != EMPTY_EV_BLOCK_VALUE && Result == APP_REGISTERS_SLOT_NULL;
+        Block = Block->Parent
+    ) {
+        Result = AppRegistersFillSlotFromCtxEval(Block->Eval);
+    }
 
-            case APP_QUERY_EXPR_KIND_RECENT_FILES: {
-                AppQueryPushSessionPaths(
-                    MemPool,
-                    &Result,
-                    "file"_s8,
-                    FALSE
-                );
-            } break;
+    return Result;
+}
 
-            case APP_QUERY_EXPR_KIND_FLV_FILES: {
-                AppQueryPushSessionPaths(
-                    MemPool,
-                    &Result,
-                    "view"_s8,
-                    FALSE
-                );
-            } break;
+AppWatchCell*
+__WatchCellPushNew(
+    Arena* MemPool,
+    AppWatchCellList* List,
+    AppWatchCell* Params
+) {
+    AppWatchCell* Result = ArenaPushArray(
+        MemPool,
+        AppWatchCell,
+        1
+    );
 
-            case APP_QUERY_EXPR_KIND_RECENT_SESSIONS: {
-                AppQueryPushSessionPaths(
-                    MemPool,
-                    &Result,
-                    "recent_session"_s8,
-                    TRUE
-                );
-            } break;
+    MemCpy(Result, Params, sizeof(*Result));
+    Result->Next = NULL;
+    Result->Index = List->Count;
+    SLL_QUEUE_PUSH(List->Head, List->Tail, Result);
+    ++List->Count;
 
-            case APP_QUERY_EXPR_KIND_SESSION_SETTINGS: {} break;
-            case APP_QUERY_EXPR_KIND_CONFIG: {} break;
-            case APP_QUERY_EXPR_KIND_CONFIG_CHILD: {} break;
+    if (Result->Percent == 0.0f)
+        Result->Percent = Result->DefaultPercent;
 
-            case APP_QUERY_EXPR_KIND_THEMES: {
-                for EACH_ENUM(AppThemePreset, T, APP_THEME_PRESET_COUNT) {
-                    AppQueryResult Entry = {};
+    List->TotalPercent += Result->Percent;
 
-                    Entry.String = APP_THEME_PRESET_DISPLAY_STR_TABLE[T];
-                    Entry.DisplayString = APP_THEME_PRESET_DISPLAY_STR_TABLE[T];
-                    ListPush(MemPool, &Result, Entry);
-                }
-            } break;
+    return Result;
+}
 
-            case APP_QUERY_EXPR_KIND_FILE_PATH: {
-                Str8 Folder = StrChopLastSlash(Input);
-                FileIter* Iter = SystemFileIterBegin(MemPool, Folder, 0);
+u64
+AppIDFromWatchCell(AppWatchCell *Cell)
+{
+    u64 Result = ((u64) Cell->Kind << 32) | (Cell->Index + 1);
 
-                for (
-                    FileInfo Info = {};
-                    SystemFileIterNext(MemPool, Iter, &Info);
-                ) {
-                    b32 IsFolder = !!(Info.Properties.Kind & SYS_FILE_IS_DIR);
-                    Str8 Ext = StrSkipLastDot(Info.Name);
-                    b32 IsWanted = (
-                        IsFolder ||
-                        StrMatch(Ext, "fli"_s8, STR_MATCH_ALL_CASES) ||
-                        StrMatch(Ext, "bin"_s8, STR_MATCH_ALL_CASES) ||
-                        StrMatch(Ext, "flv"_s8, STR_MATCH_ALL_CASES)
-                    );
+    if (Cell->Index)
+        Result ^= ((u64) (Cell->DefaultPercent * 1000.0f)) << 40;
 
-                    // NOTE(nc): we only care about folders and *.fli or *.BIN files
-                    if (!IsWanted)
-                        continue;
+    return Result;
+}
 
-                    AppQueryResult Entry = {};
+AppWatchViewTextEditState*
+AppWatchViewTextEditStateFromPoint(AppWatchViewState* WV, AppWatchPoint Point)
+{
+    AppWatchViewTextEditState* Result = &WV->__TextEditState;
 
-                    Entry.String = ArenaPushStrFmt(
-                        MemPool,
-                        "%S/%S",
-                        PRINT_STR(Folder),
-                        PRINT_STR(Info.Name)
-                    );
-                    Entry.DisplayString = StrSkipLastSlash(Entry.String);
-                    Entry.IconKind = IsFolder 
-                        ? APP_ICON_KIND_FOLDER 
-                        : APP_ICON_KIND_FILE;
-                    Entry.Description = IsFolder
-                        ? "Folder"_s8
-                        : ArenaPushStrFmt(
-                            MemPool, 
-                            "%llu bytes", 
-                            Info.Properties.Size
-                        );
-                    ListPush(MemPool, &Result, Entry);
-                }
+    if (WV->TextEditStateSlotsCount && WV->IsTextEditing) {
+        u64 PointHash = Hash(Point.Key);
+        u64 SlotIndex = PointHash % WV->TextEditStateSlotsCount;
 
-                SystemFileIterEnd(Iter);
-            } break;
+        for (
+            AppWatchViewTextEditState* S = WV->TextEditStateSlots[SlotIndex];
+            S;
+            S = S->PointHashNext
+        ) {
+            if (Point == S->Point) {
+                Result = S;
+                break;
+            }
         }
     }
 
     return Result;
 }
 
-void 
-AppQueryViewUI(r2f32 Rect)
+Str8
+AppValueStrFromEval(
+    Arena *MemPool, 
+    EVStrParams *Params, 
+    f32 MaxSize, 
+    EvalEval Eval
+) {
+    TempArena Scratch = GetScratch(&MemPool, 1);
+    Str8List Strings = {};
+    EVStrIter* Iter = EVStrIterBegin(Scratch.MemPool, Eval, Params);
+    f32 SpaceTaken = 0.0f;
+
+    for (
+        Str8 String = {};
+        EVStrIterNext(Scratch.MemPool, Iter, &String);
+    ) {
+        if (SpaceTaken > MaxSize)
+            break;
+
+        ListPush(Scratch.MemPool, &Strings, String);
+        SpaceTaken += DDimensionsFromStr(1.0f, String).X;
+    }
+
+    Str8 Result = StrListJoin(MemPool, &Strings, NULL);
+
+    ReleaseScratch(Scratch);
+
+    return Result;
+}
+
+AppWatchRowInfo
+AppWatchRowInfoFromRow(Arena *MemPool, EVRow *Row)
+{
+    AppWatchRowInfo Result = {};
+
+    Result.CanExpand = EVRowIsExpandable(Row);
+    Result.GroupCfgParent = EMPTY_CFG_NODE_VALUE;
+    Result.GroupCfgChild = EMPTY_CFG_NODE_VALUE;
+
+    TempArena Scratch = GetScratch(&MemPool, 1);
+    ConfigNode* View = ConfigNodeFromID(Registers()->View);
+    EVBlock* Block = Row->Block;
+    b32 BlockIsRoot = (Block->Parent == EMPTY_EV_BLOCK_VALUE);
+    EvalEval BlockEval = EvalEvalFromKey(Block->Eval.Key);
+    EvalTypeKey BlockTypeKey = EvalTypeKeyUnwrap(
+        BlockEval.IRTree.TypeKey,
+        EVAL_TYPE_UNWRAP_FLAG_META
+    );
+    EvalTypeKind BlockTypeKind = EvalTypeKindFromKey(BlockTypeKey);
+    EvalType* BlockType = EvalTypeFromKey(BlockTypeKey);
+    EvalTypeKind RowTypeKind = EvalTypeKindFromKey(
+        EvalTypeKeyUnwrap(
+            Row->Eval.IRTree.TypeKey,
+            EVAL_TYPE_UNWRAP_FLAG_META
+        )
+    );
+    ConfigNode* EvalledCfg = AppConfigFromEvalSpace(Row->Eval.Space);
+    b32 IsTopLevel = FALSE;
+
+    if (EvalledCfg != EMPTY_CFG_NODE_VALUE) {
+        EvalTypeKey TopLevelTypeKey = EvalStr2TypeKeyMapLookup(
+            APP_STATE->MetaName2TypeMap,
+            EvalledCfg->String
+        );
+
+        IsTopLevel = (
+            !Row->Eval.Value.U64 &&
+            TopLevelTypeKey == Row->Eval.IRTree.TypeKey
+        );
+    }
+
+    if (
+        Row->Eval.Key == EMPTY_EVAL_KEY_VALUE &&
+        Row->Eval.Expr == EMPTY_EVAL_EXPR_VALUE
+    ) {
+        Result.ExprIsEditable = TRUE;
+    }
+
+    if (!BlockIsRoot && BlockTypeKind == EVAL_TYPE_KIND_SET) {
+        Str8 SingularName = AppConfigNameFromCollectionName(BlockType->Name);
+
+        Result.GroupCfgName = SingularName.Size
+            ? SingularName
+            : BlockType->Name;
+
+        if (
+            BlockEval.Space.Kind == APP_EVAL_SPACE_KIND_META_QUERY ||
+            BlockEval.Space.Kind == APP_EVAL_SPACE_KIND_META_CFG
+        ) {
+            Result.GroupCfgParent = AppConfigFromEvalSpace(BlockEval.Space);
+        }
+
+        if (
+            BlockType->ExpandRule.ExpandIDFromNumFunc ==
+            EVAL_TYPE_EXPAND_ID_FROM_NUM_FUNC_NAME(ConfigsSlice)
+        ) {
+            Result.GroupCfgChild = ConfigNodeFromID(Row->Key.ChildID);
+        }
+    }
+
+    EvalType* MaybeTableType = BlockType;
+
+    for (
+        ;
+        (
+            MaybeTableType->Kind == EVAL_TYPE_KIND_LENS &&
+            !StrMatch(MaybeTableType->Name, "columns"_s8, 0)
+        );
+    ) {
+        MaybeTableType = EvalTypeFromKey(MaybeTableType->DirectTypeKey);
+    }
+
+    if (
+        !BlockIsRoot &&
+        MaybeTableType->Kind == EVAL_TYPE_KIND_LENS &&
+        MaybeTableType->Count >= 1
+    ) {
+        Result.CanExpand = FALSE;
+
+        EvalParentKey(Row->Eval.Key) {
+            for (u64 Index = 0; Index < MaybeTableType->Count; ++Index) {
+                WatchCellPushNew(
+                    MemPool,
+                    &Result.Cells,
+                    APP_WATCH_CELL_KIND_EVAL,
+                    EvalEvalFromExpr(MaybeTableType->Args[Index]),
+                    __Cell.DefaultPercent = 1.0f / MaybeTableType->Count
+                );
+            }
+        }
+    } else if (
+        Row->Eval.Space.Kind == EVAL_SPACE_KIND_FILESYSTEM &&
+        EvalTypeKindFromKey(Row->Eval.IRTree.TypeKey) == EVAL_TYPE_KIND_SET
+    ) {
+        EvalType* __Type = EvalTypeFromKey(Row->Eval.IRTree.TypeKey);
+
+        WatchCellPushNew(
+            MemPool,
+            &Result.Cells,
+            APP_WATCH_CELL_KIND_EVAL,
+            Row->Eval,
+            __Cell.Flags = (
+                APP_WATCH_CELL_FLAG_EXPR |
+                APP_WATCH_CELL_FLAG_NO_EVAL |
+                APP_WATCH_CELL_FLAG_INDENTED |
+                APP_WATCH_CELL_FLAG_BTN
+            ),
+            __Cell.Percent = 1.0f
+        );
+
+        if (StrMatch(__Type->Name, "file"_s8, 0))
+            Result.CanExpand = FALSE;
+    } else if (
+        ConfigNodeChildFromStr(View, "lister"_s8) != EMPTY_CFG_NODE_VALUE
+    ) {
+        AppWatchCellFlag ExtraFlags = APP_WATCH_CELL_FLAG_EXPR;
+
+        if (Row->Eval.Msgs.MaxKind != EVAL_MSG_KIND_NULL)
+            ExtraFlags |= APP_WATCH_CELL_FLAG_NO_EVAL;
+
+        Result.CanExpand = FALSE;
+        WatchCellPushNew(
+            MemPool,
+            &Result.Cells,
+            APP_WATCH_CELL_KIND_EVAL,
+            Row->Eval,
+            __Cell.Flags = (
+                ExtraFlags |
+                APP_WATCH_CELL_FLAG_BTN |
+                APP_WATCH_CELL_FLAG_INDENTED
+            ),
+            __Cell.Percent = 1.0f
+        );
+    } else if (IsTopLevel) {
+        ConfigNode* Cfg = EvalledCfg;
+
+        WatchCellPushNew(
+            MemPool,
+            &Result.Cells,
+            APP_WATCH_CELL_KIND_EVAL,
+            Row->Eval,
+            __Cell.Flags = (
+                APP_WATCH_CELL_FLAG_EXPR |
+                APP_WATCH_CELL_FLAG_NO_EVAL |
+                APP_WATCH_CELL_FLAG_BTN |
+                APP_WATCH_CELL_FLAG_INDENTED
+            ),
+            __Cell.Percent = 1.0f
+        );
+
+        MDNodePtrList Schemas = ConfigSchemasFromName(
+            Scratch.MemPool,
+            APP_STATE->CfgSchemaTable,
+            Cfg->String
+        );
+
+        for (MDNodePtrNode* N = Schemas.Head; N; N = N->Next) {
+            MDNode* CommandsRoot = MDTagFromStr(N->V, "row_commands"_s8, 0);
+
+            for EACH_MDNODE(Cmd, CommandsRoot->Head) {
+                AppCommandKind CmdKind = AppCommandKindFromStr(Cmd->String);
+                b32 IsDisabled = AppIsDisabled(Cfg);
+
+                switch (CmdKind) {
+                    default: {} break;
+
+                    case APP_COMMAND_KIND_ENABLE_CONFIG:
+                    case APP_COMMAND_KIND_DISABLE_CONFIG: {
+                        CmdKind = IsDisabled
+                            ? APP_COMMAND_KIND_ENABLE_CONFIG
+                            : APP_COMMAND_KIND_DISABLE_CONFIG;
+                    } break;
+
+                    case APP_COMMAND_KIND_SELECT_CONFIG:
+                    case APP_COMMAND_KIND_DESELECT_CONFIG: {
+                        CmdKind = IsDisabled
+                            ? APP_COMMAND_KIND_SELECT_CONFIG
+                            : APP_COMMAND_KIND_DESELECT_CONFIG;
+                    } break;
+                }
+
+                if (
+                    CmdKind == APP_COMMAND_KIND_ENABLE_CONFIG ||
+                    CmdKind == APP_COMMAND_KIND_DISABLE_CONFIG
+                ) {
+                    WatchCellPushNew(
+                        MemPool,
+                        &Result.Cells,
+                        APP_WATCH_CELL_KIND_EVAL,
+                        EvalEvalWrap(Row->Eval, "enabled"_s8),
+                        __Cell.Flags = APP_WATCH_CELL_FLAG_BACKGROUND,
+                        __Cell.PX = 6.0f
+                    );
+                } else if (CmdKind != APP_COMMAND_KIND_NULL) {
+                    WatchCellPushNew(
+                        MemPool,
+                        &Result.Cells,
+                        APP_WATCH_CELL_KIND_EVAL,
+                        EvalEvalFromStrFmt(
+                            "query:commands.%S",
+                            PRINT_STR(
+                                APP_COMMAND_KIND_INFO_TABLE[CmdKind].String
+                            )
+                        ),
+                        __Cell.Flags = (
+                            APP_WATCH_CELL_FLAG_ACTIVATE_WITH_SINGLE_CLICK |
+                            APP_WATCH_CELL_FLAG_BTN
+                        ),
+                        __Cell.PX = 3.0f
+                    );
+                }
+            }
+        }
+    } else if (
+        Row->Eval.Space.Kind == APP_EVAL_SPACE_KIND_META_QUERY ||
+        (
+            Row->Eval.Space.Kind == APP_EVAL_SPACE_KIND_META_CFG &&
+            RowTypeKind == EVAL_TYPE_KIND_SET
+        ) ||
+        (
+            Row->Eval.Space.Kind == APP_EVAL_SPACE_KIND_META_CMD &&
+            RowTypeKind == EVAL_TYPE_KIND_SET
+        ) ||
+        (
+            Row->Eval.Expr == EMPTY_EVAL_EXPR_VALUE &&
+            Result.GroupCfgName.Size &&
+            Result.GroupCfgChild == EMPTY_CFG_NODE_VALUE
+        )
+    ) {
+        WatchCellPushNew(
+            MemPool,
+            &Result.Cells,
+            APP_WATCH_CELL_KIND_EVAL,
+            Row->Eval,
+            __Cell.Flags = (
+                APP_WATCH_CELL_FLAG_EXPR |
+                APP_WATCH_CELL_FLAG_NO_EVAL |
+                APP_WATCH_CELL_FLAG_INDENTED
+            ),
+            __Cell.Percent = 1.0f
+        );
+    } else if (Row->Eval.Space.Kind == APP_EVAL_SPACE_KIND_META_CMD) {
+        WatchCellPushNew(
+            MemPool,
+            &Result.Cells,
+            APP_WATCH_CELL_KIND_EVAL,
+            Row->Eval,
+            __Cell.Flags = (
+                APP_WATCH_CELL_FLAG_EXPR |
+                APP_WATCH_CELL_FLAG_NO_EVAL |
+                APP_WATCH_CELL_FLAG_INDENTED |
+                APP_WATCH_CELL_FLAG_BTN |
+                APP_WATCH_CELL_FLAG_ACTIVATE_WITH_SINGLE_CLICK
+            ),
+            __Cell.Percent = 1.0f
+        );
+    } else if (
+        Result.GroupCfgChild == EMPTY_CFG_NODE_VALUE &&
+        Row->Eval.Space.Kind == APP_EVAL_SPACE_KIND_META_CFG &&
+        EvalTypeKindFromKey(
+            EvalTypeKeyUnwrap(
+                Row->Eval.IRTree.TypeKey,
+                EVAL_TYPE_UNWRAP_FLAG_ALL_DECORATIVE
+            )
+        ) == EVAL_TYPE_KIND_BOOL
+    ) {
+        WatchCellPushNew(
+            MemPool,
+            &Result.Cells,
+            APP_WATCH_CELL_KIND_EVAL,
+            Row->Eval,
+            __Cell.Flags = (
+                APP_WATCH_CELL_FLAG_EXPR |
+                APP_WATCH_CELL_FLAG_INDENTED
+            ),
+            __Cell.Percent = 1.0f
+        );
+    } else {
+        if (
+            RowTypeKind == EVAL_TYPE_KIND_ARRAY &&
+            (
+                Row->Eval.Space.Kind == APP_EVAL_SPACE_KIND_META_CFG ||
+                Row->Eval.Space.Kind == EVAL_SPACE_KIND_FILE
+            )
+        ) {
+            Result.CanExpand = FALSE;
+        }
+
+        WatchCellPushNew(
+            MemPool,
+            &Result.Cells,
+            APP_WATCH_CELL_KIND_EVAL,
+            Row->Eval,
+            __Cell.Flags = (
+                APP_WATCH_CELL_FLAG_EXPR |
+                APP_WATCH_CELL_FLAG_NO_EVAL |
+                APP_WATCH_CELL_FLAG_INDENTED
+            ),
+            __Cell.DefaultPercent = 0.35f
+        );
+        WatchCellPushNew(
+            MemPool,
+            &Result.Cells,
+            APP_WATCH_CELL_KIND_EVAL,
+            Row->Eval,
+            __Cell.DefaultPercent = 0.65f
+        );
+    }
+
+    ReleaseScratch(Scratch);
+
+    return Result;
+}
+
+AppWatchRowCellInfo
+AppInfoFromWatchRowCell(
+    Arena* MemPool,
+    EVRow* Row,
+    EVStringFlag Flags,
+    AppWatchRowInfo* RowInfo,
+    AppWatchCell* Cell,
+    f32 MaxSize
+) {
+    TempArena Scratch = GetScratch(&MemPool, 1);
+    AppWatchRowCellInfo Result = {};
+
+    Result.Flags = Cell->Flags;
+    Result.Config = EMPTY_CFG_NODE_VALUE;
+
+    EvalType* CellType = EvalTypeFromKey(Cell->Eval.IRTree.TypeKey);
+    MDNodePtrList CellSchemas = ConfigSchemasFromName(
+        Scratch.MemPool,
+        APP_STATE->CfgSchemaTable,
+        CellType->Name
+    );
+    FancyStrParams Params = {};
+    FancyStrParams WeakParams = {};
+
+    Params.Colour = UIColourFromName("text"_s8);
+
+    UITag("weak"_s8) {
+        WeakParams.Colour = UIColourFromName("text"_s8);
+    }
+
+    if (!Cell->Eval.Space.U64s[1] && CellSchemas.Count)
+        Result.Config = AppConfigFromEvalSpace(Cell->Eval.Space);
+
+    Result.CommandName = AppCommandNameFromEval(Cell->Eval);
+    Result.FilePath = AppFilePathFromEval(MemPool, Cell->Eval);
+
+    for (
+        EvalType* __Type = CellType;
+        __Type->Kind != EVAL_TYPE_KIND_NULL;
+        __Type = EvalTypeFromKey(__Type->DirectTypeKey)
+    ) {
+        if (__Type->Kind == EVAL_TYPE_KIND_META_DESCRIPTION) {
+            Result.Description = __Type->Name;
+            break;
+        }
+    }
+
+    if (
+        Cell->Flags & APP_WATCH_CELL_FLAG_EXPR &&
+        Cell->Flags & APP_WATCH_CELL_FLAG_NO_EVAL
+    ) {
+        if (RowInfo->ExprIsEditable)
+            Result.Flags |= APP_WATCH_CELL_FLAG_CAN_EDIT;
+    } else if (
+        EVTypeKeyIsEditable(Cell->Eval.IRTree.TypeKey) &&
+        Cell->Eval.IRTree.Mode == EVAL_MODE_OFFSET
+    ) {
+        Result.Flags |= APP_WATCH_CELL_FLAG_CAN_EDIT;
+    }
+
+    if (Cell->Eval.Space.Kind == APP_EVAL_SPACE_KIND_META_THEME) {
+        ListPush(
+            MemPool,
+            &Result.EvalFStrings,
+            &Params,
+            NULL,
+            EvalStrFromID(Cell->Eval.Value.U64)
+        );
+    } else if (
+        Cell->Eval.Msgs.MaxKind > EVAL_MSG_KIND_NULL &&
+        !(Cell->Flags & APP_WATCH_CELL_FLAG_NO_EVAL)
+    ) {
+        Str8List MsgStrings = {};
+
+        for (EvalMsg* Msg = Cell->Eval.Msgs.Head; Msg; Msg = Msg->Next) {
+            ListPush(Scratch.MemPool, &MsgStrings, Msg->Text);
+
+            if (Msg->Next)
+                ListPush(Scratch.MemPool, &MsgStrings, " "_s8);
+        }
+
+        Result.Flags |= APP_WATCH_CELL_FLAG_IS_ERRORED;
+        Result.ErrorTooltip = StrListJoin(MemPool, &MsgStrings, NULL);
+        ListPush(
+            MemPool,
+            &Result.ExprFStrings,
+            &WeakParams,
+            NULL,
+            APP_ICON_KIND_TEXT_TABLE[APP_ICON_KIND_WARNING]
+        );
+        ListPush(MemPool, &Result.ExprFStrings, &WeakParams, NULL, " "_s8);
+        ListPush(
+            MemPool,
+            &Result.ExprFStrings,
+            &WeakParams,
+            NULL,
+            Result.ErrorTooltip
+        );
+    } else if (Result.Config != EMPTY_CFG_NODE_VALUE) {
+        Result.ExprFStrings = AppTitleFStrFromConfig(
+            MemPool,
+            Result.Config,
+            FALSE
+        );
+        Result.Flags |= APP_WATCH_CELL_FLAG_BTN;
+    } else if (Result.CommandName.Size) {
+        if (Cell->PX != 0.0f) {
+            ListPush(
+                MemPool,
+                &Result.ExprFStrings,
+                &WeakParams,
+                NULL,
+                APP_ICON_KIND_TEXT_TABLE[
+                    AppIconKindFromCodeName(Result.CommandName)
+                ]
+            );
+        } else {
+            Result.ExprFStrings = AppTitleFStrFromCodeName(
+                MemPool,
+                Result.CommandName
+            );
+        }
+
+        Result.Flags |= APP_WATCH_CELL_FLAG_BTN;
+    } else if (Result.FilePath.Size) {
+        Result.ExprFStrings = AppTitleFStrFromFilePath(
+            MemPool,
+            Result.FilePath,
+            !StrMatch(RowInfo->GroupCfgName, "folder"_s8, 0)
+        );
+        Result.Flags |= APP_WATCH_CELL_FLAG_BTN;
+    } else {
+        FancyStrList ExprFStrings = {};
+        FancyStrList EvalFStrings = {};
+
+        if (Cell->Flags & APP_WATCH_CELL_FLAG_EXPR) {
+            Str8 ExprString = {};
+
+            for (
+                EvalType* T = CellType;
+                T->Kind != EVAL_TYPE_KIND_NULL;
+                T = EvalTypeFromKey(T->DirectTypeKey)
+            ) {
+                if (T->Kind == EVAL_TYPE_KIND_META_DISPLAY_NAME) {
+                    ExprString = T->Name;
+                    break;
+                }
+            }
+
+            if (!ExprString.Size) {
+                ExprString = Cell->Eval.String;
+
+                if (
+                    Cell->Eval.ParentKey != EMPTY_EVAL_KEY_VALUE &&
+                    Cell->Eval.Msgs.MaxKind == EVAL_MSG_KIND_NULL
+                ) {
+                    EvalExpr* NotableExpr = Cell->Eval.Expr;
+
+                    for (;;) {
+                        if (NotableExpr->Kind == EVAL_EXPR_KIND_CAST)
+                            NotableExpr = NotableExpr->Tail;
+                        else if (NotableExpr->Kind == EVAL_EXPR_KIND_REF)
+                            NotableExpr = NotableExpr->Ref;
+                        else
+                            break;
+                    }
+
+                    if (NotableExpr->Kind == EVAL_EXPR_KIND_ARRAY_INDEX) {
+                        ExprString = ArenaPushStrFmt(
+                            MemPool,
+                            "[%S]",
+                            PRINT_STR(
+                                EvalStrFromExpr(
+                                    MemPool,
+                                    NotableExpr->Tail,
+                                    ""_s8
+                                )
+                            )
+                        );
+                    } else if (
+                        NotableExpr->Kind == EVAL_EXPR_KIND_MEMBER_ACCESS
+                    ) {
+                        Str8 MemberName = NotableExpr->Head->Next->String;
+                        Str8 FancyName = {};
+
+                        if (
+                            Cell->Eval.Space.Kind == APP_EVAL_SPACE_KIND_META_CFG ||
+                            Cell->Eval.Space.Kind == EVAL_SPACE_KIND_FILE ||
+                            Cell->Eval.Space.Kind == EVAL_SPACE_KIND_FILESYSTEM
+                        ) {
+                            FancyName = AppDisplayFromCodeName(MemberName);
+                        }
+
+                        if (FancyName.Size) {
+                            ExprString = FancyName;
+                        } else if (MemberName.Size) {
+                            ExprString = ArenaPushStrFmt(
+                                MemPool,
+                                ".%S",
+                                PRINT_STR(MemberName)
+                            );
+                        }
+                    }
+                }
+            }
+
+            ListPush(MemPool, &ExprFStrings, &Params, NULL, ExprString);
+        }
+
+        if (!(Cell->Flags & APP_WATCH_CELL_FLAG_NO_EVAL)) {
+            EVStrParams StringParams = {
+                Flags,
+                10
+            };
+            EvalType* __Type = EvalTypeFromKey(
+                EvalTypeKeyUnwrap(
+                    Cell->Eval.IRTree.TypeKey,
+                    EVAL_TYPE_UNWRAP_FLAG_META
+                )
+            );
+            b32 IsCode = !(
+                __Type->Flags & (
+                    EVAL_TYPE_FLAG_IS_PLAIN_TEXT |
+                    EVAL_TYPE_FLAG_IS_PATH_TEXT
+                )
+            );
+
+            if (Cell->Eval.Space.Kind == APP_EVAL_SPACE_KIND_META_CFG)
+                StringParams.Flags |= EV_STR_FLAG_DISABLE_STR_QUOTES;
+
+            Str8 String = AppValueStrFromEval(
+                MemPool,
+                &StringParams,
+                MaxSize,
+                Cell->Eval
+            );
+
+            ListPush(
+                MemPool,
+                &EvalFStrings,
+                IsCode ? &Params : &WeakParams,
+                NULL,
+                String
+            );
+
+            if (!IsCode)
+                Result.Flags |= APP_WATCH_CELL_FLAG_IS_NONE_CODE;
+        }
+
+        if (Cell->Flags & APP_WATCH_CELL_FLAG_NO_EVAL) {
+            Result.EvalFStrings = ExprFStrings;
+        } else {
+            Result.ExprFStrings = ExprFStrings;
+            Result.EvalFStrings = EvalFStrings;
+        }
+    }
+
+    ReleaseScratch(Scratch);
+
+    return Result;
+}
+
+v2i64
+AppTableFromWatchPoint(EVBlockRangeList* BlockRanges, AppWatchPoint Point)
+{
+    v2i64 Table = {};
+    TempArena Scratch = GetScratch(NULL, 0);
+    u64 Num = EVNumFromKey(BlockRanges, Point.Key);
+    EVRow* Row = EVRowFromNum(
+        Scratch.MemPool,
+        AppViewEvalView(),
+        BlockRanges,
+        Num
+    );
+    AppWatchRowInfo RowInfo = AppWatchRowInfoFromRow(Scratch.MemPool, Row);
+    i64 X = 0;
+
+    for (
+        AppWatchCell* Cell = RowInfo.Cells.Head;
+        Cell;
+        Cell = Cell->Next, ++X
+    ) {
+        if (AppIDFromWatchCell(Cell) == Point.CellID) {
+            Table.X = X;
+            break;
+        }
+    }
+
+    Table.Y = (i64) Num;
+    ReleaseScratch(Scratch);
+
+    return Table;
+}
+
+AppWatchPoint
+AppWatchPointFromTable(EVBlockRangeList* BlockRanges, v2i64 Table)
+{
+    AppWatchPoint Point = {};
+    TempArena Scratch = GetScratch(NULL, 0);
+    EVRow* Row = EVRowFromNum(
+        Scratch.MemPool,
+        AppViewEvalView(),
+        BlockRanges,
+        (u64) Table.Y
+    );
+    AppWatchRowInfo RowInfo = AppWatchRowInfoFromRow(Scratch.MemPool, Row);
+    i64 X = 0;
+
+    for (
+        AppWatchCell* Cell = RowInfo.Cells.Head;
+        Cell;
+        Cell = Cell->Next, ++X
+    ) {
+        if (X == Table.X) {
+            Point.CellID = AppIDFromWatchCell(Cell);
+            break;
+        }
+    }
+
+    Point.Key = Row->Key;
+    Point.ParentKey = Row->Block->Key;
+    ReleaseScratch(Scratch);
+
+    return Point;
+}
+
+// NOTE(nc): one cell of the terminal UI. it shows a name, a value, or both.
+//         : when the cell has active focus the value is a line edit.
+UISignal
+AppCell(AppCellParams* Params, Str8 String)
+{
+    TempArena Scratch = GetScratch(NULL, 0);
+    UIKey Key = UIKeyFromStr(UIActiveSeedKey(), String);
+    b32 IsAutoFocusHot = UIIsKeyAutoFocusHot(Key);
+    b32 IsAutoFocusActive = UIIsKeyAutoFocusActive(Key);
+
+    if (IsAutoFocusHot)
+        UIPushFocusHot(UI_FOCUS_KIND_ON);
+
+    if (IsAutoFocusActive)
+        UIPushFocusActive(UI_FOCUS_KIND_ON);
+
+    b32 IsFocusHot = UIIsFocusHot();
+    b32 IsFocusActive = UIIsFocusActive();
+    b32 IsEditing = (
+        IsFocusActive ||
+        UIHeadFocusActive() == UI_FOCUS_KIND_ON
+    );
+    b32 BuildToggleSwitch = (
+        !!(Params->Kind & APP_CELL_KIND_TOGGLE_SWITCH) && 
+        !IsFocusActive
+    );
+    b32 BuildSlider = (
+        !!(Params->Kind & APP_CELL_KIND_SLIDER) && 
+        !IsFocusActive
+    );
+    b32 BuildBindings = (
+        !!(Params->Kind & APP_CELL_KIND_BINDINGS) && 
+        !IsFocusActive
+    );
+    b32 BuildName = !!Params->MetaFancyStrings.NodeCount;
+    b32 BuildValue = (
+        IsEditing ||
+        (
+            !BuildToggleSwitch &&
+            (
+                !BuildName ||
+                Params->PreEditValue.Size ||
+                Params->ValueFancyStrings.NodeCount
+            )
+        )
+    );
+
+    UISetNextChildLayoutAxis(AXIS_2D_X);
+    UISetNextHoverCursor(
+        IsEditing 
+            ? CURSOR_KIND_I_BAR 
+            : CURSOR_KIND_POINTER
+    );
+
+    UIBox* Box = UIBuildBoxFromKey(
+        (
+            UI_BOX_KIND_MOUSE_CLICKABLE |
+            UI_BOX_KIND_CLICK_TO_FOCUS |
+            (
+                (
+                    !!(Params->Kind & APP_CELL_KIND_KEYBOARD_CLICKABLE) ||
+                    IsAutoFocusHot ||
+                    IsAutoFocusActive
+                ) * UI_BOX_KIND_KEYBOARD_CLICKABLE
+            ) |
+            (!!(Params->Kind & APP_CELL_KIND_BTN) * UI_BOX_KIND_DRAW_HOT_EFFECTS) |
+            (
+                !!(Params->Kind & APP_CELL_KIND_SINGLE_CLICK_ACTIVATE) *
+                UI_BOX_KIND_DRAW_ACTIVE_EFFECTS
+            ) |
+            (
+                !(Params->Kind & APP_CELL_KIND_NO_BACKGROUND) *
+                UI_BOX_KIND_DRAW_BACKGROUND
+            ) |
+            (!!(Params->Kind & APP_CELL_KIND_BORDER) * UI_BOX_KIND_DRAW_BORDER)
+        ),
+        Key
+    );
+    UIBox* EditBox = EMPTY_UI_BOX_VALUE;
+    UIBox* TextBox = EMPTY_UI_BOX_VALUE;
+
+    UIParent(Box) {
+        if (Params->Depth > 0)
+            UISpacer(UI_PX(2.0f * Params->Depth, 1.0f));
+
+        if (Params->Kind & APP_CELL_KIND_EXPANDER) {
+            UIPreferredWidth(UI_PX(2.0f, 1.0f)) {
+                UIFocus(UI_FOCUS_KIND_OFF) {
+                    UISignal ExpanderSig = UIExpander(
+                        *Params->IsExpanded,
+                        "###expander"_s8
+                    );
+
+                    if (UI_PRESSED(ExpanderSig))
+                        *Params->IsExpanded ^= TRUE;
+                }
+            }
+        } else if (Params->Kind & APP_CELL_KIND_EXPANDER_PLACEHOLDER) {
+            UIPreferredWidth(UI_PX(2.0f, 1.0f)) {
+                UITag("weak"_s8) {
+                    UILabel(APP_ICON_KIND_TEXT_TABLE[APP_ICON_KIND_DOT]);
+                }
+            }
+        } else if (Params->Kind & APP_CELL_KIND_EXPANDER_SPACE) {
+            UISpacer(UI_PX(2.0f, 1.0f));
+        }
+
+        if (BuildName) {
+            FMRangeList FuzzyMatches = {};
+
+            if (Params->SearchNeedle.Size) {
+                FuzzyMatches = FuzzyFindFStrs(
+                    UIBuildMemPool(),
+                    &Params->MetaFancyStrings,
+                    Params->SearchNeedle
+                );
+            }
+
+            UIWidthFill() {
+                UIBox* NameBox = UIBuildBoxFromStr(
+                    UI_BOX_KIND_DRAW_TEXT,
+                    "###name_box"_s8
+                );
+
+                UIBoxEquipDisplayFancyStrs(
+                    NameBox, 
+                    &Params->MetaFancyStrings
+                );
+                UIBoxEquipFuzzyMatchRanges(NameBox, &FuzzyMatches);
+            }
+        }
+
+        if (BuildBindings) {
+            UIPreferredWidth(UI_TEXT_DIM(2.0f, 1.0f)) {
+                UIFocus(UI_FOCUS_KIND_OFF) {
+                    AppCommandBindingButtons(
+                        Params->BindingsName,
+                        ""_s8,
+                        U64_MAX,
+                        APP_COMMAND_BINDING_BTN_FLAG_ADD_NEW
+                    );
+                }
+            }
+        }
+
+        if (BuildToggleSwitch) {
+            UIPreferredWidth(UI_PX(6.0f, 1.0f)) {
+                UIFocus(UI_FOCUS_KIND_OFF) {
+                    UIToggle(
+                        Params->IsToggled,
+                        UI_TOGGLE_KIND_SWITCH,
+                        "###toggle"_s8
+                    );
+                }
+            }
+        }
+
+        if (BuildSlider) {
+            UIPreferredWidth(UI_PX(12.0f, 1.0f)) {
+                UIFocus(UI_FOCUS_KIND_OFF) {
+                    UISlider(
+                        Params->SliderValue,
+                        Rng(0.0f, 1.0f),
+                        UI_SLIDER_KIND_HORZ,
+                        "###slider"_s8
+                    );
+                }
+            }
+
+            UISpacer(UI_PX(1.0f, 1.0f));
+        }
+
+        if (BuildValue) {
+            UISize EditBoxSize = UI_PERCENT(1.0f, 0.0f);
+
+            if (BuildName) {
+                EditBoxSize = IsEditing
+                    ? UI_PX(FloorF32(Length(Box->Rect).X * 0.5f), 1.0f)
+                    : UI_SUM_OF_CHILDREN(1.0f);
+            }
+
+            UISetNextPreferredWidth(EditBoxSize);
+            UISetNextChildLayoutAxis(AXIS_2D_X);
+            EditBox = UIBuildBoxFromStr(
+                IsEditing * (
+                    UI_BOX_KIND_CLIP |
+                    UI_BOX_KIND_ALLOW_OVERFLOW_X |
+                    UI_BOX_KIND_VIEW_CLAMP
+                ),
+                "###edit_box"_s8
+            );
+        }
+    }
+
+    b32 Commit = FALSE;
+    b32 CanEdit = (
+        !(Params->Kind & APP_CELL_KIND_DISABLE_EDIT) &&
+        Params->EditBuffer &&
+        Params->EditStringSize &&
+        Params->Cursor &&
+        Params->Mark
+    );
+
+    if (!IsFocusActive && IsFocusHot) {
+        for (UIEvent* Evt = NULL; UINextEvent(&Evt); ) {
+            if (Evt->Flags & UI_EVENT_FLAG_COPY)
+                SetClipboardText(Params->PreEditValue);
+
+            if (Evt->Flags & UI_EVENT_FLAG_DELETE && CanEdit) {
+                Commit = TRUE;
+                *Params->EditStringSize = 0;
+            }
+        }
+    }
+
+    UISignal Sig = UISignalFromBox(Box);
+
+    if (Commit)
+        Sig.Kind |= UI_SIGNAL_KIND_COMMIT;
+
+    b32 FocusStarted = FALSE;
+
+    if (!IsFocusActive && CanEdit) {
+        b32 StartEditing = (
+            UI_DOUBLE_CLICKED(Sig) ||
+            Sig.Kind & UI_SIGNAL_KIND_KEYBOARD_PRESSED
+        );
+
+        if (IsFocusHot && !StartEditing) {
+            for (UIEvent* Evt = NULL; UINextEvent(&Evt); ) {
+                if (Evt->String.Size || Evt->Flags & UI_EVENT_FLAG_PASTE) {
+                    StartEditing = TRUE;
+                    break;
+                }
+            }
+
+            if (UISlotPress(UI_EVENT_ACTION_SLOT_EDIT))
+                StartEditing = TRUE;
+        }
+
+        if (StartEditing) {
+            Str8 EditString = Params->PreEditValue;
+
+            EditString.Size = MIN(Params->EditBufferSize, EditString.Size);
+            MemCpy(Params->EditBuffer, EditString.Str, EditString.Size);
+            *Params->EditStringSize = EditString.Size;
+            UISetAutoFocusActiveKey(Key);
+
+            if (!(Params->Kind & APP_CELL_KIND_BTN))
+                UIKillAction();
+
+            *Params->Cursor = TxtPt(1, EditString.Size + 1);
+            *Params->Mark = TxtPt(1, 1);
+            FocusStarted = TRUE;
+        }
+    } else if (
+        IsFocusActive && 
+        Sig.Kind & UI_SIGNAL_KIND_KEYBOARD_PRESSED
+    ) {
+        UISetAutoFocusActiveKey(EMPTY_UI_KEY_VALUE);
+        Sig.Kind |= UI_SIGNAL_KIND_COMMIT;
+    }
+
+    if (CanEdit && (IsFocusActive || FocusStarted)) {
+        APP_STATE->TextEditMode = TRUE;
+
+        for (UIEvent* Evt = NULL; UINextEvent(&Evt); ) {
+            Str8 EditString = Str(
+                Params->EditBuffer, 
+                *Params->EditStringSize
+            );
+
+            if (
+                (
+                    Evt->Kind != UI_EVENT_KIND_EDIT &&
+                    Evt->Kind != UI_EVENT_KIND_NAVIGATE &&
+                    Evt->Kind != UI_EVENT_KIND_TEXT
+                ) ||
+                Evt->DeltaI32.Y != 0
+            ) {
+                continue;
+            }
+
+            UITextOp Op = UISingleLineTextOpFromEvent(
+                Scratch.MemPool,
+                Evt,
+                EditString,
+                *Params->Cursor,
+                *Params->Mark
+            );
+
+            if (Op.Range.Min != Op.Range.Max || Op.Replace.Size) {
+                Str8 NewString = UIPushStrReplaceRange(
+                    Scratch.MemPool,
+                    EditString,
+                    Rng(Op.Range.Min.Column, Op.Range.Max.Column),
+                    Op.Replace
+                );
+
+                NewString.Size = MIN(Params->EditBufferSize, NewString.Size);
+                MemCpy(Params->EditBuffer, NewString.Str, NewString.Size);
+                *Params->EditStringSize = NewString.Size;
+            }
+
+            if (Op.Kind & UI_TEXT_OP_KIND_COPY)
+                SetClipboardText(Op.Copy);
+
+            *Params->Cursor = Op.Cursor;
+            *Params->Mark = Op.Mark;
+            UIEatEvent(Evt);
+        }
+    }
+
+    TextPoint MousePt = {};
+    f32 CursorOffset = 0.0f;
+
+    if (EditBox != EMPTY_UI_BOX_VALUE) {
+        UIParent(EditBox) {
+            if (IsEditing && CanEdit) {
+                Str8 EditString = ArenaPushStrCpy(
+                    UIBuildMemPool(),
+                    Str(Params->EditBuffer, *Params->EditStringSize)
+                );
+                UILineEditDrawData* DrawData = ArenaPushArrayZero(
+                    UIBuildMemPool(),
+                    UILineEditDrawData,
+                    1
+                );
+
+                UISetNextPreferredWidth(
+                    UI_PX(
+                        DDimensionsFromStr(
+                            UIHeadTabSize(), 
+                            EditString
+                        ).X + 2.0f,
+                        1.0f
+                    )
+                );
+                TextBox = UIBuildBoxFromStr(
+                    UI_BOX_KIND_DRAW_TEXT | UI_BOX_KIND_DISABLE_TEXT_TRUNC,
+                    "###text_box"_s8
+                );
+                DrawData->EdittedString = EditString;
+                DrawData->Cursor = *Params->Cursor;
+                DrawData->Mark = *Params->Mark;
+                DrawData->Trail = !UI_DRAGGING(Sig);
+                UIBoxEquipDisplayStr(TextBox, EditString);
+                UIBoxEquipCustomDraw(TextBox, UILineEditDraw, DrawData);
+                MousePt = TxtPt(
+                    1,
+                    1 + UIBoxCharPositionFromXY(TextBox, UIMouse())
+                );
+                CursorOffset = DDimensionsFromStr(
+                    UIHeadTabSize(),
+                    StrPrefix(EditString, Params->Cursor->Column - 1)
+                ).X;
+            } else {
+                FancyStrList FancyStrings = Params->ValueFancyStrings;
+                FMRangeList FuzzyMatches = {};
+
+                if (!FancyStrings.TotalSize) {
+                    Str8 DisplayString = Params->PreEditValue;
+                    FancyStrParams FSParams = {};
+
+                    if (!DisplayString.Size)
+                        DisplayString = UIDisplayPartFromKeyStr(String);
+
+                    UITag("weak"_s8) {
+                        FSParams.Colour = UIColourFromName("text"_s8);
+                    }
+
+                    FancyStrings = {};
+                    ListPush(
+                        UIBuildMemPool(),
+                        &FancyStrings,
+                        &FSParams,
+                        NULL,
+                        ArenaPushStrCpy(UIBuildMemPool(), DisplayString)
+                    );
+                }
+
+                if (Params->SearchNeedle.Size) {
+                    FuzzyMatches = FuzzyFindFStrs(
+                        UIBuildMemPool(),
+                        &FancyStrings,
+                        Params->SearchNeedle
+                    );
+                }
+
+                UISetNextPreferredWidth(
+                    BuildName
+                        ? UI_TEXT_DIM(1.0f, 1.0f)
+                        : UI_PERCENT(1.0f, 0.0f)
+                );
+                TextBox = UIBuildBoxFromStr(
+                    UI_BOX_KIND_DRAW_TEXT,
+                    "###text_box"_s8
+                );
+                UIBoxEquipDisplayFancyStrs(TextBox, &FancyStrings);
+                UIBoxEquipFuzzyMatchRanges(TextBox, &FuzzyMatches);
+            }
+        }
+
+        if (IsEditing) {
+            r1f32 CursorRange = Rng(
+                MAX(CursorOffset - 2.0f, 0.0f),
+                CursorOffset + 2.0f
+            );
+            r1f32 VisibleRange = Rng(
+                EditBox->ViewOffsetTarget.X,
+                EditBox->ViewOffsetTarget.X + Length(EditBox->Rect).X
+            );
+
+            EditBox->ViewOffsetTarget.X += MIN(
+                CursorRange.Min - VisibleRange.Min,
+                0.0f
+            );
+            EditBox->ViewOffsetTarget.X += MAX(
+                CursorRange.Max - VisibleRange.Max,
+                0.0f
+            );
+        } else {
+            EditBox->ViewOffsetTarget.X = 0.0f;
+            EditBox->ViewOffset.X = 0.0f;
+        }
+    }
+
+    if (IsFocusActive && CanEdit && UI_DRAGGING(Sig)) {
+        if (UI_PRESSED(Sig))
+            *Params->Mark = MousePt;
+
+        *Params->Cursor = MousePt;
+    }
+
+    if (IsAutoFocusHot)
+        UIPopFocusHot();
+
+    if (IsAutoFocusActive)
+        UIPopFocusActive();
+
+    ReleaseScratch(Scratch);
+
+    return Sig;
+}
+
+void
+AppWatchViewUI(r2f32 Rect)
+{
+    TempArena Scratch = GetScratch(NULL, 0);
+    ConfigNode* View = ConfigNodeFromID(Registers()->View);
+    AppViewState* VS = AppViewStateFromConfig(View);
+    AppWatchViewState* EWV = GetAppViewState(AppWatchViewState);
+    EVView* EvalView = AppViewEvalView();
+    b32 IsLister = (
+        ConfigNodeChildFromStr(View, "lister"_s8) != EMPTY_CFG_NODE_VALUE
+    );
+    b32 ImplicitRoot = (
+        ConfigNodeChildFromStr(View, "explicit_root"_s8) == EMPTY_CFG_NODE_VALUE
+    );
+    ConfigID OriginView = (IsLister && APP_STATE->QueryRegs)
+        ? APP_STATE->QueryRegs->View
+        : Registers()->View;
+    EvalEval Eval = EvalEvalFromStr(AppExpressionFromConfig(View));
+    UIScrollPoint2D ScrollPosition = AppViewScrollPosition();
+    v2f32 RectLength = Length(Rect);
+    i64 NumPossibleVisibleRows = (i64) RectLength.Y;
+    f32 ContentsWidth = MAX(RectLength.X - 1.0f, 1.0f);
+    EVStringFlag StringFlags = EV_STR_FLAG_READ_ONLY_DISPLAY_RULES;
+    Str8 Filter = AppViewQueryInput();
+    b32 IsFirstFrame = FALSE;
+
+    if (!EWV->IsInitialised) {
+        IsFirstFrame = TRUE;
+        EWV->IsInitialised = TRUE;
+        EWV->FilterMemPool = AppPushViewMemPool();
+        EWV->TextEditMemPool = AppPushViewMemPool();
+    }
+
+    if (!StrMatch(Filter, EWV->PrevFilter, 0)) {
+        MemZero(&EWV->Cursor, sizeof(EWV->Cursor));
+        MemZero(&EWV->Mark, sizeof(EWV->Mark));
+        MemZero(&EWV->NextCursor, sizeof(EWV->NextCursor));
+        MemZero(&EWV->NextMark, sizeof(EWV->NextMark));
+        ArenaClear(EWV->FilterMemPool);
+        EWV->PrevFilter = ArenaPushStrCpy(EWV->FilterMemPool, Filter);
+    }
+
+    EVBlockTree BlockTree = {};
+    EVBlockRangeList BlockRanges = {};
+    UIScrollListRowBlockArray RowBlocks = {};
+    v2i64 CursorTable = {};
+    v2i64 MarkTable = {};
+    r2i64 SelectionTable = {};
+
+    UIFocus(UI_FOCUS_KIND_ON) {
+        b32 StateDirty = TRUE;
+        b32 SnapToCursor = FALSE;
+        b32 CursorDirtyTable = FALSE;
+
+        for (UIEvent* Evt = NULL; ; ) {
+            if (StateDirty) {
+                Eval = EvalEvalFromStr(Eval.String);
+
+                if (ImplicitRoot || IsFirstFrame) {
+                    EVKeySetExpansion(
+                        EvalView,
+                        EVKeyRoot(),
+                        EVKeyAlloc(Hash(EVKeyRoot()), 1),
+                        TRUE
+                    );
+                }
+
+                BlockTree = EVBlockTreeFromEval(
+                    Scratch.MemPool,
+                    EvalView,
+                    Filter,
+                    Eval
+                );
+                BlockRanges = EVBlockRangeListFromTree(
+                    Scratch.MemPool,
+                    &BlockTree
+                );
+
+                if (ImplicitRoot && BlockRanges.Head) {
+                    --BlockRanges.Count;
+                    BlockRanges.Head = BlockRanges.Head->Next;
+                }
+
+                UIScrollListRowBlockChunkList RowBlockChunks = {};
+
+                for (
+                    EVBlockRangeNode* N = BlockRanges.Head;
+                    N;
+                    N = N->Next
+                ) {
+                    UIScrollListRowBlock RowBlock = {};
+
+                    RowBlock.RowCount = Length(N->V.Range);
+                    RowBlock.ItemCount = N->V.Block->VisualExpandInfo.SingleItem
+                        ? 1
+                        : Length(N->V.Range);
+                    ListPush(Scratch.MemPool, &RowBlockChunks, 256, &RowBlock);
+                }
+
+                RowBlocks = UIScrollListRowBlockArrayFromChunkList(
+                    Scratch.MemPool,
+                    &RowBlockChunks
+                );
+                StateDirty = FALSE;
+            }
+
+            if (CursorDirtyTable) {
+                CursorDirtyTable = FALSE;
+
+                AppWatchPoint* Points[2] = {
+                    &EWV->Cursor,
+                    &EWV->Mark
+                };
+                v2i64 Tables[2] = {
+                    CursorTable,
+                    MarkTable
+                };
+
+                for (u64 Index = 0; Index < ARRAY_COUNT(Points); ++Index) {
+                    EVKey PrevKey = Points[Index]->Key;
+                    EVKey PrevParentKey = Points[Index]->ParentKey;
+
+                    Points[Index][0] = AppWatchPointFromTable(
+                        &BlockRanges,
+                        Tables[Index]
+                    );
+
+                    if (
+                        Points[Index]->Key == EMPTY_EV_KEY_VALUE &&
+                        Tables[Index].Y != 0
+                    ) {
+                        Points[Index]->Key = PrevParentKey;
+
+                        for (
+                            EVExpandNode* N = EVExpandNodeFromKey(
+                                EvalView,
+                                PrevParentKey
+                            );
+                            N;
+                            N = N->Parent
+                        ) {
+                            Points[Index]->Key = N->Key;
+
+                            if (!N->Expanded)
+                                break;
+                        }
+                    }
+
+                    if (
+                        !Index &&
+                        (
+                            EWV->Cursor.Key != PrevKey ||
+                            EWV->Cursor.ParentKey != PrevParentKey
+                        )
+                    ) {
+                        EWV->IsTextEditing = FALSE;
+                    }
+                }
+
+                EWV->NextCursor = EWV->Cursor;
+                EWV->NextMark = EWV->Mark;
+            }
+
+            r2i64 CursorTableRange = {};
+
+            {
+                CursorTable = AppTableFromWatchPoint(&BlockRanges, EWV->Cursor);
+                MarkTable = AppTableFromWatchPoint(&BlockRanges, EWV->Mark);
+
+                EVRow* Row = EVRowFromNum(
+                    Scratch.MemPool,
+                    EvalView,
+                    &BlockRanges,
+                    MarkTable.Y
+                );
+                AppWatchRowInfo RowInfo = AppWatchRowInfoFromRow(
+                    Scratch.MemPool,
+                    Row
+                );
+
+                CursorTableRange.Max.X = (i64) RowInfo.Cells.Count - 1;
+                CursorTableRange.Max.Y = (
+                    (i64) BlockTree.TotalItemCount - !!ImplicitRoot
+                );
+
+                for EACH_ENUM(Axis2D, Axis, AXIS_2D_COUNT) {
+                    r1i64 AxisRange = Rng(
+                        CursorTableRange.Min.V[Axis],
+                        MAX(
+                            CursorTableRange.Min.V[Axis],
+                            CursorTableRange.Max.V[Axis]
+                        )
+                    );
+
+                    CursorTable.V[Axis] = Clamp(AxisRange, CursorTable.V[Axis]);
+                    MarkTable.V[Axis] = Clamp(AxisRange, MarkTable.V[Axis]);
+                    SelectionTable.Min.V[Axis] = MIN(
+                        CursorTable.V[Axis],
+                        MarkTable.V[Axis]
+                    );
+                    SelectionTable.Max.V[Axis] = MAX(
+                        CursorTable.V[Axis],
+                        MarkTable.V[Axis]
+                    );
+                }
+            }
+
+            if (SnapToCursor && CursorTable.Y >= 1) {
+                UIScrollPoint* ScrollPoint = &ScrollPosition.Y;
+                i64 CursorRow = (i64) EVVNumFromNum(
+                    &BlockRanges,
+                    CursorTable.Y
+                ) - 1;
+                i64 MinDelta = MIN((i64) 0, CursorRow - ScrollPoint->Index);
+                i64 MaxDelta = MAX(
+                    (i64) 0,
+                    CursorRow + 1 - (ScrollPoint->Index + NumPossibleVisibleRows)
+                );
+                i64 NewIndex = ScrollPoint->Index + MinDelta + MaxDelta;
+
+                UIScrollPointTargetIndex(ScrollPoint, MAX(NewIndex, (i64) 0));
+                SnapToCursor = FALSE;
+            }
+
+            // NOTE(nc): when the cursor was moved by the mouse, do one pass
+            //         : with an empty event. the selection is still the old
+            //         : one in this pass, this completes an edit in progress.
+            UIEvent DummyEvt = {};
+            UIEvent* E = &DummyEvt;
+            b32 CursorRugPull = (EWV->Cursor != EWV->NextCursor);
+
+            if (CursorRugPull) {
+                EWV->Cursor = EWV->NextCursor;
+                EWV->Mark = EWV->NextMark;
+            } else {
+                if (!UINextEvent(&Evt) || !UIIsFocusActive())
+                    break;
+
+                E = Evt;
+            }
+
+            b32 Taken = FALSE;
+            b32 SelectionIsOneRow = (
+                SelectionTable.Min.Y == SelectionTable.Max.Y
+            );
+            b32 SelectionIsOneCell = (
+                SelectionIsOneRow &&
+                SelectionTable.Min.X == SelectionTable.Max.X
+            );
+            EVWindowedRowList SelectedRows = {};
+
+            if (SelectionTable.Max.Y != 0) {
+                SelectedRows = EVRowsFromNumRange(
+                    Scratch.MemPool,
+                    EvalView,
+                    &BlockRanges,
+                    Rng(
+                        (u64) MAX(SelectionTable.Min.Y, (i64) 1),
+                        (u64) SelectionTable.Max.Y + 1
+                    )
+                );
+            }
+
+            // NOTE(nc): lister: accept the selected row. with no selection,
+            //         : accept the first row.
+            if (
+                IsLister &&
+                !EWV->IsTextEditing &&
+                E->Kind == UI_EVENT_KIND_PRESS &&
+                E->Slot == UI_EVENT_ACTION_SLOT_ACCEPT &&
+                SelectionIsOneRow
+            ) {
+                Str8 CmdName = AppViewQueryCommand();
+                EVRow* Row = EVRowFromNum(
+                    Scratch.MemPool,
+                    EvalView,
+                    &BlockRanges,
+                    MAX(SelectionTable.Min.Y, (i64) 1)
+                );
+                EvalEval RowEval = Row->Eval;
+
+                if (RowEval.Expr != EMPTY_EVAL_EXPR_VALUE && CmdName.Size) {
+                    switch (RowEval.Space.Kind) {
+                        default: {} break;
+
+                        case EVAL_SPACE_KIND_FILE:
+                        case EVAL_SPACE_KIND_FILESYSTEM: {
+                            EvalType* __Type = EvalTypeFromKey(
+                                RowEval.IRTree.TypeKey
+                            );
+                            Str8 File = AppFilePathFromEval(
+                                Scratch.MemPool,
+                                RowEval
+                            );
+
+                            Taken = TRUE;
+
+                            if (StrMatch(__Type->Name, "folder"_s8, 0)) {
+                                AppCmd(
+                                    APP_COMMAND_KIND_UPDATE_QUERY,
+                                    __Registers.String = ArenaPushStrFmt(
+                                        Scratch.MemPool,
+                                        "%S/",
+                                        PRINT_STR(File)
+                                    )
+                                );
+                            } else {
+                                AppCmd(
+                                    APP_COMMAND_KIND_COMPLETE_QUERY,
+                                    __Registers.FilePath = File
+                                );
+                            }
+                        } break;
+
+                        case APP_EVAL_SPACE_KIND_META_CFG: {
+                            ConfigNode* Cfg = AppConfigFromEvalSpace(
+                                RowEval.Space
+                            );
+                            Taken = TRUE;
+                            AppCmd(
+                                APP_COMMAND_KIND_COMPLETE_QUERY,
+                                __Registers.Config = Cfg->ID,
+                                __Registers.FilePath = AppPathFromConfig(Cfg)
+                            );
+                        } break;
+
+                        case APP_EVAL_SPACE_KIND_META_CMD: {
+                            Taken = TRUE;
+                            AppCmd(
+                                APP_COMMAND_KIND_COMPLETE_QUERY,
+                                __Registers.CommandName = AppCommandNameFromEval(
+                                    RowEval
+                                )
+                            );
+                        } break;
+
+                        case APP_EVAL_SPACE_KIND_META_THEME: {
+                            Taken = TRUE;
+                            AppCmd(
+                                APP_COMMAND_KIND_COMPLETE_QUERY,
+                                __Registers.String = EvalStrFromID(
+                                    RowEval.Value.U64
+                                )
+                            );
+                        } break;
+                    }
+                } else if (RowEval.Expr != EMPTY_EVAL_EXPR_VALUE) {
+                    b32 RowIsSet = (
+                        EvalTypeKindFromKey(
+                            EvalTypeKeyUnwrap(
+                                RowEval.IRTree.TypeKey,
+                                EVAL_TYPE_UNWRAP_FLAG_ALL_DECORATIVE
+                            )
+                        ) == EVAL_TYPE_KIND_SET
+                    );
+
+                    Taken = TRUE;
+
+                    switch (RowEval.Space.Kind) {
+                        default: {
+                            Taken = FALSE;
+                        } break;
+
+                        case APP_EVAL_SPACE_KIND_META_CFG: {
+                            ConfigNode* Cfg = AppConfigFromEvalSpace(
+                                RowEval.Space
+                            );
+
+                            if (StrMatch(Cfg->String, "recent_session"_s8, 0)) {
+                                AppCmd(
+                                    APP_COMMAND_KIND_OPEN_RECENT_SESSION,
+                                    __Registers.View = OriginView,
+                                    __Registers.Config = Cfg->ID
+                                );
+                            } else if (RowIsSet) {
+                                AppCmd(
+                                    APP_COMMAND_KIND_PUSH_QUERY,
+                                    __Registers.View = OriginView,
+                                    __Registers.CommandName = ""_s8,
+                                    __Registers.Expression = EvalFullExprFromKey(
+                                        Scratch.MemPool,
+                                        RowEval.Key
+                                    )
+                                );
+                            } else {
+                                Taken = FALSE;
+                            }
+                        } break;
+
+                        case APP_EVAL_SPACE_KIND_META_QUERY: {
+                            AppCmd(
+                                APP_COMMAND_KIND_PUSH_QUERY,
+                                __Registers.View = OriginView,
+                                __Registers.CommandName = ""_s8,
+                                __Registers.Expression = EvalFullExprFromKey(
+                                    Scratch.MemPool,
+                                    RowEval.Key
+                                )
+                            );
+                        } break;
+
+                        case APP_EVAL_SPACE_KIND_META_CMD: {
+                            AppRegistersScope(__Registers.View = OriginView) {
+                                AppRegistersFillSlotFromCellCtx(Row);
+                                AppCmd(
+                                    APP_COMMAND_KIND_RUN_COMMAND,
+                                    __Registers.CommandName = AppCommandNameFromEval(
+                                        RowEval
+                                    ),
+                                    __Registers.Expression = ""_s8
+                                );
+                            }
+                        } break;
+                    }
+
+                    if (Taken)
+                        AppCmd(APP_COMMAND_KIND_COMPLETE_QUERY);
+                }
+            }
+
+            // NOTE(nc): start of a cell edit
+            if (
+                !Taken &&
+                !EWV->IsTextEditing &&
+                (
+                    E->Kind == UI_EVENT_KIND_TEXT ||
+                    E->Flags & UI_EVENT_FLAG_PASTE ||
+                    (
+                        E->Kind == UI_EVENT_KIND_PRESS &&
+                        E->Slot == UI_EVENT_ACTION_SLOT_EDIT
+                    )
+                ) &&
+                SelectionIsOneCell &&
+                SelectionTable.Min.Y != 0 &&
+                SelectedRows.Head
+            ) {
+                EVRow* Row = &SelectedRows.Head->Row;
+                AppWatchRowInfo RowInfo = AppWatchRowInfoFromRow(
+                    Scratch.MemPool,
+                    Row
+                );
+                i64 CellX = 0;
+
+                ArenaClear(EWV->TextEditMemPool);
+                EWV->TextEditStateSlotsCount = 64;
+                EWV->TextEditStateSlots = ArenaPushArrayZero(
+                    EWV->TextEditMemPool,
+                    AppWatchViewTextEditState*,
+                    EWV->TextEditStateSlotsCount
+                );
+
+                for (
+                    AppWatchCell* Cell = RowInfo.Cells.Head;
+                    Cell;
+                    Cell = Cell->Next, ++CellX
+                ) {
+                    if (CellX != SelectionTable.Min.X)
+                        continue;
+
+                    AppWatchRowCellInfo CellInfo = AppInfoFromWatchRowCell(
+                        Scratch.MemPool,
+                        Row,
+                        StringFlags & ~EV_STR_FLAG_READ_ONLY_DISPLAY_RULES,
+                        &RowInfo,
+                        Cell,
+                        1024.0f
+                    );
+
+                    if (CellInfo.Flags & APP_WATCH_CELL_FLAG_CAN_EDIT) {
+                        Str8 String = (
+                            CellInfo.Flags & APP_WATCH_CELL_FLAG_NO_EVAL
+                        )
+                            ? Cell->Eval.String
+                            : Str8FromFancyStrList(
+                                Scratch.MemPool,
+                                &CellInfo.EvalFStrings
+                            );
+                        AppWatchViewTextEditState* EditState = ArenaPushArrayZero(
+                            EWV->TextEditMemPool,
+                            AppWatchViewTextEditState,
+                            1
+                        );
+                        u64 SlotIndex = (
+                            Hash(Row->Key) % EWV->TextEditStateSlotsCount
+                        );
+
+                        String.Size = MIN(
+                            String.Size,
+                            sizeof(EditState->InputBuffer)
+                        );
+                        SLL_STACK_PUSH_EX(
+                            EWV->TextEditStateSlots[SlotIndex],
+                            EditState,
+                            PointHashNext
+                        );
+                        EditState->Point.ParentKey = Row->Block->Key;
+                        EditState->Point.Key = Row->Key;
+                        EditState->Point.CellID = AppIDFromWatchCell(Cell);
+                        EditState->Cursor = TxtPt(1, String.Size + 1);
+                        EditState->Mark = TxtPt(1, 1);
+                        EditState->InputSize = String.Size;
+                        EditState->InitialSize = String.Size;
+                        MemCpy(EditState->InputBuffer, String.Str, String.Size);
+                        MemCpy(EditState->InitialBuffer, String.Str, String.Size);
+                        EWV->IsTextEditing = TRUE;
+                    }
+                }
+            }
+
+            // NOTE(nc): the cell edit
+            if (!Taken && EWV->IsTextEditing) {
+                b32 EditingComplete = (
+                    (
+                        E->Kind == UI_EVENT_KIND_PRESS &&
+                        (
+                            E->Slot == UI_EVENT_ACTION_SLOT_CANCEL ||
+                            E->Slot == UI_EVENT_ACTION_SLOT_ACCEPT
+                        )
+                    ) ||
+                    (
+                        E->Kind == UI_EVENT_KIND_NAVIGATE &&
+                        E->DeltaI32.Y != 0
+                    ) ||
+                    CursorRugPull
+                );
+
+                APP_STATE->TextEditMode = TRUE;
+
+                if (
+                    EditingComplete ||
+                    (
+                        (
+                            E->Kind == UI_EVENT_KIND_EDIT ||
+                            E->Kind == UI_EVENT_KIND_NAVIGATE ||
+                            E->Kind == UI_EVENT_KIND_TEXT
+                        ) &&
+                        !E->DeltaI32.Y
+                    )
+                ) {
+                    Taken = TRUE;
+
+                    for (
+                        EVWindowedRowNode* RowNode = SelectedRows.Head;
+                        RowNode;
+                        RowNode = RowNode->Next
+                    ) {
+                        EVRow* Row = &RowNode->Row;
+                        AppWatchRowInfo RowInfo = AppWatchRowInfoFromRow(
+                            Scratch.MemPool,
+                            Row
+                        );
+                        i64 CellX = 0;
+
+                        for (
+                            AppWatchCell* Cell = RowInfo.Cells.Head;
+                            Cell;
+                            Cell = Cell->Next, ++CellX
+                        ) {
+                            if (
+                                CellX < SelectionTable.Min.X ||
+                                CellX > SelectionTable.Max.X
+                            ) {
+                                continue;
+                            }
+
+                            AppWatchPoint Point = {
+                                Row->Block->Key,
+                                Row->Key,
+                                AppIDFromWatchCell(Cell)
+                            };
+                            AppWatchViewTextEditState* EditState = AppWatchViewTextEditStateFromPoint(
+                                EWV,
+                                Point
+                            );
+
+                            if (EditState == &EWV->__TextEditState)
+                                continue;
+
+                            Str8 String = Str(
+                                EditState->InputBuffer,
+                                EditState->InputSize
+                            );
+                            UITextOp Op = UISingleLineTextOpFromEvent(
+                                Scratch.MemPool,
+                                E,
+                                String,
+                                EditState->Cursor,
+                                EditState->Mark
+                            );
+
+                            if (Op.Kind & UI_TEXT_OP_KIND_COPY)
+                                SetClipboardText(Op.Copy);
+
+                            if (
+                                EditingComplete &&
+                                E->Slot == UI_EVENT_ACTION_SLOT_CANCEL
+                            ) {
+                                String = Str(
+                                    EditState->InitialBuffer,
+                                    EditState->InitialSize
+                                );
+                            }
+
+                            Str8 NewString = String;
+
+                            if (
+                                Op.Range.Min != Op.Range.Max ||
+                                Op.Replace.Size
+                            ) {
+                                NewString = UIPushStrReplaceRange(
+                                    Scratch.MemPool,
+                                    String,
+                                    Rng(
+                                        Op.Range.Min.Column,
+                                        Op.Range.Max.Column
+                                    ),
+                                    Op.Replace
+                                );
+                            }
+
+                            NewString.Size = MIN(
+                                NewString.Size,
+                                sizeof(EditState->InputBuffer)
+                            );
+                            MemCpy(
+                                EditState->InputBuffer,
+                                NewString.Str,
+                                NewString.Size
+                            );
+
+                            EditState->InputSize = NewString.Size;
+                            EditState->Cursor = Op.Cursor;
+                            EditState->Mark = Op.Mark;
+
+                            // NOTE(nc): a config value is committed on each
+                            //         : change, all others at the end
+                            if (
+                                !(Cell->Flags & APP_WATCH_CELL_FLAG_NO_EVAL) &&
+                                (
+                                    EditingComplete ||
+                                    Cell->Eval.Space.Kind == APP_EVAL_SPACE_KIND_META_CFG
+                                )
+                            ) {
+                                StateDirty = TRUE;
+
+                                if (!AppCommitEvalValueStr(Cell->Eval, NewString)) {
+                                    LogError(
+                                        "Could not commit value successfully"_s8
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (EditingComplete)
+                    EWV->IsTextEditing = FALSE;
+            }
+
+            // NOTE(nc): copy of the selected cells
+            if (
+                !Taken &&
+                !EWV->IsTextEditing &&
+                E->Flags & UI_EVENT_FLAG_COPY
+            ) {
+                Str8List Strings = {};
+
+                Taken = TRUE;
+
+                for (
+                    EVWindowedRowNode* RowNode = SelectedRows.Head;
+                    RowNode;
+                    RowNode = RowNode->Next
+                ) {
+                    EVRow* Row = &RowNode->Row;
+                    AppWatchRowInfo RowInfo = AppWatchRowInfoFromRow(
+                        Scratch.MemPool,
+                        Row
+                    );
+                    i64 CellX = 0;
+
+                    for (
+                        AppWatchCell* Cell = RowInfo.Cells.Head;
+                        Cell;
+                        Cell = Cell->Next, ++CellX
+                    ) {
+                        if (
+                            CellX < SelectionTable.Min.X ||
+                            CellX > SelectionTable.Max.X
+                        ) {
+                            continue;
+                        }
+
+                        AppWatchRowCellInfo CellInfo = AppInfoFromWatchRowCell(
+                            Scratch.MemPool,
+                            Row,
+                            StringFlags,
+                            &RowInfo,
+                            Cell,
+                            1024.0f
+                        );
+                        Str8 ExprString = Str8FromFancyStrList(
+                            Scratch.MemPool,
+                            &CellInfo.ExprFStrings
+                        );
+                        Str8 EvalString = Str8FromFancyStrList(
+                            Scratch.MemPool,
+                            &CellInfo.EvalFStrings
+                        );
+
+                        ListPush(Scratch.MemPool, &Strings, ExprString);
+
+                        if (ExprString.Size && EvalString.Size)
+                            ListPush(Scratch.MemPool, &Strings, " "_s8);
+
+                        ListPush(Scratch.MemPool, &Strings, EvalString);
+
+                        if (CellX < SelectionTable.Max.X)
+                            ListPush(Scratch.MemPool, &Strings, ","_s8);
+                    }
+
+                    if (RowNode->Next)
+                        ListPush(Scratch.MemPool, &Strings, "\n"_s8);
+                }
+
+                SetClipboardText(
+                    StrListJoin(Scratch.MemPool, &Strings, NULL)
+                );
+            }
+
+            // NOTE(nc): delete of the selected cells. a row of a config
+            //         : group removes its config. other cells get no value.
+            if (
+                !Taken &&
+                !EWV->IsTextEditing &&
+                E->Flags & UI_EVENT_FLAG_DELETE
+            ) {
+                ConfigNodePtrList ConfigsToRemove = {};
+
+                Taken = TRUE;
+                StateDirty = TRUE;
+                SnapToCursor = TRUE;
+
+                for (
+                    EVWindowedRowNode* RowNode = SelectedRows.Head;
+                    RowNode;
+                    RowNode = RowNode->Next
+                ) {
+                    EVRow* Row = &RowNode->Row;
+                    AppWatchRowInfo RowInfo = AppWatchRowInfoFromRow(
+                        Scratch.MemPool,
+                        Row
+                    );
+                    i64 CellX = 0;
+
+                    for (
+                        AppWatchCell* Cell = RowInfo.Cells.Head;
+                        Cell;
+                        Cell = Cell->Next, ++CellX
+                    ) {
+                        if (
+                            CellX < SelectionTable.Min.X ||
+                            CellX > SelectionTable.Max.X
+                        ) {
+                            continue;
+                        }
+
+                        if (
+                            Cell->Flags & APP_WATCH_CELL_FLAG_EXPR &&
+                            Cell->Flags & APP_WATCH_CELL_FLAG_NO_EVAL
+                        ) {
+                            if (RowInfo.GroupCfgChild != EMPTY_CFG_NODE_VALUE) {
+                                ListPush(
+                                    Scratch.MemPool,
+                                    &ConfigsToRemove,
+                                    RowInfo.GroupCfgChild
+                                );
+                            }
+                        } else {
+                            AppCommitEvalValueStr(Cell->Eval, ""_s8);
+                        }
+                    }
+                }
+
+                for (
+                    ConfigNodePtrNode* N = ConfigsToRemove.Head;
+                    N;
+                    N = N->Next
+                ) {
+                    ConfigNodeRelease(APP_STATE->Config, N->V);
+                }
+
+                if (ConfigsToRemove.Head)
+                    CursorDirtyTable = TRUE;
+            }
+
+            // NOTE(nc): move of the cursor
+            if (
+                !Taken &&
+                !EWV->IsTextEditing &&
+                !(E->Flags & UI_EVENT_FLAG_DELETE) &&
+                (E->DeltaI32.X != 0 || E->DeltaI32.Y != 0)
+            ) {
+                v2i32 Delta = E->DeltaI32;
+                b32 HasSelection = !MemCmpStruct(
+                    &SelectionTable.Min,
+                    &SelectionTable.Max
+                );
+                b32 Moved = TRUE;
+
+                if (E->Flags & UI_EVENT_FLAG_PICK_SELECT_SIDE && HasSelection) {
+                    if (Delta.X > 0 || Delta.Y > 0)
+                        CursorTable = SelectionTable.Max;
+                    else if (Delta.X < 0 || Delta.Y < 0)
+                        CursorTable = SelectionTable.Min;
+                }
+
+                if (
+                    E->Flags & UI_EVENT_FLAG_ZERO_DELTA_ON_SELECT &&
+                    HasSelection
+                ) {
+                    MemZero(&Delta, sizeof(Delta));
+                }
+
+                switch (E->DeltaStride) {
+                    default: {
+                        Moved = FALSE;
+                    } break;
+
+                    case UI_EVENT_DELTA_STRIDE_CHAR: {
+                        for EACH_ENUM(Axis2D, Axis, AXIS_2D_COUNT) {
+                            CursorTable.V[Axis] += Delta.V[Axis];
+
+                            if (CursorTable.V[Axis] < CursorTableRange.Min.V[Axis])
+                                CursorTable.V[Axis] = CursorTableRange.Max.V[Axis];
+                            else if (CursorTable.V[Axis] > CursorTableRange.Max.V[Axis])
+                                CursorTable.V[Axis] = CursorTableRange.Min.V[Axis];
+                        }
+                    } break;
+
+                    case UI_EVENT_DELTA_STRIDE_WORD:
+                    case UI_EVENT_DELTA_STRIDE_LINE: {
+                        CursorTable.X = (Delta.X > 0)
+                            ? CursorTableRange.Max.X
+                            : (Delta.X < 0)
+                                ? CursorTableRange.Min.X
+                                : CursorTable.X;
+                    } break;
+
+                    case UI_EVENT_DELTA_STRIDE_PAGE: {
+                        CursorTable.Y += (Delta.Y > 0)
+                            ? +MAX(NumPossibleVisibleRows - 1, (i64) 1)
+                            : (Delta.Y < 0)
+                                ? -MAX(NumPossibleVisibleRows - 1, (i64) 1)
+                                : 0;
+                        CursorTable.Y = Clamp(
+                            Rng((i64) 1, (i64) MAX(CursorTableRange.Max.Y, 1)),
+                            CursorTable.Y
+                        );
+                    } break;
+
+                    case UI_EVENT_DELTA_STRIDE_WHOLE: {
+                        CursorTable.Y = (Delta.Y > 0)
+                            ? CursorTableRange.Max.Y
+                            : (Delta.Y < 0)
+                                ? MIN((i64) 1, CursorTableRange.Max.Y)
+                                : CursorTable.Y;
+                    } break;
+                }
+
+                if (Moved) {
+                    Taken = TRUE;
+                    CursorDirtyTable = TRUE;
+                    SnapToCursor = TRUE;
+
+                    if (!(E->Flags & UI_EVENT_FLAG_KEEP_MARK))
+                        MarkTable = CursorTable;
+                }
+            }
+
+            if (Taken && E != &DummyEvt)
+                UIEatEvent(E);
+        }
+
+        EvalEval SelectedEval = {};
+        b32 Pressed = FALSE;
+        r1i64 VisibleRowRange = {};
+        UIScrollListParameters ScrollParams = {};
+        UIScrollListSignal ScrollListSig = {};
+
+        ScrollParams.Kind = UI_SCROLL_LIST_KIND_ALL;
+        ScrollParams.RowHeightPX = 1.0f;
+        ScrollParams.DimensionsPX = RectLength;
+        ScrollParams.ItemRange = Rng(
+            (i64) 0,
+            (i64) BlockTree.TotalRowCount - (i64) !!ImplicitRoot
+        );
+        ScrollParams.CursorMinIsEmptySelection[AXIS_2D_Y] = TRUE;
+        ScrollParams.RowBlocks = RowBlocks;
+
+        UIScrollList(
+            &ScrollParams,
+            &ScrollPosition.Y,
+            NULL,
+            NULL,
+            &VisibleRowRange,
+            &ScrollListSig
+        ) {
+            EVWindowedRowList Rows = EVWindowedRowListFromBlockRangeList(
+                Scratch.MemPool,
+                EvalView,
+                &BlockRanges,
+                Rng(
+                    (u64) VisibleRowRange.Min + 1,
+                    (u64) VisibleRowRange.Max + 2
+                )
+            );
+            u64 GlobalRowIndex = Rows.CountBeforeSemantic;
+
+            for (
+                EVWindowedRowNode* RowNode = Rows.Head;
+                RowNode;
+                RowNode = RowNode->Next, ++GlobalRowIndex
+            ) {
+                EVRow* Row = &RowNode->Row;
+                AppWatchRowInfo RowInfo = AppWatchRowInfoFromRow(
+                    Scratch.MemPool,
+                    Row
+                );
+                u64 RowHash = Hash(Row->Key);
+                u64 RowDepth = EVDepthFromBlock(Row->Block);
+                b32 RowSelected = (
+                    SelectionTable.Min.Y <= (i64) GlobalRowIndex + 1 &&
+                    (i64) GlobalRowIndex + 1 <= SelectionTable.Max.Y
+                );
+                b32 RowExpanded = EVExpansionFromKey(EvalView, Row->Key);
+                b32 NextRowExpanded = RowExpanded;
+
+                if (ImplicitRoot && RowDepth > 0)
+                    --RowDepth;
+
+                UISetNextPreferredWidth(UI_PX(ContentsWidth, 1.0f));
+                UISetNextPreferredHeight(
+                    UI_PX((f32) MAX(Row->VisualSize, (u64) 1), 1.0f)
+                );
+                UISetNextChildLayoutAxis(AXIS_2D_X);
+                UISetNextFocusHot(
+                    RowSelected ? UI_FOCUS_KIND_ON : UI_FOCUS_KIND_OFF
+                );
+
+                if (RowSelected)
+                    UISetNextTag("pop"_s8);
+
+                UIBox* RowBox = UIBuildBoxFromStrFmt(
+                    (
+                        UI_BOX_KIND_DISABLE_FOCUS_OVERLAY |
+                        (!!RowSelected * UI_BOX_KIND_DRAW_BACKGROUND)
+                    ),
+                    "###row_%llx",
+                    RowHash
+                );
+
+                UIParent(RowBox) {
+                    i64 CellX = 0;
+
+                    for (
+                        AppWatchCell* Cell = RowInfo.Cells.Head;
+                        Cell;
+                        Cell = Cell->Next, ++CellX
+                    ) {
+                        f32 CellWidth = FloorF32(
+                            Cell->PX + Cell->Percent * ContentsWidth
+                        );
+                        u64 CellID = AppIDFromWatchCell(Cell);
+                        AppWatchPoint CellPoint = {
+                            Row->Block->Key,
+                            Row->Key,
+                            CellID
+                        };
+                        AppWatchViewTextEditState* CellEditState = AppWatchViewTextEditStateFromPoint(
+                            EWV,
+                            CellPoint
+                        );
+                        b32 CellSelected = (
+                            RowSelected &&
+                            SelectionTable.Min.X <= CellX &&
+                            CellX <= SelectionTable.Max.X
+                        );
+                        b32 CellIsEdited = (
+                            CellSelected &&
+                            EWV->IsTextEditing &&
+                            CellEditState != &EWV->__TextEditState
+                        );
+                        AppWatchRowCellInfo CellInfo = AppInfoFromWatchRowCell(
+                            UIBuildMemPool(),
+                            Row,
+                            StringFlags,
+                            &RowInfo,
+                            Cell,
+                            CellWidth
+                        );
+                        EvalType* CellType = EvalTypeFromKey(
+                            Cell->Eval.IRTree.TypeKey
+                        );
+                        EvalEval CellValueEval = EvalValueEvalFromEval(
+                            Cell->Eval
+                        );
+                        b32 CellHasValue = (
+                            !(Cell->Flags & APP_WATCH_CELL_FLAG_NO_EVAL) &&
+                            Cell->Eval.IRTree.Mode != EVAL_MODE_NULL
+                        );
+                        b32 IsToggleSwitch = (
+                            CellHasValue &&
+                            EvalTypeKindFromKey(
+                                EvalTypeKeyUnwrap(
+                                    Cell->Eval.IRTree.TypeKey,
+                                    EVAL_TYPE_UNWRAP_FLAG_ALL_DECORATIVE
+                                )
+                            ) == EVAL_TYPE_KIND_BOOL
+                        );
+                        b32 IsSlider = (
+                            CellHasValue &&
+                            CellType->Kind == EVAL_TYPE_KIND_LENS &&
+                            StrMatch(CellType->Name, "range1"_s8, 0) &&
+                            CellType->Args &&
+                            CellType->Count >= 2
+                        );
+                        b32 CellToggled = (CellValueEval.Value.U64 != 0);
+                        b32 NextCellToggled = CellToggled;
+                        f64 SliderMin = 0.0;
+                        f64 SliderMax = 0.0;
+                        f64 SliderValue = 0.0;
+                        EvalTypeKind SliderTypeKind = EVAL_TYPE_KIND_NULL;
+
+                        if (CellSelected)
+                            SelectedEval = Cell->Eval;
+
+                        // NOTE(nc): the slider range is read as f64 values
+                        if (IsSlider) {
+                            EvalTypeKey SliderTypeKey = EvalTypeKeyUnwrap(
+                                CellType->DirectTypeKey,
+                                EVAL_TYPE_UNWRAP_FLAG_ALL_DECORATIVE
+                            );
+
+                            SliderTypeKind = EvalTypeKindFromKey(SliderTypeKey);
+
+                            EvalParentKey(Cell->Eval.Key) {
+                                SliderMin = EvalValueFromKey(
+                                    EvalKeyWrap(
+                                        EvalKeyFromExpr(CellType->Args[0]),
+                                        "(f64)$"
+                                    )
+                                ).F64;
+                                SliderMax = EvalValueFromKey(
+                                    EvalKeyWrap(
+                                        EvalKeyFromExpr(CellType->Args[1]),
+                                        "(f64)$"
+                                    )
+                                ).F64;
+                            }
+
+                            SliderValue = (SliderTypeKind == EVAL_TYPE_KIND_F32)
+                                ? (f64) CellValueEval.Value.F32
+                                : (SliderTypeKind == EVAL_TYPE_KIND_F64)
+                                    ? CellValueEval.Value.F64
+                                    : (f64) CellValueEval.Value.I64;
+                            IsSlider = (SliderMax > SliderMin);
+                        }
+
+                        f32 CellSliderValue = IsSlider
+                            ? (f32) ((SliderValue - SliderMin) / (SliderMax - SliderMin))
+                            : 0.0f;
+                        f32 NextCellSliderValue = CellSliderValue;
+                        UISignal Sig = {};
+
+                        UISetNextPreferredWidth(
+                            UI_PX(
+                                CellWidth, 
+                                Cell->PX != 0.0f 
+                                    ? 1.0f 
+                                    : 0.0f
+                            )
+                        );
+                        UISetNextChildLayoutAxis(AXIS_2D_X);
+
+                        UIBox* CellBox = UIBuildBoxFromStrFmt(
+                            (CellX > 0) * UI_BOX_KIND_DRAW_SIDE_LEFT,
+                            "###cell_%llx_%llx",
+                            RowHash,
+                            CellID
+                        );
+
+                        if (Cell->Kind == APP_WATCH_CELL_KIND_EVAL)
+                        UIParent(CellBox) {
+                            UIFocusHot(
+                                CellSelected
+                                    ? UI_FOCUS_KIND_ON
+                                    : UI_FOCUS_KIND_OFF
+                            ) {
+                                UIFocusActive(
+                                    CellIsEdited
+                                        ? UI_FOCUS_KIND_ON
+                                        : UI_FOCUS_KIND_OFF
+                                ) {
+                                    AppCellParams CellParams = {};
+                                    Str8 Needle = Filter;
+                                    b32 IsFirstCell = (Cell == RowInfo.Cells.Head);
+
+                                    if (Cell->Eval.Space.Kind == EVAL_SPACE_KIND_FILESYSTEM)
+                                        Needle = StrSkipLastSlash(Needle);
+
+                                    CellParams.Kind = (
+                                        APP_CELL_KIND_KEYBOARD_CLICKABLE |
+                                        APP_CELL_KIND_NO_BACKGROUND
+                                    );
+                                    CellParams.Depth = !!(Cell->Flags & APP_WATCH_CELL_FLAG_INDENTED) * (i32) RowDepth;
+                                    CellParams.Cursor = &CellEditState->Cursor;
+                                    CellParams.Mark = &CellEditState->Mark;
+                                    CellParams.EditBuffer = CellEditState->InputBuffer;
+                                    CellParams.EditBufferSize = sizeof(CellEditState->InputBuffer);
+                                    CellParams.EditStringSize = &CellEditState->InputSize;
+                                    CellParams.IsExpanded = &NextRowExpanded;
+                                    CellParams.SearchNeedle = Needle;
+                                    CellParams.MetaFancyStrings = CellInfo.ExprFStrings;
+                                    CellParams.ValueFancyStrings = CellInfo.EvalFStrings;
+                                    CellParams.Description = CellInfo.Description;
+
+                                    if (!CellIsEdited)
+                                        CellParams.Kind |= APP_CELL_KIND_DISABLE_EDIT;
+
+                                    if (
+                                        CellIsEdited &&
+                                        Cell->Flags & APP_WATCH_CELL_FLAG_NO_EVAL
+                                    ) {
+                                        MemZero(
+                                            &CellParams.MetaFancyStrings,
+                                            sizeof(CellParams.MetaFancyStrings)
+                                        );
+                                    }
+
+                                    if (RowInfo.CanExpand && IsFirstCell)
+                                        CellParams.Kind |= APP_CELL_KIND_EXPANDER;
+                                    else if (RowDepth != 0 && IsFirstCell)
+                                        CellParams.Kind |= APP_CELL_KIND_EXPANDER_SPACE;
+
+                                    if (CellInfo.Flags & APP_WATCH_CELL_FLAG_ACTIVATE_WITH_SINGLE_CLICK)
+                                        CellParams.Kind |= APP_CELL_KIND_SINGLE_CLICK_ACTIVATE;
+
+                                    if (CellInfo.Flags & APP_WATCH_CELL_FLAG_BTN)
+                                        CellParams.Kind |= APP_CELL_KIND_BTN;
+
+                                    if (CellInfo.Flags & APP_WATCH_CELL_FLAG_BACKGROUND)
+                                        CellParams.Kind &= ~APP_CELL_KIND_NO_BACKGROUND;
+
+                                    if (IsToggleSwitch) {
+                                        CellParams.Kind |= APP_CELL_KIND_TOGGLE_SWITCH;
+                                        CellParams.IsToggled = &NextCellToggled;
+                                    }
+
+                                    if (IsSlider) {
+                                        CellParams.Kind |= APP_CELL_KIND_SLIDER;
+                                        CellParams.SliderValue = &NextCellSliderValue;
+                                    }
+
+                                    if (
+                                        Cell->PX == 0.0f &&
+                                        CellInfo.CommandName.Size &&
+                                        AppCommandKindInfoFromStr(
+                                            CellInfo.CommandName
+                                        )->Flags & APP_COMMAND_KIND_FLAG_LIST_IN_UI
+                                    ) {
+                                        CellParams.Kind |= APP_CELL_KIND_BINDINGS;
+                                        CellParams.BindingsName = CellInfo.CommandName;
+                                    }
+
+                                    UITextAlignment(
+                                        Cell->PX != 0.0f
+                                            ? UI_TEXT_ALIGN_CENTRE
+                                            : UI_TEXT_ALIGN_LEFT
+                                    ) {
+                                        UIWidthFill() {
+                                            Sig = AppCell(
+                                                &CellParams,
+                                                "###%llx_row_%llx",
+                                                CellX,
+                                                RowHash
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (UI_HOVERING(Sig) && CellInfo.ErrorTooltip.Size) {
+                            UITooltip() {
+                                UIPreferredWidth(UI_TEXT_DIM(2.0f, 1.0f)) {
+                                    UILabel(CellInfo.ErrorTooltip);
+                                }
+                            }
+                        }
+
+                        if (
+                            UI_PRESSED(Sig) &&
+                            !(Sig.Kind & UI_SIGNAL_KIND_KEYBOARD_PRESSED) &&
+                            !(CellInfo.Flags & APP_WATCH_CELL_FLAG_ACTIVATE_WITH_SINGLE_CLICK)
+                        ) {
+                            EWV->NextCursor = CellPoint;
+                            EWV->NextMark = CellPoint;
+                            Pressed = TRUE;
+                        }
+
+                        b32 IsSingleClick = (
+                            IsLister ||
+                            !!(CellInfo.Flags & APP_WATCH_CELL_FLAG_ACTIVATE_WITH_SINGLE_CLICK)
+                        );
+                        b32 IsKeyboard = !!(
+                            Sig.Kind & UI_SIGNAL_KIND_KEYBOARD_PRESSED
+                        );
+
+                        if (
+                            (!IsSingleClick && UI_DOUBLE_CLICKED(Sig)) ||
+                            (IsSingleClick && Sig.Kind & UI_SIGNAL_KIND_LEFT_CLICKED) ||
+                            IsKeyboard
+                        ) {
+                            if (IsLister) {
+                                if (IsToggleSwitch && (IsLister || IsKeyboard)) {
+                                    NextCellToggled = !CellToggled;
+                                } else if (IsLister) {
+                                    // NOTE(nc): a value is edited. all other
+                                    //         : rows are accepted by the mouse
+                                    //         : through the accept event
+                                    if (CellInfo.Flags & APP_WATCH_CELL_FLAG_CAN_EDIT) {
+                                        EWV->NextCursor = CellPoint;
+                                        EWV->NextMark = CellPoint;
+                                        AppCmd(APP_COMMAND_KIND_EDIT);
+                                    }
+                                } else if (!IsKeyboard) {
+                                    EWV->NextCursor = CellPoint;
+                                    EWV->NextMark = CellPoint;
+                                    AppCmd(APP_COMMAND_KIND_ACCEPT);
+                                }
+                            } else if (CellInfo.CommandName.Size) {
+                                AppCommandKindInfo* CommandKindInfo = AppCommandKindInfoFromStr(
+                                    CellInfo.CommandName
+                                );
+
+                                AppRegistersScope() {
+                                    AppRegistersSlot Slot = AppRegistersFillSlotFromCellCtx(
+                                        Row
+                                    );
+
+                                    if (
+                                        Slot == CommandKindInfo->Query.Slot ||
+                                        !(CommandKindInfo->Query.Kind & APP_QUERY_KIND_REQUIRED)
+                                    ) {
+                                        AppPushCmd(
+                                            CellInfo.CommandName,
+                                            Registers()
+                                        );
+                                    } else {
+                                        AppCmd(
+                                            APP_COMMAND_KIND_RUN_COMMAND,
+                                            __Registers.CommandName = CellInfo.CommandName
+                                        );
+                                    }
+                                }
+                            } else if (
+                                !IsKeyboard &&
+                                CellInfo.Flags & APP_WATCH_CELL_FLAG_CAN_EDIT &&
+                                !IsToggleSwitch
+                            ) {
+                                EWV->NextCursor = CellPoint;
+                                EWV->NextMark = CellPoint;
+                                AppCmd(APP_COMMAND_KIND_EDIT);
+                            } else if (IsKeyboard && RowInfo.CanExpand) {
+                                NextRowExpanded = !RowExpanded;
+                            } else if (IsKeyboard) {
+                                // NOTE(nc): accept on a row with a value:
+                                //         : a bool changes, others are edited
+                                for (
+                                    AppWatchCell* C = RowInfo.Cells.Head;
+                                    C;
+                                    C = C->Next
+                                ) {
+                                    if (
+                                        C->Flags & APP_WATCH_CELL_FLAG_NO_EVAL ||
+                                        C->Eval.IRTree.Mode != EVAL_MODE_OFFSET ||
+                                        !EVTypeKeyIsEditable(C->Eval.IRTree.TypeKey)
+                                    ) {
+                                        continue;
+                                    }
+
+                                    b32 IsBool = (
+                                        EvalTypeKindFromKey(
+                                            EvalTypeKeyUnwrap(
+                                                C->Eval.IRTree.TypeKey,
+                                                EVAL_TYPE_UNWRAP_FLAG_ALL_DECORATIVE
+                                            )
+                                        ) == EVAL_TYPE_KIND_BOOL
+                                    );
+
+                                    if (IsBool) {
+                                        AppCommitEvalValueStr(
+                                            C->Eval,
+                                            EvalValueEvalFromEval(C->Eval).Value.U64
+                                                ? "0"_s8
+                                                : "1"_s8
+                                        );
+                                    } else {
+                                        AppWatchPoint EditPoint = {
+                                            Row->Block->Key,
+                                            Row->Key,
+                                            AppIDFromWatchCell(C)
+                                        };
+
+                                        EWV->NextCursor = EditPoint;
+                                        EWV->NextMark = EditPoint;
+                                        AppCmd(APP_COMMAND_KIND_EDIT);
+                                    }
+
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (NextCellToggled != CellToggled) {
+                            AppCommitEvalValueStr(
+                                Cell->Eval,
+                                NextCellToggled ? "1"_s8 : "0"_s8
+                            );
+                        }
+
+                        if (NextCellSliderValue != CellSliderValue) {
+                            f64 NewValue = CLAMP(
+                                SliderMin,
+                                SliderMin + (f64) NextCellSliderValue * (SliderMax - SliderMin),
+                                SliderMax
+                            );
+                            Str8 NewValueString = (
+                                SliderTypeKind == EVAL_TYPE_KIND_F32 ||
+                                SliderTypeKind == EVAL_TYPE_KIND_F64
+                            )
+                                ? ArenaPushStrFmt(Scratch.MemPool, "%f", NewValue)
+                                : ArenaPushStrFmt(
+                                    Scratch.MemPool,
+                                    "%lld",
+                                    (i64) NewValue
+                                );
+
+                            AppCommitEvalValueStr(Cell->Eval, NewValueString);
+                        }
+                    }
+                }
+
+                if (
+                    NextRowExpanded != RowExpanded &&
+                    Row->Key != EVKeyRoot()
+                ) {
+                    EVKeySetExpansion(
+                        EvalView,
+                        Row->Block->Key,
+                        Row->Key,
+                        NextRowExpanded
+                    );
+                }
+            }
+        }
+
+        if (!IsLister) {
+            Registers()->Expression = EvalFullExprFromKey(
+                AppFrameMemPool(),
+                SelectedEval.Key
+            );
+
+            if (Pressed && !APP_STATE->QueryIsActive)
+                AppCmd(APP_COMMAND_KIND_FOCUS_PANEL);
+        }
+
+        VS->ContentsAreFocused = EWV->IsTextEditing;
+        AppStoreViewScrollPosition(ScrollPosition);
+    }
+
+    ReleaseScratch(Scratch);
+}
+
+
+// NOTE(nc): the floating query. it is a watch view with a search row.
+//         : the view is 'immediate.window_query.watch' (see PUSH_QUERY).
+INTERNAL void
+AppFloatingQueryUI(r2f32 Rect)
 {
     TempArena Scratch = GetScratch(NULL, 0);
     AppRegisters* QueryRegs = APP_STATE->QueryRegs;
+    ConfigNode* WindowQuery = AppImmediateConfigFromKey("window_query"_s8);
+    ConfigNode* View = ConfigNodeChildFromStrOrAlloc(
+        APP_STATE->Config,
+        WindowQuery,
+        "watch"_s8
+    );
+    ConfigNode* Query = ConfigNodeChildFromStrOrAlloc(
+        APP_STATE->Config,
+        View,
+        "query"_s8
+    );
+    ConfigNode* InputRoot = ConfigNodeChildFromStrOrAlloc(
+        APP_STATE->Config,
+        Query,
+        "input"_s8
+    );
+    ConfigNode* Expression = ConfigNodeChildFromStrOrAlloc(
+        APP_STATE->Config,
+        View,
+        "expression"_s8
+    );
+    AppViewState* VS = AppViewStateFromConfig(View);
     Str8 CommandName = QueryRegs->CommandName;
     AppCommandKindInfo* Info = AppCommandKindInfoFromStr(CommandName);
-    Str8 Expression = QueryRegs->Expression;
-    b32 IsFilePath = (
-        AppQueryExpressionKindFromStr(
-            Expression
-        ) == APP_QUERY_EXPR_KIND_FILE_PATH
-    );
-    Str8 Input = Str(APP_STATE->QueryBuffer, APP_STATE->QueryStringSize);
-    Str8 Needle = IsFilePath ? StrSkipLastSlash(Input) : Input;
-    AppQueryResultList Results = AppQueryResultsFromExpression(
-        Scratch.MemPool,
-        Expression,
-        Input
-    );
-    AppQueryResult** Rows = ArenaPushArrayZero(
-        Scratch.MemPool,
-        AppQueryResult*,
-        Results.Count
-    );
-    u64 RowsCount = 0;
+    Str8 QueryExpression = QueryRegs->Expression;
+    Str8 Input = ArenaPushStrCpy(Scratch.MemPool, InputRoot->Head->String);
 
-    for (AppQueryResultNode* N = Results.Head; N; N = N->Next) {
-        FMRangeList NameMatches = FuzzyFind(
-            Scratch.MemPool,
-            Needle,
-            N->V.DisplayString
-        );
-        FMRangeList TagsMatches = FuzzyFind(
-            Scratch.MemPool,
-            Needle,
-            N->V.SearchTags
-        );
+    if (!QueryExpression.Size && CommandName.Size)
+        QueryExpression = Info->Query.Expression;
 
-        if (
-            NameMatches.Count == NameMatches.StrPartCount ||
-            TagsMatches.Count == TagsMatches.StrPartCount
-        ) {
-            Rows[RowsCount++] = &N->V;
-        }
-    }
+    VS->QueryStringSize = MIN(sizeof(VS->QueryBuffer), Input.Size);
+    MemCpy(VS->QueryBuffer, Input.Str, VS->QueryStringSize);
 
     v2f32 RectLength = Length(Rect);
     f32 Width = CLAMP(20.0f, RectLength.X - 8.0f, 76.0f);
@@ -5463,294 +7898,160 @@ AppQueryViewUI(r2f32 Rect)
         Rect.X0 + FloorF32((RectLength.X - Width) / 2.0f) + Width,
         Rect.Y0 + 1.0f + ListHeight + 4.0f
     );
-    AppQueryResult* Accepted = NULL;
-    b32 IsAccepted = FALSE;
-    UISignal EditSig = {};
-
-    APP_STATE->TextEditMode = TRUE;
-    APP_STATE->QueryListCursor.Y = MIN(
-        APP_STATE->QueryListCursor.Y, 
-        (i64) RowsCount
+    r2f32 ListRect = Rng(
+        ListerRect.X0 + 1.0f,
+        ListerRect.Y0 + 3.0f,
+        ListerRect.X1 - 1.0f,
+        ListerRect.Y0 + 3.0f + ListHeight
     );
-    APP_STATE->QueryListMark = APP_STATE->QueryListCursor;
 
-    UIFocus(UI_FOCUS_KIND_ON) {
-        UITag("floating"_s8) {
-            UISetNextFlags(UI_BOX_KIND_DRAW_DROP_SHADOW);
+    AppRegistersScope(__Registers.View = View->ID) {
+        UIFocus(UI_FOCUS_KIND_ON) {
+            UITag("floating"_s8) {
+                UISetNextFlags(UI_BOX_KIND_DRAW_DROP_SHADOW);
 
-            UIPane(ListerRect, "###query_lister"_s8) {
-                Str8 InputPreEdit = ArenaPushStrCpy(Scratch.MemPool, Input);
+                UIPane(ListerRect, "###query_lister"_s8) {
+                    UISpacer(UI_PX(1.0f, 1.0f));
+                    UISetNextPreferredHeight(UI_PX(ListHeight + 2.0f, 1.0f));
+                    UIRowBegin();
+                    UISpacer(UI_PX(1.0f, 1.0f));
+                    UISetNextPreferredWidth(UI_PX(Width - 2.0f, 1.0f));
+                    UISetNextPreferredHeight(UI_PERCENT(1.0f, 0.0f));
+                    UIColumnBegin();
 
-                UISpacer(UI_PX(1.0f, 1.0f));
-                UISetNextPreferredHeight(UI_PX(ListHeight + 2.0f, 1.0f));
-                UIRowBegin();
-                UISpacer(UI_PX(1.0f, 1.0f));
-                UISetNextPreferredWidth(UI_PX(Width - 2.0f, 1.0f));
-                UISetNextPreferredHeight(UI_PERCENT(1.0f, 0.0f));
-                UIColumnBegin();
-
-                UIWidthFill() {
-                    UINamedRow("###query_input_row"_s8) {
-                        UIBox* InputRow = UIHeadParent();
-                        UIKey InputKey = UIKeyFromStr(
-                            InputRow->Key,
-                            "###query_input"_s8
-                        );
-
-                        InputRow->DefaultNavFocusActiveKey = InputKey;
-                        InputRow->DefaultNavFocusNextActiveKey = InputKey;
-
-                        UIPreferredWidth(UI_TEXT_DIM(2.0f, 1.0f)) {
-                            UITag("weak"_s8) {
-                                UILabel(APP_ICON_KIND_TEXT_TABLE[APP_ICON_KIND_FIND]);
-
-                                if (CommandName.Size) {
+                    UIPreferredHeight(UI_PX(1.0f, 1.0f)) {
+                        UINamedRow("###query_input_row"_s8) {
+                            UIPreferredWidth(UI_TEXT_DIM(2.0f, 1.0f)) {
+                                UITag("weak"_s8) {
                                     UILabel(
-                                        AppVocabInfoFromCodeName(
-                                            Info->String
-                                        )->DisplayName
+                                        APP_ICON_KIND_TEXT_TABLE[APP_ICON_KIND_FIND]
                                     );
+
+                                    if (CommandName.Size) {
+                                        UILabel(
+                                            AppDisplayFromCodeName(Info->String)
+                                        );
+                                    }
+                                }
+                            }
+
+                            UIFocus(
+                                VS->ContentsAreFocused
+                                    ? UI_FOCUS_KIND_OFF
+                                    : UI_FOCUS_KIND_ON
+                            ) {
+                                UITag("alt"_s8) {
+                                    UIWidthFill() {
+                                        AppCellParams Params = {};
+
+                                        Params.Cursor = &VS->QueryCursor;
+                                        Params.Mark = &VS->QueryMark;
+                                        Params.EditBuffer = VS->QueryBuffer;
+                                        Params.EditBufferSize = sizeof(VS->QueryBuffer);
+                                        Params.EditStringSize = &VS->QueryStringSize;
+                                        Params.PreEditValue = Input;
+                                        AppCell(&Params, "###query_input"_s8);
+                                    }
                                 }
                             }
                         }
-
-                        UITag("alt"_s8) {
-                            EditSig = UILineEdit(
-                                &APP_STATE->QueryCursor,
-                                &APP_STATE->QueryMark,
-                                APP_STATE->QueryBuffer,
-                                sizeof(APP_STATE->QueryBuffer),
-                                &APP_STATE->QueryStringSize,
-                                Input,
-                                "###query_input"_s8
-                            );
-                        }
-                    }
-
-                    if (
-                        !StrMatch(
-                            InputPreEdit,
-                            Str(APP_STATE->QueryBuffer, APP_STATE->QueryStringSize),
-                            0
-                        )
-                    ) {
-                        APP_STATE->QueryListCursor = {};
-                        APP_STATE->QueryListCursor.Y = IsFilePath ? 0 : 1;
-                        APP_STATE->QueryListMark = APP_STATE->QueryListCursor;
-                        APP_STATE->QueryScroll = {};
-                        AppRequestFrame();
                     }
 
                     UIDivider(UI_PX(1.0f, 1.0f));
 
-                    UIScrollListParameters Params = {};
-                    UIScrollListSignal ListSig = {};
-                    r1i64 Visible = {};
+                    // NOTE(nc): the input goes to the view before the rows
+                    //         : are made, the rows use it as the filter
+                    Str8 NewInput = Str(VS->QueryBuffer, VS->QueryStringSize);
+                    u64 InputPosition = StrFindSubStr(
+                        QueryExpression,
+                        "$input"_s8,
+                        0,
+                        0
+                    );
 
-                    Params.Kind = UI_SCROLL_LIST_KIND_ALL;
-                    Params.DimensionsPX = Vec(Width - 2.0f, ListHeight);
-                    Params.RowHeightPX = 1.0f;
-                    Params.CursorRange.Max.Y = (i64) RowsCount;
-                    Params.ItemRange = Rng((i64) 0, (i64) RowsCount);
-                    Params.CursorMinIsEmptySelection[AXIS_2D_Y] = TRUE;
+                    if (!StrMatch(NewInput, Input, 0))
+                        AppRequestFrame();
 
-                    UIScrollList(
-                        &Params,
-                        &APP_STATE->QueryScroll,
-                        &APP_STATE->QueryListCursor,
-                        &APP_STATE->QueryListMark,
-                        &Visible,
-                        &ListSig
-                    ) {
-                        for (
-                            i64 Row = Visible.Min;
-                            Row <= Visible.Max && Row < (i64) RowsCount;
-                            ++Row
-                        ) {
-                            AppQueryResult* Entry = Rows[Row];
-                            b32 IsCursor = (
-                                APP_STATE->QueryListCursor.Y == Row + 1
-                            );
-                            FMRangeList Matches = FuzzyFind(
-                                Scratch.MemPool,
-                                Needle,
-                                Entry->DisplayString
-                            );
-                            Str8 Note = Entry->Description;
+                    ConfigNodeNewReplace(APP_STATE->Config, InputRoot, NewInput);
 
-                            UITag(
-                                IsCursor 
-                                    ? "pop"_s8 
-                                    : ""_s8
-                            ) {
-                                UISetNextChildLayoutAxis(AXIS_2D_X);
-
-                                UIBox* RowBox = UIBuildBoxFromStrFmt(
-                                    (
-                                        UI_BOX_KIND_MOUSE_CLICKABLE |
-                                        UI_BOX_KIND_DRAW_BACKGROUND |
-                                        UI_BOX_KIND_DRAW_HOT_EFFECTS
-                                    ),
-                                    "###query_row_%lld",
-                                    Row
-                                );
-
-                                UIParent(RowBox) {
-                                    UIPreferredWidth(UI_TEXT_DIM(2.0f, 1.0f)) {
-                                        if (Entry->IconKind != APP_ICON_KIND_NULL) {
-                                            UITag("weak"_s8) {
-                                                UILabel(
-                                                    APP_ICON_KIND_TEXT_TABLE[Entry->IconKind]
-                                                );
-                                            }
-                                        }
-
-                                        UIBox* LabelBox = UILabel(
-                                            Entry->DisplayString
-                                        ).Box;
-
-                                        UIBoxEquipFuzzyMatchRanges(
-                                            LabelBox, 
-                                            &Matches
-                                        );
-                                        UISpacer(UI_PERCENT(1.0f, 0.0f));
-
-                                        if (Entry->CommandInfo) {
-                                            AppCommandBindingButtons(
-                                                Entry->String,
-                                                ""_s8,
-                                                U64_MAX,
-                                                APP_COMMAND_BINDING_BTN_FLAG_ADD_NEW
-                                            );
-                                        } else if (Note.Size) {
-                                            UITag("weak"_s8) {
-                                                UILabel(Note);
-                                            }
-                                        }
-                                    }
-                                }
-
-                                UISignal RowSig = UISignalFromBox(RowBox);
-
-                                if (UI_PRESSED(RowSig)) {
-                                    APP_STATE->QueryListCursor.Y = Row + 1;
-                                    APP_STATE->QueryListMark = APP_STATE->QueryListCursor;
-                                }
-
-                                if (UI_CLICKED(RowSig)) {
-                                    Accepted = Entry;
-                                    IsAccepted = TRUE;
-                                }
-                            }
-                        }
+                    if (!QueryExpression.Size) {
+                        QueryExpression = NewInput;
+                    } else if (InputPosition < QueryExpression.Size) {
+                        QueryExpression = ArenaPushStrFmt(
+                            Scratch.MemPool,
+                            "%S%S%S",
+                            PRINT_STR(StrPrefix(QueryExpression, InputPosition)),
+                            PRINT_STR(
+                                EVEscapedFromRawStr(Scratch.MemPool, NewInput)
+                            ),
+                            PRINT_STR(
+                                StrSkip(QueryExpression, InputPosition + 6)
+                            )
+                        );
                     }
 
-                    APP_STATE->QueryScroll.Offset = 0.0f;
-                }
-
+                    ConfigNodeNewReplace(
+                        APP_STATE->Config,
+                        Expression,
+                        QueryExpression
+                    );
+                    AppWatchViewUI(ListRect);
                     UIColumnEnd();
                     UIRowEnd();
-            }
-        }
-
-        for (UIEvent* Evt = NULL; UINextEvent(&Evt); ) {
-            if (
-                Evt->Kind == UI_EVENT_KIND_PRESS &&
-                Evt->Input == INPUT_KIND_LEFT_MOUSE_BTN &&
-                !InRange(ListerRect, Evt->Position)
-            ) {
-                AppCmd(APP_COMMAND_KIND_CANCEL_QUERY);
-                break;
-            }
-        }
-
-        if (UISlotPress(UI_EVENT_ACTION_SLOT_CANCEL))
-            AppCmd(APP_COMMAND_KIND_CANCEL_QUERY);
-
-        if (
-            UI_COMMITTED(EditSig) ||
-            UISlotPress(UI_EVENT_ACTION_SLOT_ACCEPT)
-        ) {
-            IsAccepted = TRUE;
-
-            if (APP_STATE->QueryListCursor.Y > 0)
-                Accepted = Rows[APP_STATE->QueryListCursor.Y - 1];
-            else if (!IsFilePath && RowsCount)
-                Accepted = Rows[0];
-        }
-    }
-
-    if (
-        IsAccepted && 
-        IsFilePath && 
-        Accepted && 
-        Accepted->IconKind == APP_ICON_KIND_FOLDER
-    ) {
-        Str8 NewInput = ArenaPushStrFmt(
-            Scratch.MemPool,
-            "%S/",
-            PRINT_STR(Accepted->String)
-        );
-
-        APP_STATE->QueryStringSize = MIN(
-            sizeof(APP_STATE->QueryBuffer), 
-            NewInput.Size
-        );
-        MemCpy(
-            APP_STATE->QueryBuffer, 
-            NewInput.Str, 
-            APP_STATE->QueryStringSize
-        );
-        APP_STATE->QueryCursor = TxtPt(1, 1 + APP_STATE->QueryStringSize);
-        APP_STATE->QueryMark = APP_STATE->QueryCursor;
-        APP_STATE->QueryListCursor = {};
-        APP_STATE->QueryListMark = {};
-        APP_STATE->QueryScroll = {};
-        AppRequestFrame();
-    } else if (IsAccepted && (Accepted || IsFilePath)) {
-        Str8 Value = Accepted 
-            ? Accepted->String 
-            : StrTrimLastSlash(Input);
-
-        AppCmd(APP_COMMAND_KIND_CANCEL_QUERY);
-
-        AppRegistersScope() {
-            CopyRegisters(AppFrameMemPool(), Registers(), QueryRegs);
-
-            if (!CommandName.Size) {
-                AppCmd(
-                    APP_COMMAND_KIND_RUN_COMMAND,
-                    __Registers.CommandName = Value,
-                    __Registers.Expression = ""_s8
-                );
-            } else {
-                AppRegistersFillSlotFromStr(
-                    Info->Query.Slot, 
-                    Expression, 
-                    Value
-                );
-
-                if (Accepted && Accepted->CfgID)
-                    Registers()->Config = Accepted->CfgID;
-
-                if (
-                    Accepted &&
-                    !IsFilePath &&
-                    Info->Query.Slot == APP_REGISTERS_SLOT_FILE_PATH
-                ) {
-                    Registers()->FilePath = ArenaPushStrCpy(
-                        AppFrameMemPool(),
-                        Accepted->String
-                    );
                 }
 
-                Registers()->Expression = ""_s8;
-                AppPushCmd(CommandName, Registers());
+                for (UIEvent* Evt = NULL; UINextEvent(&Evt); ) {
+                    if (
+                        Evt->Kind == UI_EVENT_KIND_PRESS &&
+                        Evt->Input == INPUT_KIND_LEFT_MOUSE_BTN &&
+                        !InRange(ListerRect, Evt->Position)
+                    ) {
+                        AppCmd(APP_COMMAND_KIND_CANCEL_QUERY);
+                        break;
+                    }
+                }
+
+                if (UISlotPress(UI_EVENT_ACTION_SLOT_CANCEL))
+                    AppCmd(APP_COMMAND_KIND_CANCEL_QUERY);
+
+                // NOTE(nc): the watch view did not use the accept, the
+                //         : command gets the input text
+                if (
+                    CommandName.Size &&
+                    UISlotPress(UI_EVENT_ACTION_SLOT_ACCEPT)
+                ) {
+                    AppRegistersFillSlotFromStr(
+                        Info->Query.Slot,
+                        ""_s8,
+                        Str(VS->QueryBuffer, VS->QueryStringSize)
+                    );
+                    AppCmd(APP_COMMAND_KIND_COMPLETE_QUERY);
+                }
             }
         }
     }
 
+    VS->LastFrameIndexBuilt = APP_STATE->FrameIndex;
     ReleaseScratch(Scratch);
+}
+
+UISignal
+AppCell(AppCellParams* Params, char* Fmt, ...)
+{
+    TempArena Scratch = GetScratch(NULL, 0);
+    va_list Args;
+
+    va_start(Args, Fmt);
+
+    Str8 String = ArenaPushStrFmtV(Scratch.MemPool, Fmt, Args);
+
+    va_end(Args);
+
+    UISignal Sig = AppCell(Params, String);
+
+    ReleaseScratch(Scratch);
+
+    return Sig;
 }
 
 UISignal 
@@ -6842,6 +9143,10 @@ AppFrame(void)
                     }
 
                     ArenaRelease(VS->MemPool);
+
+                    if (VS->EvalView)
+                        EVViewRelease(VS->EvalView);
+
                     DLL_REMOVE_EX(
                         NULL,
                         APP_STATE->ViewStateSlots[SlotIndex].Head,
@@ -7384,15 +9689,15 @@ AppFrame(void)
             );
         }
 
-        Str8 EvalCfgNames[] = {
-            "recent_session"_s8
-        };
-
-        for (u64 Index = 0; Index < ARRAY_COUNT(EvalCfgNames); ++Index) {
-            Str8 CfgName = EvalCfgNames[Index];
-            Str8 CollectionName = AppPluralFromCodeName(CfgName);
+        for (
+            u64 Index = 0;
+            Index < ARRAY_COUNT(APP_CONFIG_COLLECTION_TABLE);
+            ++Index
+        ) {
+            Str8 CollectionName = APP_CONFIG_COLLECTION_TABLE[Index].Name;
             EvalTypeKey CollectionTypeKey = EvalTypeKeyConstruct(
                 __Params.Kind = EVAL_TYPE_KIND_SET,
+                __Params.Name = CollectionName,
                 __Params.IRExtFunc = EVAL_TYPE_IR_EXT_FUNC_NAME(ConfigsSlice),
                 __Params.AccessFunc = EVAL_TYPE_ACCESS_FUNC_NAME(ConfigsSlice),
                 __Params.ExpandRule.ExpandInfoFunc = EVAL_TYPE_EXPAND_INFO_FUNC_NAME(ConfigsSlice),
@@ -7872,7 +10177,8 @@ AppFrame(void)
                         AppCmd(
                             APP_COMMAND_KIND_PUSH_QUERY,
                             __Registers.CommandName = ""_s8,
-                            __Registers.Expression = "commands"_s8
+                            __Registers.Expression = "query:commands"_s8,
+                            __Registers.DoLister = TRUE
                         );
                     } break;
 
@@ -7892,7 +10198,8 @@ AppFrame(void)
                         } else {
                             AppCmd(
                                 APP_COMMAND_KIND_PUSH_QUERY,
-                                __Registers.Expression = Info->Query.Expression
+                                __Registers.Expression = Info->Query.Expression,
+                                __Registers.DoLister = !!Info->Query.Expression.Size
                             );
                         }
                     } break;
@@ -9951,9 +12258,34 @@ AppFrame(void)
                     case APP_COMMAND_KIND_FILTER:
                     case APP_COMMAND_KIND_SWITCH:
                     case APP_COMMAND_KIND_SHOW_FILE_IN_EXPLORER:
-                    case APP_COMMAND_KIND_SESSION_SETTINGS:
-                    case APP_COMMAND_KIND_EDIT_SESSION_THEME:
                     case APP_COMMAND_KIND_RECORD_RECENT_SESSION: {} break;
+
+                    case APP_COMMAND_KIND_SESSION_SETTINGS: {
+                        AppCmd(
+                            APP_COMMAND_KIND_PUSH_QUERY,
+                            __Registers.CommandName = ""_s8,
+                            __Registers.Expression = "query:session_settings"_s8,
+                            __Registers.DoLister = TRUE
+                        );
+                    } break;
+
+                    case APP_COMMAND_KIND_EDIT_SESSION_THEME: {
+                        ConfigNode* Session = ConfigNodeChildFromStr(
+                            ConfigNodeRoot(),
+                            "session"_s8
+                        );
+
+                        AppCmd(
+                            APP_COMMAND_KIND_PUSH_QUERY,
+                            __Registers.CommandName = ""_s8,
+                            __Registers.DoLister = FALSE,
+                            __Registers.Expression = ArenaPushStrFmt(
+                                Scratch.MemPool,
+                                "query:config.$%llx.theme_colours",
+                                Session->ID
+                            )
+                        );
+                    } break;
 
                     case APP_COMMAND_KIND_SELECT_CONFIG: {
                         ConfigNode* Cfg = ConfigNodeFromID(Registers()->Config);
@@ -10290,19 +12622,92 @@ AppFrame(void)
                             !CommandName.Size || 
                             Info->Query.Kind & APP_QUERY_KIND_FLOATING
                         );
-                        b32 IsFilePath = (
-                            AppQueryExpressionKindFromStr(
-                                Registers()->Expression
-                            ) == APP_QUERY_EXPR_KIND_FILE_PATH
-                        );
+                        ConfigNode* View = ConfigNodeFromID(Registers()->View);
+                        Str8 QueryExpression = Registers()->Expression;
+
+                        if (!QueryExpression.Size)
+                            QueryExpression = Info->Query.Expression;
 
                         UIContextMenuClose();
                         APP_STATE->MenuBarFocused = FALSE;
 
-                        if (IsFloating) {
-                            Str8 InitialInput = ""_s8;
 
-                            if (IsFilePath) {
+                        // NOTE(nc): the view of a floating query is made new
+                        //         : for each query, so the old view state
+                        //         : (cursor, scroll) is not used again. with
+                        //         : DoLister it is a list to make a selection
+                        //         : from. without, it is a tree to edit.
+                        if (IsFloating) {
+                            ConfigNode* WindowQuery = AppImmediateConfigFromKey(
+                                "window_query"_s8
+                            );
+
+                            APP_STATE->QueryIsActive = TRUE;
+                            ArenaClear(APP_STATE->QueryMemPool);
+                            APP_STATE->QueryRegs = CopyRegisters(
+                                APP_STATE->QueryMemPool, 
+                                Registers()
+                            );
+                            ConfigNodeReleaseAllChildren(
+                                APP_STATE->Config,
+                                WindowQuery
+                            );
+                            View = ConfigNodeChildFromStrOrAlloc(
+                                APP_STATE->Config,
+                                WindowQuery,
+                                "watch"_s8
+                            );
+                            ConfigNodeChildFromStrOrAlloc(
+                                APP_STATE->Config,
+                                View,
+                                Registers()->DoLister
+                                    ? "lister"_s8
+                                    : "explicit_root"_s8
+                            );
+                            ConfigNodeNewReplace(
+                                APP_STATE->Config,
+                                ConfigNodeChildFromStrOrAlloc(
+                                    APP_STATE->Config,
+                                    View,
+                                    "expression"_s8
+                                ),
+                                QueryExpression
+                            );
+                        }
+
+                        if (View != EMPTY_CFG_NODE_VALUE) {
+                            ConfigNode* Query = ConfigNodeChildFromStrOrAlloc(
+                                APP_STATE->Config,
+                                View,
+                                "query"_s8
+                            );
+                            ConfigNode* Cmd = ConfigNodeChildFromStrOrAlloc(
+                                APP_STATE->Config,
+                                Query,
+                                "cmd"_s8
+                            );
+                            ConfigNode* Input = ConfigNodeChildFromStrOrAlloc(
+                                APP_STATE->Config,
+                                Query,
+                                "input"_s8
+                            );
+                            Str8 InitialInput = ""_s8;
+                            Str8 CurrentQueryCommandName = ArenaPushStrCpy(
+                                Scratch.MemPool, 
+                                Cmd->Head->String
+                            );
+
+                            // NOTE(nc): an expression with '$input' is a file
+                            //         : path query, it starts in the current path
+                            if (
+                                IsFloating &&
+                                StrFindSubStr(
+                                    QueryExpression, 
+                                    "$input"_s8, 
+                                    0, 
+                                    0
+                                ) < QueryExpression.Size
+                            ) {
                                 ConfigNode* Session = ConfigNodeChildFromStr(
                                     ConfigNodeRoot(), 
                                     "session"_s8
@@ -10325,62 +12730,15 @@ AppFrame(void)
                                     "%S/", 
                                     PRINT_STR(CurrentPathString)
                                 );
+                            } else if (
+                                !IsFloating &&
+                                Info->Query.Kind & APP_QUERY_KIND_KEEP_OLD_INPUT
+                            ) {
+                                InitialInput = ArenaPushStrCpy(
+                                    Scratch.MemPool, 
+                                    Input->Head->String
+                                );
                             }
-
-                            APP_STATE->QueryIsActive = TRUE;
-                            ArenaClear(APP_STATE->QueryMemPool);
-                            APP_STATE->QueryRegs = CopyRegisters(
-                                APP_STATE->QueryMemPool, 
-                                Registers()
-                            );
-                            APP_STATE->QueryStringSize = MIN(
-                                sizeof(APP_STATE->QueryBuffer), 
-                                InitialInput.Size
-                            );
-                            MemCpy(
-                                APP_STATE->QueryBuffer, 
-                                InitialInput.Str, 
-                                APP_STATE->QueryStringSize
-                            );
-                            APP_STATE->QueryCursor = TxtPt(
-                                1, 
-                                1 + APP_STATE->QueryStringSize
-                            );
-                            APP_STATE->QueryMark = APP_STATE->QueryCursor;
-                            APP_STATE->QueryScroll = {};
-                            APP_STATE->QueryListCursor = {};
-                            APP_STATE->QueryListCursor.Y = IsFilePath;
-                            APP_STATE->QueryListMark = APP_STATE->QueryListCursor;
-                        } else if (
-                            ConfigNodeFromID(
-                                Registers()->View
-                            ) != EMPTY_CFG_NODE_VALUE
-                        ) {
-                            ConfigNode* View = ConfigNodeFromID(Registers()->View);
-                            ConfigNode* Query = ConfigNodeChildFromStrOrAlloc(
-                                APP_STATE->Config,
-                                View,
-                                "query"_s8
-                            );
-                            ConfigNode* Cmd = ConfigNodeChildFromStrOrAlloc(
-                                APP_STATE->Config,
-                                Query,
-                                "cmd"_s8
-                            );
-                            ConfigNode* Input = ConfigNodeChildFromStrOrAlloc(
-                                APP_STATE->Config,
-                                Query,
-                                "input"_s8
-                            );
-                            Str8 InitialInput = ""_s8;
-
-                            if (Info->Query.Kind & APP_QUERY_KIND_KEEP_OLD_INPUT)
-                                InitialInput = Input->Head->String;
-
-                            Str8 CurrentQueryCommandName = ArenaPushStrCpy(
-                                Scratch.MemPool, 
-                                Cmd->Head->String
-                            );
 
                             ConfigNodeNewReplace(
                                 APP_STATE->Config,
@@ -10395,18 +12753,19 @@ AppFrame(void)
 
                             AppViewState* VS = AppViewStateFromConfig(View);
 
+                            VS->QueryCursor = TxtPt(1, 1 + InitialInput.Size);
+                            VS->QueryMark = VS->QueryCursor;
+
                             if (
+                                !IsFloating &&
                                 !VS->QueryIsOpen && 
                                 Info->Query.Kind & APP_QUERY_KIND_SELECT_OLD_INPUT
                             ) {
-                                VS->QueryCursor = TxtPt(1, 1 + Input->Head->String.Size);
                                 VS->QueryMark = TxtPt(1, 1);
-                            } else {
-                                VS->QueryCursor = TxtPt(1, 1 + Input->Head->String.Size);
-                                VS->QueryMark = VS->QueryCursor;
                             }
 
                             if (
+                                IsFloating ||
                                 !StrMatch(CurrentQueryCommandName, CommandName, 0) ||
                                 VS->ContentsAreFocused
                             ) {
@@ -10423,15 +12782,33 @@ AppFrame(void)
                     case APP_COMMAND_KIND_COMPLETE_QUERY: {
                         ConfigNode* View = ConfigNodeFromID(Registers()->View);
                         Str8 CommandName = AppViewQueryCommand();
-
-                        if (CommandName.Size)
-                            AppPushCmd(CommandName, Registers());
-
                         AppCommandKindInfo* Info = AppCommandKindInfoFromStr(
                             CommandName
                         );
+                        b32 IsLister = (
+                            ConfigNodeChildFromStr(
+                                View, 
+                                "lister"_s8
+                            ) != EMPTY_CFG_NODE_VALUE
+                        );
 
-                        if (!(Info->Query.Kind & APP_QUERY_KIND_KEEP_OLD_INPUT)) {
+                        // NOTE(nc): the command of a lister gets the view that
+                        //         : was in focus when the query started
+                        if (CommandName.Size) {
+                            AppRegistersScope() {
+                                if (IsLister && APP_STATE->QueryRegs)
+                                    Registers()->View = APP_STATE->QueryRegs->View;
+
+                                AppPushCmd(CommandName, Registers());
+                            }
+                        }
+
+                        if (IsLister) {
+                            APP_STATE->QueryIsActive = FALSE;
+                        } else if (
+                            View != EMPTY_CFG_NODE_VALUE &&
+                            !(Info->Query.Kind & APP_QUERY_KIND_KEEP_OLD_INPUT)
+                        ) {
                             AppViewState* VS = AppViewStateFromConfig(View);
 
                             VS->QueryIsOpen = FALSE;
@@ -10919,7 +13296,7 @@ AppWindowFrame(void)
     }
 
     if (QueryIsOpen && !PopUpIsOpen)
-        AppQueryViewUI(ContentRect);
+        AppFloatingQueryUI(ContentRect);
 
     UIKey FileMenuKey = UIKeyFromStr({}, "_file_menu_key_"_s8);
     UIKey ViewMenuKey = UIKeyFromStr({}, "_view_menu_key_"_s8);

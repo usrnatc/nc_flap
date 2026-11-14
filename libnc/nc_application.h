@@ -248,20 +248,47 @@ enum : u32 {
     APP_THEME_PRESET_COUNT
 };
 
-enum AppQueryExpressionKind {
-    APP_QUERY_EXPR_KIND_NULL,
-    APP_QUERY_EXPR_KIND_COMMANDS,
-    APP_QUERY_EXPR_KIND_TAB_COMMANDS,
-    APP_QUERY_EXPR_KIND_RECENT_FILES,
-    APP_QUERY_EXPR_KIND_FLV_FILES,
-    APP_QUERY_EXPR_KIND_RECENT_SESSIONS,
-    APP_QUERY_EXPR_KIND_THEMES,
-    APP_QUERY_EXPR_KIND_SESSION_SETTINGS,
-    APP_QUERY_EXPR_KIND_CONFIG,
-    APP_QUERY_EXPR_KIND_CONFIG_CHILD,
-    APP_QUERY_EXPR_KIND_FILE_PATH,
-    APP_QUERY_EXPR_KIND_COUNT
+typedef u32 AppCellKind;
+enum : u32 {
+    APP_CELL_KIND_EXPANDER              = (1 << 0),
+    APP_CELL_KIND_EXPANDER_SPACE        = (1 << 1),
+    APP_CELL_KIND_EXPANDER_PLACEHOLDER  = (1 << 2),
+    APP_CELL_KIND_TOGGLE_SWITCH         = (1 << 3),
+    APP_CELL_KIND_SLIDER                = (1 << 4),
+    APP_CELL_KIND_BINDINGS              = (1 << 5),
+    APP_CELL_KIND_DISABLE_EDIT          = (1 << 6),
+    APP_CELL_KIND_KEYBOARD_CLICKABLE    = (1 << 7),
+    APP_CELL_KIND_SINGLE_CLICK_ACTIVATE = (1 << 8),
+    APP_CELL_KIND_BORDER                = (1 << 9),
+    APP_CELL_KIND_NO_BACKGROUND         = (1 << 10),
+    APP_CELL_KIND_BTN                   = (1 << 11)
 };
+
+enum AppWatchCellKind {
+    APP_WATCH_CELL_KIND_EVAL,
+    APP_WATCH_CELL_KIND_VIEW_UI
+};
+
+typedef u32 AppWatchCellFlag;
+enum : u32 {
+    APP_WATCH_CELL_FLAG_EXPR                       = (1 << 0),
+    APP_WATCH_CELL_FLAG_NO_EVAL                    = (1 << 1),
+    APP_WATCH_CELL_FLAG_BTN                        = (1 << 2),
+    APP_WATCH_CELL_FLAG_BACKGROUND                 = (1 << 3),
+    APP_WATCH_CELL_FLAG_ACTIVATE_WITH_SINGLE_CLICK = (1 << 4),
+    APP_WATCH_CELL_FLAG_IS_NONE_CODE               = (1 << 5),
+    APP_WATCH_CELL_FLAG_CAN_EDIT                   = (1 << 6),
+    APP_WATCH_CELL_FLAG_IS_ERRORED                 = (1 << 7),
+    APP_WATCH_CELL_FLAG_INDENTED                   = (1 << 8)
+};
+
+#define WatchCellPushNew(X, Y, Z, W, ...) [&]() -> AppWatchCell* { \
+    AppWatchCell __Cell = {};                                      \
+    __Cell.Kind = (Z);                                             \
+    __Cell.Eval = (W);                                             \
+    __VA_ARGS__;                                                   \
+    return __WatchCellPushNew((X), (Y), &__Cell);                  \
+}()
 
 #define AppPluralFromCodeName(X)         (AppVocabInfoFromCodeName(X)->CodeNamePlural)
 #define AppDisplayFromCodeName(X)        (AppVocabInfoFromCodeName(X)->DisplayName)
@@ -294,7 +321,8 @@ enum AppQueryExpressionKind {
     X.String = Registers()->String,             \
     X.CommandName = Registers()->CommandName,   \
     X.Direction = Registers()->Direction,       \
-    X.OSEvent = Registers()->OSEvent            \
+    X.OSEvent = Registers()->OSEvent,           \
+    X.DoLister = Registers()->DoLister          \
 
 #define AppPushRegisters(...) [&]() -> AppRegisters* { \
     AppRegisters __Registers = {};                     \
@@ -373,6 +401,7 @@ struct AppRegisters {
     Str8         CommandName;
     Direction2D  Direction;
     InputEvent*  OSEvent;
+    b32          DoLister;
 };
 
 struct AppRegistersNode {
@@ -450,6 +479,95 @@ struct AppArenaExt {
     Arena*       MemPool;
 };
 
+struct AppWatchPoint {
+    EVKey ParentKey;
+    EVKey Key;
+    u64   CellID;
+};
+
+struct AppWatchViewTextEditState {
+    AppWatchViewTextEditState* PointHashNext;
+    AppWatchPoint              Point;
+    TextPoint                  Cursor;
+    TextPoint                  Mark;
+    u8                         InputBuffer[KB(1)];
+    u64                        InputSize;
+    u8                         InitialBuffer[KB(1)];
+    u64                        InitialSize;
+};
+
+struct AppWatchViewState {
+    b32                         IsInitialised;
+    Arena*                      FilterMemPool;
+    Str8                        PrevFilter;
+    AppWatchPoint               Cursor;
+    AppWatchPoint               Mark;
+    AppWatchPoint               NextCursor;
+    AppWatchPoint               NextMark;
+    Arena*                      TextEditMemPool;
+    AppWatchViewTextEditState   __TextEditState;
+    AppWatchViewTextEditState** TextEditStateSlots;
+    u64                         TextEditStateSlotsCount;
+    b32                         IsTextEditing;
+};
+
+struct AppCellParams {
+    AppCellKind  Kind;
+    i32          Depth;
+    Str8         PreEditValue;
+    FancyStrList MetaFancyStrings;
+    FancyStrList ValueFancyStrings;
+    Str8         SearchNeedle;
+    Str8         Description;
+    b32*         IsExpanded;
+    b32*         IsToggled;
+    f32*         SliderValue;
+    Str8         BindingsName;
+    TextPoint*   Cursor;
+    TextPoint*   Mark;
+    u8*          EditBuffer;
+    u64          EditBufferSize;
+    u64*         EditStringSize;
+};
+
+struct AppWatchCell {
+    AppWatchCell*    Next;
+    AppWatchCellKind Kind;
+    AppWatchCellFlag Flags;
+    u64              Index;
+    EvalEval         Eval;
+    f32              DefaultPercent;
+    f32              Percent;
+    f32              PX;
+};
+
+struct AppWatchCellList {
+    AppWatchCell* Head;
+    AppWatchCell* Tail;
+    u64           Count;
+    f32           TotalPercent;
+};
+
+struct AppWatchRowInfo {
+    b32              CanExpand;
+    b32              ExprIsEditable;
+    Str8             GroupCfgName;
+    ConfigNode*      GroupCfgParent;
+    ConfigNode*      GroupCfgChild;
+    AppWatchCellList Cells;
+};
+
+struct AppWatchRowCellInfo {
+    AppWatchCellFlag Flags;
+    ConfigNode*      Config;
+    Str8             CommandName;
+    Str8             FilePath;
+    FancyStrList     ExprFStrings;
+    FancyStrList     EvalFStrings;
+    Str8             Description;
+    Str8             ErrorTooltip;
+};
+
 struct AppViewState {
     AppViewState*   HashNext;
     AppViewState*   HashPrev;
@@ -473,6 +591,7 @@ struct AppViewState {
     u64             QueryStringSize;
     Str8            QueryCommandName;
     b32             ContentsAreFocused;
+    EVView*         EvalView;
 };
 
 struct AppViewStateSlot {
@@ -610,29 +729,6 @@ struct BindingTableEntry {
     ConfigBinding Binding;
 };
 
-struct AppQueryResult {
-    Str8                String;
-    Str8                DisplayString;
-    Str8                Description;
-    Str8                SearchTags;
-    AppIconKind         IconKind;
-    ConfigID            CfgID;
-    AppCommandKindInfo* CommandInfo;
-    void*               UserData;
-};
-
-struct AppQueryResultNode {
-    AppQueryResultNode* Next;
-    AppQueryResultNode* Prev;
-    AppQueryResult      V;
-};
-
-struct AppQueryResultList {
-    AppQueryResultNode* Head;
-    AppQueryResultNode* Tail;
-    u64                 Count;
-};
-
 struct AppSchemaIRExt {
     ConfigNode*   Config;
     MDNodePtrList Schemas;
@@ -664,7 +760,7 @@ extern Str8 APP_ICON_KIND_TEXT_TABLE[APP_ICON_KIND_COUNT];
 extern Str8 APP_THEME_PRESET_DISPLAY_STR_TABLE[APP_THEME_PRESET_COUNT];
 extern Str8 APP_THEME_PRESET_CODE_STR_TABLE[APP_THEME_PRESET_COUNT];
 extern Str8 APP_THEME_PRESET_CONFIG_STR_TABLE[APP_THEME_PRESET_COUNT];
-extern AppNameSchemaInfo APP_NAME_SCHEMA_INFO_TABLE[8];
+extern AppNameSchemaInfo APP_NAME_SCHEMA_INFO_TABLE[10];
 extern Str8 APP_REGISTERS_SLOT_CODE_NAME_TABLE[APP_REGISTERS_SLOT_COUNT];
 extern r1u64 APP_REGISTERS_SLOT_RANGE_TABLE[APP_REGISTERS_SLOT_COUNT];
 extern Str8 APP_TAB_FAST_PATH_VIEW_NAME_TABLE[APP_COMMAND_KIND_COUNT - APP_COMMAND_KIND_FIRST_TAB_FAST_PATH_CMD];
@@ -717,7 +813,6 @@ Str8 AppViewSettingFromNameStr8(Str8 Name);
 b32 AppViewSettingFromNameB32(Str8 Name);
 u64 AppViewSettingFromNameU64(Str8 Name);
 f32 AppViewSettingFromNameF32(Str8 Name);
-
 ConfigNode* AppConfigFromEvalSpace(EvalSpace Space);
 EvalSpace AppEvalSpaceFromConfig(ConfigNode* Cfg);
 Str8 AppCommandNameFromEval(EvalEval Eval);
@@ -734,9 +829,7 @@ r1u64 AppSpaceRangeFromEval(EvalEval Eval);
 EvalValue AppViewSettingValueFromName(Str8 String);
 Str8 AppFilePathFromConfig(ConfigNode* Config);
 Str8 AppNameFromConfig(ConfigNode* Config);
-
-Str8 AppViewFilePath(void);     // NOTE(nc): may not need this, just use string query via name 'file'
-
+Str8 AppViewFilePath(void);
 void* AppViewStateFromSize(u64 Size);
 Arena* AppPushViewMemPool(void);
 void AppStoreViewExprStr(Str8 String);
@@ -758,15 +851,12 @@ b32 AppNextViewCommand(AppCommand** Command);
 AppRegisters* __AppPushRegisters(AppRegisters* Regs);
 AppRegisters* AppPopRegisters(void);
 void ListPush(Arena* MemPool, ConfigNodePtrList* List, ConfigNode* Config);
-void ListPush(Arena* MemPool, AppQueryResultList* List, AppQueryResult Entry);
 Str8 AppExpressionFromConfig(ConfigNode* Config);
 Str8 AppLabelFromConfig(ConfigNode* Config);
 MDNode* AppThemeTreeFromName(Arena* MemPool, Access* Acc, Str8 Name);
 AppViewUIRule* AppViewUIRuleFromStr(Str8 String);
 void __AppSetAutoCompleteRegisters(Str8 Expr, AppRegisters* Regs);
 void AppSetHoverEval(v2i32 Position, Str8 String);
-AppQueryResultList AppQueryResultsFromExpression(Arena* MemPool, Str8 Expression, Str8 Input);
-void AppQueryViewUI(r2f32 Rect);
 FancyStrList AppTitleFStrFromConfig(Arena* MemPool, ConfigNode* Config, b32 IncludeExtras);
 UISignal AppIconButton(AppIconKind Kind, FMRangeList* Matches, Str8 String);
 UISignal AppIconButton(AppIconKind Kind, FMRangeList* Matches, char* Fmt, ...);
@@ -774,11 +864,43 @@ UISignal AppMenuBarButton(Str8 String);
 void AppCommandBindingButtons(Str8 Name, Str8 Filter, u64 Limit, AppCommandBindingButtonFlag Flags);
 UISignal AppCommandSpecButton(Str8 Name);
 void AppCommandListMenuButtons(Str8* CommandNames, u64 CommandNamesCount, u32* FastPointCodePoints);
+EVView* AppViewEvalView(void);
+AppRegistersSlot AppRegistersFillSlotFromCtxEval(EvalEval Eval);
+AppRegistersSlot AppRegistersFillSlotFromCellCtx(EVRow* Row);
+AppWatchCell* __WatchCellPushNew(Arena* MemPool, AppWatchCellList* List, AppWatchCell* Params);
+u64 AppIDFromWatchCell(AppWatchCell* Cell);
+AppWatchViewTextEditState* AppWatchViewTextEditStateFromPoint(AppWatchViewState* WV, AppWatchPoint Point);
+Str8 AppValueStrFromEval(Arena* MemPool, EVStrParams* Params, f32 MaxSize, EvalEval Eval);
+AppWatchRowInfo AppWatchRowInfoFromRow(Arena* MemPool, EVRow* Row);
+AppWatchRowCellInfo AppInfoFromWatchRowCell(Arena* MemPool, EVRow* Row, EVStringFlag Flags, AppWatchRowInfo* RowInfo, AppWatchCell* Cell, f32 MaxSize);
+v2i64 AppTableFromWatchPoint(EVBlockRangeList* BlockRanges, AppWatchPoint Point);
+AppWatchPoint AppWatchPointFromTable(EVBlockRangeList* BlockRanges, v2i64 Table);
+UISignal AppCell(AppCellParams* Params, Str8 String);
+UISignal AppCell(AppCellParams* Params, char* Fmt, ...);
+FancyStrList AppTitleFStrFromCodeName(Arena* MemPool, Str8 CodeName);
+FancyStrList AppTitleFStrFromFilePath(Arena* MemPool, Str8 FilePath, b32 IncludeFolder);
+Str8 AppConfigNameFromCollectionName(Str8 Name);
+
 void AppInit(CommandLine* CLI);
 void AppFrame(void);
 void AppWindowFrame(void);
+void AppWatchViewUI(r2f32 Rect);
 
 extern void AppViewUI(r2f32 Rect);
 extern void AppFileRecorded(Str8 Path);
+
+#if defined(NC_LANG_CPP)
+    internal b32
+    operator==(const AppWatchPoint& PointA, const AppWatchPoint& PointB)
+    {
+        return MemCmpStruct(&PointA, &PointB);
+    }
+
+    internal b32
+    operator!=(const AppWatchPoint& PointA, const AppWatchPoint& PointB)
+    {
+        return !(PointA == PointB);
+    }
+#endif
 
 #endif // __NC_APPLICATION_H__
