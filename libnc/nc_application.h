@@ -279,7 +279,8 @@ enum : u32 {
     APP_WATCH_CELL_FLAG_IS_NONE_CODE               = (1 << 5),
     APP_WATCH_CELL_FLAG_CAN_EDIT                   = (1 << 6),
     APP_WATCH_CELL_FLAG_IS_ERRORED                 = (1 << 7),
-    APP_WATCH_CELL_FLAG_INDENTED                   = (1 << 8)
+    APP_WATCH_CELL_FLAG_INDENTED                   = (1 << 8),
+    APP_WATCH_CELL_FLAG_SWATCH                     = (1 << 9)
 };
 
 #define WatchCellPushNew(X, Y, Z, W, ...) [&]() -> AppWatchCell* { \

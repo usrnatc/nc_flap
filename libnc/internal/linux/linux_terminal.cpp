@@ -849,7 +849,7 @@ ListPush(Arena* MemPool, InputEventList* List, InputEventKind Event)
     InputEvent* NewEvent = ArenaPushArrayZero(MemPool, InputEvent, 1);
 
     DLL_PUSH_BACK(List->Head, List->Tail, NewEvent);
-    NewEvent->TimeStampUSecs = (u64) TimeGetTimestamp();
+    NewEvent->TimeStampUSecs = TimeNow();
     NewEvent->Kind = Event;
     ++List->Count;
 

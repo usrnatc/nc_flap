@@ -2141,7 +2141,7 @@ UIProgressSpinner(f32 SpinRate, Str8 String)
         Str8Lit("\xE2\xA0\x87"),
         Str8Lit("\xE2\xA0\x8F")
     };
-    f64 Seconds = (f64) TimeGetTimestamp() / 1000000.0;
+    f64 Seconds = (f64) TimeNow() / 1000000.0;
     u64 FrameIndex = (u64) (Seconds * (f64) SpinRate * (f64) ARRAY_COUNT(Frames)) % ARRAY_COUNT(Frames);
 
     UISetNextPreferredWidth(UI_PX(1.0f, 1.0f));

@@ -6865,7 +6865,9 @@ EvalPushParseFromStr(
 
                 if (Atom == EMPTY_EVAL_EXPR_VALUE || AtomIsMaybeCast) {
                     b32 GotNewAtom = FALSE;
-                    EvalExpr* MaybeCast = AtomIsMaybeCast ? Atom : EMPTY_EVAL_EXPR_VALUE;
+                    EvalExpr* MaybeCast = AtomIsMaybeCast 
+                        ? Atom 
+                        : EMPTY_EVAL_EXPR_VALUE;
 
                     AtomIsMaybeCast = FALSE;
 
@@ -6880,9 +6882,18 @@ EvalPushParseFromStr(
                             Token.Kind == EVAL_TOKEN_KIND_STR_LIT
                         ) {
                             u64 TokenExtCount = 0;
-                            EvalToken DotMaybeToken = EvalTokenAtX(It + 1, &Tokens);
-                            Str8 DotMaybeTokenString = StrSub(Text, DotMaybeToken.Range);
-                            EvalToken ExtMaybeToken = EvalTokenAtX(It + 2, &Tokens);
+                            EvalToken DotMaybeToken = EvalTokenAtX(
+                                It + 1, 
+                                &Tokens
+                            );
+                            Str8 DotMaybeTokenString = StrSub(
+                                Text, 
+                                DotMaybeToken.Range
+                            );
+                            EvalToken ExtMaybeToken = EvalTokenAtX(
+                                It + 2, 
+                                &Tokens
+                            );
                             Str8 ExtMaybeTokenString = StrSub(Text, ExtMaybeToken.Range);
 
                             if (
@@ -7051,7 +7062,12 @@ EvalPushParseFromStr(
                             ++It;
 
                             if (DotPosition == TokenString.Size) {
-                                u64 Value = U64FromStr(TokenString);
+                                u32 Base = (
+                                    TokenString.Size > 2 &&
+                                    TokenString.Str[0] == '0' &&
+                                    (TokenString.Str[1] | 0x20) == 'x'
+                                ) ? 16 : 10;
+                                u64 Value = U64FromStr(TokenString, Base);
                                 
                                 Atom = EvalPushExpr(
                                     MemPool, 
@@ -9464,7 +9480,7 @@ EVStrIterNext(Arena* MemPool, EVStrIter* Iter, OUT Str8* String)
                             } break;
 
                             case 1: {
-                                Str8 PrePrefix = {};
+                                Str8 PrePrefix = ""_s8;
 
                                 if (PtrData->DidPrePrefixPtr)
                                     PrePrefix = " -> "_s8;

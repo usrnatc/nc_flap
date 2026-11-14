@@ -419,7 +419,11 @@ EVAL_TYPE_ACCESS_FUNC_DEF(Schema)
             );
             EvalTypeKey ChildTypeKey = {};
             b32 WrapChildWithMetaExpr = FALSE;
-            b32 IsQueryChild = MDNodeHasTag(ChildSchema, "query"_s8, 0);
+            b32 IsQueryChild = StrMatch(
+                ChildSchema->Head->String, 
+                "query"_s8, 
+                0
+            );
             EvalTypeFlag TypeFlags = (
                 !!IsQueryChild * EVAL_TYPE_FLAG_IS_NOT_EDITABLE
             );
@@ -482,7 +486,7 @@ EVAL_TYPE_ACCESS_FUNC_DEF(Schema)
                 ChildTypeKey = EvalTypeKeyBasic(EVAL_TYPE_KIND_BOOL);
                 WrapChildWithMetaExpr = TRUE;
             } else if (
-                StrMatch(ChildSchema->Head->String, "set"_s8, 0)
+                StrMatch(ChildSchema->Head->String, "query"_s8, 0)
             ) {
                 ChildTypeKey = EvalStr2TypeKeyMapLookup(
                     APP_STATE->MetaName2TypeMap,

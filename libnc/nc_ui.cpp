@@ -240,7 +240,7 @@ UIScannedColumnFromColumn(Str8 String, i64 StartColumn, SideKind Side)
 
     for (
         i64 Column = StartColumn + StartOffset; 
-        Column >= 1 && Column >= String.Size + 1; 
+        Column >= 1 && Column <= (i64) String.Size + 1; 
         Column += Delta
     ) {
         u8 Byte = 0;
@@ -993,7 +993,7 @@ UIStringHoverActive(void)
     b32 Result = (
         UI_STATE->BuildIndex > 0 &&
         UI_STATE->StringHoverBuildIndex >= UI_STATE->BuildIndex - 1 &&
-        TimeGetTimestamp() >= UI_STATE->StringHoverBeginUSecs + MILLISECONDS(50)
+        TimeNow() >= UI_STATE->StringHoverBeginUSecs + MILLISECONDS(50)
     );
 
     return Result;
@@ -1270,7 +1270,7 @@ UIBeginBuild(
 
     for (UIEventNode* Node = Events->Head; Node; Node = Node->Next)
         if (Node->V.Kind == UI_EVENT_KIND_MOUSE_MOVE)
-            UI_STATE->LastTimeMouseMovedUSecs = TimeGetTimestamp();
+            UI_STATE->LastTimeMouseMovedUSecs = TimeNow();
 
     for (
         UIMouseButtonKind MouseBtnKind = (UIMouseButtonKind) 0;

@@ -4594,9 +4594,9 @@ AppVocabInfoFromCodeNamePlural(Str8 CodeName)
         for (
             AppVocabInfoMapNode* N = APP_STATE->VocabInfoMap.PluralSlots[SlotIndex].Head;
             N;
-            N = N->SingleNext
+            N = N->PluralNext
         ) {
-            if (StrMatch(N->V.CodeName, CodeName, 0)) {
+            if (StrMatch(N->V.CodeNamePlural, CodeName, 0)) {
                 Result = &N->V;
                 break;
             }
@@ -5510,6 +5510,34 @@ AppWatchRowInfoFromRow(Arena *MemPool, EVRow *Row)
                 APP_WATCH_CELL_FLAG_INDENTED
             ),
             __Cell.Percent = 1.0f
+        );
+    } else if (
+        IsTopLevel &&
+        StrMatch(EvalledCfg->String, "theme_colour"_s8, 0)
+    ) {
+        Result.CanExpand = FALSE;
+        WatchCellPushNew(
+            MemPool,
+            &Result.Cells,
+            APP_WATCH_CELL_KIND_EVAL,
+            EvalEvalWrap(Row->Eval, "$.tags"_s8),
+            __Cell.Flags = APP_WATCH_CELL_FLAG_INDENTED,
+            __Cell.Percent = 1.0f
+        );
+        WatchCellPushNew(
+            MemPool,
+            &Result.Cells,
+            APP_WATCH_CELL_KIND_EVAL,
+            EvalEvalWrap(Row->Eval, "$.value"_s8),
+            __Cell.PX = 12.0f
+        );
+        WatchCellPushNew(
+            MemPool,
+            &Result.Cells,
+            APP_WATCH_CELL_KIND_EVAL,
+            EvalEvalWrap(Row->Eval, "$.value"_s8),
+            __Cell.Flags = APP_WATCH_CELL_FLAG_SWATCH,
+            __Cell.PX = 4.0f
         );
     } else if (IsTopLevel) {
         ConfigNode* Cfg = EvalledCfg;
@@ -7548,108 +7576,125 @@ AppWatchViewUI(r2f32 Rect)
                         );
                         UISetNextChildLayoutAxis(AXIS_2D_X);
 
+                        b32 IsSwatch = !!(
+                            Cell->Flags & APP_WATCH_CELL_FLAG_SWATCH
+                        );
+
+                        if (IsSwatch) {
+                            UISetNextBackgroundColour(
+                                RGBAFromU32((u32) CellValueEval.Value.U64)
+                            );
+                        }
+
                         UIBox* CellBox = UIBuildBoxFromStrFmt(
-                            (CellX > 0) * UI_BOX_KIND_DRAW_SIDE_LEFT,
+                            (
+                                (CellX > 0) * UI_BOX_KIND_DRAW_SIDE_LEFT |
+                                IsSwatch * UI_BOX_KIND_DRAW_BACKGROUND
+                            ),
                             "###cell_%llx_%llx",
                             RowHash,
                             CellID
                         );
 
-                        if (Cell->Kind == APP_WATCH_CELL_KIND_EVAL)
-                        UIParent(CellBox) {
-                            UIFocusHot(
-                                CellSelected
-                                    ? UI_FOCUS_KIND_ON
-                                    : UI_FOCUS_KIND_OFF
-                            ) {
-                                UIFocusActive(
-                                    CellIsEdited
+                        if (
+                            Cell->Kind == APP_WATCH_CELL_KIND_EVAL &&
+                            !IsSwatch
+                        ) {
+                            UIParent(CellBox) {
+                                UIFocusHot(
+                                    CellSelected
                                         ? UI_FOCUS_KIND_ON
                                         : UI_FOCUS_KIND_OFF
                                 ) {
-                                    AppCellParams CellParams = {};
-                                    Str8 Needle = Filter;
-                                    b32 IsFirstCell = (Cell == RowInfo.Cells.Head);
-
-                                    if (Cell->Eval.Space.Kind == EVAL_SPACE_KIND_FILESYSTEM)
-                                        Needle = StrSkipLastSlash(Needle);
-
-                                    CellParams.Kind = (
-                                        APP_CELL_KIND_KEYBOARD_CLICKABLE |
-                                        APP_CELL_KIND_NO_BACKGROUND
-                                    );
-                                    CellParams.Depth = !!(Cell->Flags & APP_WATCH_CELL_FLAG_INDENTED) * (i32) RowDepth;
-                                    CellParams.Cursor = &CellEditState->Cursor;
-                                    CellParams.Mark = &CellEditState->Mark;
-                                    CellParams.EditBuffer = CellEditState->InputBuffer;
-                                    CellParams.EditBufferSize = sizeof(CellEditState->InputBuffer);
-                                    CellParams.EditStringSize = &CellEditState->InputSize;
-                                    CellParams.IsExpanded = &NextRowExpanded;
-                                    CellParams.SearchNeedle = Needle;
-                                    CellParams.MetaFancyStrings = CellInfo.ExprFStrings;
-                                    CellParams.ValueFancyStrings = CellInfo.EvalFStrings;
-                                    CellParams.Description = CellInfo.Description;
-
-                                    if (!CellIsEdited)
-                                        CellParams.Kind |= APP_CELL_KIND_DISABLE_EDIT;
-
-                                    if (
-                                        CellIsEdited &&
-                                        Cell->Flags & APP_WATCH_CELL_FLAG_NO_EVAL
+                                    UIFocusActive(
+                                        CellIsEdited
+                                            ? UI_FOCUS_KIND_ON
+                                            : UI_FOCUS_KIND_OFF
                                     ) {
-                                        MemZero(
-                                            &CellParams.MetaFancyStrings,
-                                            sizeof(CellParams.MetaFancyStrings)
+                                        AppCellParams CellParams = {};
+                                        Str8 Needle = Filter;
+                                        b32 IsFirstCell = (Cell == RowInfo.Cells.Head);
+
+                                        if (Cell->Eval.Space.Kind == EVAL_SPACE_KIND_FILESYSTEM)
+                                            Needle = StrSkipLastSlash(Needle);
+
+                                        CellParams.Kind = (
+                                            APP_CELL_KIND_KEYBOARD_CLICKABLE |
+                                            APP_CELL_KIND_NO_BACKGROUND
                                         );
-                                    }
+                                        CellParams.Depth = !!(Cell->Flags & APP_WATCH_CELL_FLAG_INDENTED) * (i32) RowDepth;
+                                        CellParams.Cursor = &CellEditState->Cursor;
+                                        CellParams.Mark = &CellEditState->Mark;
+                                        CellParams.EditBuffer = CellEditState->InputBuffer;
+                                        CellParams.EditBufferSize = sizeof(CellEditState->InputBuffer);
+                                        CellParams.EditStringSize = &CellEditState->InputSize;
+                                        CellParams.IsExpanded = &NextRowExpanded;
+                                        CellParams.SearchNeedle = Needle;
+                                        CellParams.MetaFancyStrings = CellInfo.ExprFStrings;
+                                        CellParams.ValueFancyStrings = CellInfo.EvalFStrings;
+                                        CellParams.Description = CellInfo.Description;
 
-                                    if (RowInfo.CanExpand && IsFirstCell)
-                                        CellParams.Kind |= APP_CELL_KIND_EXPANDER;
-                                    else if (RowDepth != 0 && IsFirstCell)
-                                        CellParams.Kind |= APP_CELL_KIND_EXPANDER_SPACE;
+                                        if (!CellIsEdited)
+                                            CellParams.Kind |= APP_CELL_KIND_DISABLE_EDIT;
 
-                                    if (CellInfo.Flags & APP_WATCH_CELL_FLAG_ACTIVATE_WITH_SINGLE_CLICK)
-                                        CellParams.Kind |= APP_CELL_KIND_SINGLE_CLICK_ACTIVATE;
-
-                                    if (CellInfo.Flags & APP_WATCH_CELL_FLAG_BTN)
-                                        CellParams.Kind |= APP_CELL_KIND_BTN;
-
-                                    if (CellInfo.Flags & APP_WATCH_CELL_FLAG_BACKGROUND)
-                                        CellParams.Kind &= ~APP_CELL_KIND_NO_BACKGROUND;
-
-                                    if (IsToggleSwitch) {
-                                        CellParams.Kind |= APP_CELL_KIND_TOGGLE_SWITCH;
-                                        CellParams.IsToggled = &NextCellToggled;
-                                    }
-
-                                    if (IsSlider) {
-                                        CellParams.Kind |= APP_CELL_KIND_SLIDER;
-                                        CellParams.SliderValue = &NextCellSliderValue;
-                                    }
-
-                                    if (
-                                        Cell->PX == 0.0f &&
-                                        CellInfo.CommandName.Size &&
-                                        AppCommandKindInfoFromStr(
-                                            CellInfo.CommandName
-                                        )->Flags & APP_COMMAND_KIND_FLAG_LIST_IN_UI
-                                    ) {
-                                        CellParams.Kind |= APP_CELL_KIND_BINDINGS;
-                                        CellParams.BindingsName = CellInfo.CommandName;
-                                    }
-
-                                    UITextAlignment(
-                                        Cell->PX != 0.0f
-                                            ? UI_TEXT_ALIGN_CENTRE
-                                            : UI_TEXT_ALIGN_LEFT
-                                    ) {
-                                        UIWidthFill() {
-                                            Sig = AppCell(
-                                                &CellParams,
-                                                "###%llx_row_%llx",
-                                                CellX,
-                                                RowHash
+                                        if (
+                                            CellIsEdited &&
+                                            Cell->Flags & APP_WATCH_CELL_FLAG_NO_EVAL
+                                        ) {
+                                            MemZero(
+                                                &CellParams.MetaFancyStrings,
+                                                sizeof(CellParams.MetaFancyStrings)
                                             );
+                                        }
+
+                                        if (RowInfo.CanExpand && IsFirstCell)
+                                            CellParams.Kind |= APP_CELL_KIND_EXPANDER;
+                                        else if (RowDepth != 0 && IsFirstCell)
+                                            CellParams.Kind |= APP_CELL_KIND_EXPANDER_SPACE;
+
+                                        if (CellInfo.Flags & APP_WATCH_CELL_FLAG_ACTIVATE_WITH_SINGLE_CLICK)
+                                            CellParams.Kind |= APP_CELL_KIND_SINGLE_CLICK_ACTIVATE;
+
+                                        if (CellInfo.Flags & APP_WATCH_CELL_FLAG_BTN)
+                                            CellParams.Kind |= APP_CELL_KIND_BTN;
+
+                                        if (CellInfo.Flags & APP_WATCH_CELL_FLAG_BACKGROUND)
+                                            CellParams.Kind &= ~APP_CELL_KIND_NO_BACKGROUND;
+
+                                        if (IsToggleSwitch) {
+                                            CellParams.Kind |= APP_CELL_KIND_TOGGLE_SWITCH;
+                                            CellParams.IsToggled = &NextCellToggled;
+                                        }
+
+                                        if (IsSlider) {
+                                            CellParams.Kind |= APP_CELL_KIND_SLIDER;
+                                            CellParams.SliderValue = &NextCellSliderValue;
+                                        }
+
+                                        if (
+                                            Cell->PX == 0.0f &&
+                                            CellInfo.CommandName.Size &&
+                                            AppCommandKindInfoFromStr(
+                                                CellInfo.CommandName
+                                            )->Flags & APP_COMMAND_KIND_FLAG_LIST_IN_UI
+                                        ) {
+                                            CellParams.Kind |= APP_CELL_KIND_BINDINGS;
+                                            CellParams.BindingsName = CellInfo.CommandName;
+                                        }
+
+                                        UITextAlignment(
+                                            Cell->PX != 0.0f
+                                                ? UI_TEXT_ALIGN_CENTRE
+                                                : UI_TEXT_ALIGN_LEFT
+                                        ) {
+                                            UIWidthFill() {
+                                                Sig = AppCell(
+                                                    &CellParams,
+                                                    "###%llx_row_%llx",
+                                                    CellX,
+                                                    RowHash
+                                                );
+                                            }
                                         }
                                     }
                                 }
@@ -7688,18 +7733,17 @@ AppWatchViewUI(r2f32 Rect)
                             IsKeyboard
                         ) {
                             if (IsLister) {
-                                if (IsToggleSwitch && (IsLister || IsKeyboard)) {
+                                if (IsToggleSwitch) {
                                     NextCellToggled = !CellToggled;
-                                } else if (IsLister) {
-                                    // NOTE(nc): a value is edited. all other
-                                    //         : rows are accepted by the mouse
-                                    //         : through the accept event
-                                    if (CellInfo.Flags & APP_WATCH_CELL_FLAG_CAN_EDIT) {
-                                        EWV->NextCursor = CellPoint;
-                                        EWV->NextMark = CellPoint;
-                                        AppCmd(APP_COMMAND_KIND_EDIT);
-                                    }
+                                } else if (
+                                    CellInfo.Flags & APP_WATCH_CELL_FLAG_CAN_EDIT
+                                ) {
+                                    EWV->NextCursor = CellPoint;
+                                    EWV->NextMark = CellPoint;
+                                    AppCmd(APP_COMMAND_KIND_EDIT);
+                                    AppCmd(APP_COMMAND_KIND_EDIT);
                                 } else if (!IsKeyboard) {
+                                    AppCmd(APP_COMMAND_KIND_EDIT);
                                     EWV->NextCursor = CellPoint;
                                     EWV->NextMark = CellPoint;
                                     AppCmd(APP_COMMAND_KIND_ACCEPT);
