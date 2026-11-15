@@ -1615,6 +1615,14 @@ Str8 APP_THEME_PRESET_CONFIG_STR_TABLE[APP_THEME_PRESET_COUNT] = {
         "  theme_colour:{tags: \"scroll_bar background\", value: 0x1f2430ff}\n"
         "  theme_colour:{tags: \"scroll_bar accent\", value: 0xffb454ff}\n"
         "  theme_colour:{tags: \"drop_site background\", value: 0xffb45440}\n"
+        "  theme_colour:{tags: curve_0, value: 0x59c2ffff}\n"
+        "  theme_colour:{tags: curve_1, value: 0xffb454ff}\n"
+        "  theme_colour:{tags: curve_2, value: 0xc2d94cff}\n"
+        "  theme_colour:{tags: curve_3, value: 0xf07178ff}\n"
+        "  theme_colour:{tags: curve_4, value: 0xd2a6ffff}\n"
+        "  theme_colour:{tags: curve_5, value: 0x95e6cbff}\n"
+        "  theme_colour:{tags: curve_6, value: 0xffee99ff}\n"
+        "  theme_colour:{tags: curve_7, value: 0xf29668ff}\n"
         "}\n"
     ),
     // default_dark____________________________________________________________
@@ -1660,6 +1668,14 @@ Str8 APP_THEME_PRESET_CONFIG_STR_TABLE[APP_THEME_PRESET_COUNT] = {
         "  theme_colour:{tags: \"tab unfocused background\", value: 0x2c3e48ff}\n"
         "  theme_colour:{tags: \"tab unfocused text\", value: 0xe5e5e5ff}\n"
         "  theme_colour:{tags: \"drop_site background\", value: 0x3a90bb40}\n"
+        "  theme_colour:{tags: curve_0, value: 0x59c2ffff}\n"
+        "  theme_colour:{tags: curve_1, value: 0xffb454ff}\n"
+        "  theme_colour:{tags: curve_2, value: 0xc2d94cff}\n"
+        "  theme_colour:{tags: curve_3, value: 0xf07178ff}\n"
+        "  theme_colour:{tags: curve_4, value: 0xd2a6ffff}\n"
+        "  theme_colour:{tags: curve_5, value: 0x95e6cbff}\n"
+        "  theme_colour:{tags: curve_6, value: 0xffee99ff}\n"
+        "  theme_colour:{tags: curve_7, value: 0xf29668ff}\n"
         "}\n"
     ),
     // default_light___________________________________________________________
@@ -1706,6 +1722,14 @@ Str8 APP_THEME_PRESET_CONFIG_STR_TABLE[APP_THEME_PRESET_COUNT] = {
         "  theme_colour:{tags: \"tab unfocused background\", value: 0xdde3e9ff}\n"
         "  theme_colour:{tags: \"tab unfocused text\", value: 0x1c2530ff}\n"
         "  theme_colour:{tags: \"drop_site background\", value: 0x1a5b7c40}\n"
+        "  theme_colour:{tags: curve_0, value: 0x0969daff}\n"
+        "  theme_colour:{tags: curve_1, value: 0xbc4c00ff}\n"
+        "  theme_colour:{tags: curve_2, value: 0x1a7f37ff}\n"
+        "  theme_colour:{tags: curve_3, value: 0xcf222eff}\n"
+        "  theme_colour:{tags: curve_4, value: 0x8250dfff}\n"
+        "  theme_colour:{tags: curve_5, value: 0x1b7c83ff}\n"
+        "  theme_colour:{tags: curve_6, value: 0x9a6700ff}\n"
+        "  theme_colour:{tags: curve_7, value: 0xbf3989ff}\n"
         "}\n"
     ),
     // github_dark_____________________________________________________________
@@ -1752,6 +1776,14 @@ Str8 APP_THEME_PRESET_CONFIG_STR_TABLE[APP_THEME_PRESET_COUNT] = {
         "  theme_colour:{tags: \"tab unfocused background\", value: 0x263447ff}\n"
         "  theme_colour:{tags: \"tab unfocused text\", value: 0xc9d1d9ff}\n"
         "  theme_colour:{tags: \"drop_site background\", value: 0x58a6ff40}\n"
+        "  theme_colour:{tags: curve_0, value: 0x59c2ffff}\n"
+        "  theme_colour:{tags: curve_1, value: 0xffb454ff}\n"
+        "  theme_colour:{tags: curve_2, value: 0xc2d94cff}\n"
+        "  theme_colour:{tags: curve_3, value: 0xf07178ff}\n"
+        "  theme_colour:{tags: curve_4, value: 0xd2a6ffff}\n"
+        "  theme_colour:{tags: curve_5, value: 0x95e6cbff}\n"
+        "  theme_colour:{tags: curve_6, value: 0xffee99ff}\n"
+        "  theme_colour:{tags: curve_7, value: 0xf29668ff}\n"
         "}\n"
     ),
     // github_light____________________________________________________________
@@ -1798,6 +1830,14 @@ Str8 APP_THEME_PRESET_CONFIG_STR_TABLE[APP_THEME_PRESET_COUNT] = {
         "  theme_colour:{tags: \"tab unfocused background\", value: 0xd8dee4ff}\n"
         "  theme_colour:{tags: \"tab unfocused text\", value: 0x24292fff}\n"
         "  theme_colour:{tags: \"drop_site background\", value: 0x0969da40}\n"
+        "  theme_colour:{tags: curve_0, value: 0x0969daff}\n"
+        "  theme_colour:{tags: curve_1, value: 0xbc4c00ff}\n"
+        "  theme_colour:{tags: curve_2, value: 0x1a7f37ff}\n"
+        "  theme_colour:{tags: curve_3, value: 0xcf222eff}\n"
+        "  theme_colour:{tags: curve_4, value: 0x8250dfff}\n"
+        "  theme_colour:{tags: curve_5, value: 0x1b7c83ff}\n"
+        "  theme_colour:{tags: curve_6, value: 0x9a6700ff}\n"
+        "  theme_colour:{tags: curve_7, value: 0xbf3989ff}\n"
         "}\n"
     ),
     // one_dark_pro____________________________________________________________
@@ -1844,6 +1884,14 @@ Str8 APP_THEME_PRESET_CONFIG_STR_TABLE[APP_THEME_PRESET_COUNT] = {
         "  theme_colour:{tags: \"tab unfocused background\", value: 0x323a47ff}\n"
         "  theme_colour:{tags: \"tab unfocused text\", value: 0xabb2bfff}\n"
         "  theme_colour:{tags: \"drop_site background\", value: 0x61afef40}\n"
+        "  theme_colour:{tags: curve_0, value: 0x59c2ffff}\n"
+        "  theme_colour:{tags: curve_1, value: 0xffb454ff}\n"
+        "  theme_colour:{tags: curve_2, value: 0xc2d94cff}\n"
+        "  theme_colour:{tags: curve_3, value: 0xf07178ff}\n"
+        "  theme_colour:{tags: curve_4, value: 0xd2a6ffff}\n"
+        "  theme_colour:{tags: curve_5, value: 0x95e6cbff}\n"
+        "  theme_colour:{tags: curve_6, value: 0xffee99ff}\n"
+        "  theme_colour:{tags: curve_7, value: 0xf29668ff}\n"
         "}\n"
     ),
     // dracula_________________________________________________________________
@@ -1890,6 +1938,14 @@ Str8 APP_THEME_PRESET_CONFIG_STR_TABLE[APP_THEME_PRESET_COUNT] = {
         "  theme_colour:{tags: \"tab unfocused background\", value: 0x3a3c4eff}\n"
         "  theme_colour:{tags: \"tab unfocused text\", value: 0xf8f8f2ff}\n"
         "  theme_colour:{tags: \"drop_site background\", value: 0xbd93f940}\n"
+        "  theme_colour:{tags: curve_0, value: 0x59c2ffff}\n"
+        "  theme_colour:{tags: curve_1, value: 0xffb454ff}\n"
+        "  theme_colour:{tags: curve_2, value: 0xc2d94cff}\n"
+        "  theme_colour:{tags: curve_3, value: 0xf07178ff}\n"
+        "  theme_colour:{tags: curve_4, value: 0xd2a6ffff}\n"
+        "  theme_colour:{tags: curve_5, value: 0x95e6cbff}\n"
+        "  theme_colour:{tags: curve_6, value: 0xffee99ff}\n"
+        "  theme_colour:{tags: curve_7, value: 0xf29668ff}\n"
         "}\n"
     ),
     // eva_light_______________________________________________________________
@@ -1936,6 +1992,14 @@ Str8 APP_THEME_PRESET_CONFIG_STR_TABLE[APP_THEME_PRESET_COUNT] = {
         "  theme_colour:{tags: \"tab unfocused background\", value: 0xd3dae8ff}\n"
         "  theme_colour:{tags: \"tab unfocused text\", value: 0x5d5d5fff}\n"
         "  theme_colour:{tags: \"drop_site background\", value: 0x0065ff40}\n"
+        "  theme_colour:{tags: curve_0, value: 0x0969daff}\n"
+        "  theme_colour:{tags: curve_1, value: 0xbc4c00ff}\n"
+        "  theme_colour:{tags: curve_2, value: 0x1a7f37ff}\n"
+        "  theme_colour:{tags: curve_3, value: 0xcf222eff}\n"
+        "  theme_colour:{tags: curve_4, value: 0x8250dfff}\n"
+        "  theme_colour:{tags: curve_5, value: 0x1b7c83ff}\n"
+        "  theme_colour:{tags: curve_6, value: 0x9a6700ff}\n"
+        "  theme_colour:{tags: curve_7, value: 0xbf3989ff}\n"
         "}\n"
     )
 };

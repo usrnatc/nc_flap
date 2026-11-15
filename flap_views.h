@@ -10,8 +10,9 @@
 #include "fli.h"
 
 #include "flv_lower.h"
-#include "flv_visualisation.h"
 #include "flv_compile.h"
+
+#include "flap_widgets.h"
 
 // @defines____________________________________________________________________
 typedef u32 FLAPExplorerRowKind;
@@ -24,12 +25,15 @@ enum : u32 {
 
 // @types______________________________________________________________________
 struct FLAPViewTabState {
-    u64           UnitHash;
-    UIScrollPoint Scroll[FLV_LAYOUT_MAX];
-    v2i64         Cursor[FLV_LAYOUT_MAX];
-    v2i64         Mark[FLV_LAYOUT_MAX];
-    f32*          Percents[FLV_LAYOUT_MAX];
-    u32           PercentsCount[FLV_LAYOUT_MAX];
+    u64               UnitHash;
+    FLAPGraphState    Graph;
+    FLAPGraphColumns* GraphColumns[FLV_LAYOUT_MAX];
+    u32               GraphColumnsCount[FLV_LAYOUT_MAX];
+    UIScrollPoint     Scroll[FLV_LAYOUT_MAX];
+    v2i64             Cursor[FLV_LAYOUT_MAX];
+    v2i64             Mark[FLV_LAYOUT_MAX];
+    f32*              Percents[FLV_LAYOUT_MAX];
+    u32               PercentsCount[FLV_LAYOUT_MAX];
 };
 
 struct FLAPViewTabCtx {

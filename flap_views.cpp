@@ -113,6 +113,23 @@ FLAPTablePercents(FLAPViewTabCtx* Ctx, u32 NodeIndex, u32 Count)
     return Result;
 }
 
+INTERNAL FLAPGraphColumns*
+FLAPGraphColumnsArray(FLAPViewTabCtx* Ctx, u32 NodeIndex, u32 Count)
+{
+    FLAPViewTabState* State = Ctx->State;
+
+    if (State->GraphColumnsCount[NodeIndex] != Count) {
+        State->GraphColumns[NodeIndex] = ArenaPushArrayZero(
+            AppViewMemPool(),
+            FLAPGraphColumns,
+            Count
+        );
+        State->GraphColumnsCount[NodeIndex] = Count;
+    }
+
+    return State->GraphColumns[NodeIndex];
+}
+
 INTERNAL void
 FLAPAnalysisUI(FLAPViewTabCtx* Ctx, u32 NodeIndex, r2f32 Rect)
 {
@@ -165,6 +182,7 @@ FLAPAnalysisUI(FLAPViewTabCtx* Ctx, u32 NodeIndex, r2f32 Rect)
         } else {
             u32 TableEmit = U32_MAX;
             u32 FlagCount = 0;
+            u32 CurveCount = 0;
  
             for (u32 Index = 0; Index < Program->EmitCount; ++Index) {
                 u8 Kind = Program->Emits[Index].DisplayKind;
@@ -181,32 +199,34 @@ FLAPAnalysisUI(FLAPViewTabCtx* Ctx, u32 NodeIndex, r2f32 Rect)
                 if (Kind == TOKEN_KIND_FLAG)
                     ++FlagCount;
  
-                // TODO(nathan): curves are held until the TUI plot exists.
-                if (Kind == TOKEN_KIND_GRAPH) {
-                    Str8 Label = Program->Strings[
-                        Program->Emits[Index].LabelStringIndex
-                    ];
- 
-                    UITag("weak"_s8) {
-                        UIWidthFill() {
-                            if (Items[Index].IsMissing) {
-                                UILabel("graph %S: missing", PRINT_STR(Label));
-                            } else {
-                                UILabel(
-                                    "graph %S: axis %u, %llu samples",
-                                    PRINT_STR(Label),
-                                    Items[Index].Curve.Axis,
-                                    Items[Index].Curve.Count
-                                );
-                            }
-                        }
-                    }
- 
-                    Rect.Y0 += 1.0f;
+                if (
+                    Kind == TOKEN_KIND_GRAPH &&
+                    !Items[Index].IsMissing &&
+                    Items[Index].Kind == FLV_RENDER_KIND_CURVE
+                ) {
+                    ++CurveCount;
                 }
             }
  
-            if (TableEmit != U32_MAX) {
+            if (CurveCount) {
+                FLAPGraphParams Params = {};
+
+                Params.Acc = Ctx->Acc;
+                Params.FLI = Ctx->FLI;
+                Params.Program = Program;
+                Params.Items = Items;
+                Params.State = &Ctx->State->Graph;
+                Params.Columns = FLAPGraphColumnsArray(
+                    Ctx,
+                    NodeIndex,
+                    Program->EmitCount
+                );
+                Params.MemPool = AppViewMemPool();
+                Params.UnitHash = Ctx->Unit->Hash;
+                Params.Flight = Ctx->Keys[Ctx->Flight];
+                Params.Key = NodeIndex;
+                FLAPGraph(&Params, Rect);
+            } else if (TableEmit != U32_MAX) {
                 FLAPTableParams Params = {};
 
                 Params.Acc = Ctx->Acc;
@@ -591,10 +611,39 @@ APP_VIEW_UI_FUNC_DEF(FLVView)
             Ctx.FLI = FLI;
             Ctx.State = State;
             Ctx.View = View;
+
+            if (UIIsFocusActive() && UIText('z'))
+                State->Graph.IsFitted = FALSE;
+
+            if (!State->Graph.IsFitted) {
+                State->Graph.FitRangeUSecs = {};
+                State->Graph.IsFitReady = TRUE;
+            }
  
             UISetNextPreferredSize(AXIS_2D_X, UI_PERCENT(1.0f, 0.0f));
             UISetNextPreferredSize(AXIS_2D_Y, UI_PERCENT(1.0f, 0.0f));
             FLAPLayoutUI(&Ctx, Rect);
+
+            if (
+                !State->Graph.IsFitted &&
+                State->Graph.IsFitReady &&
+                State->Graph.FitRangeUSecs.Min < State->Graph.FitRangeUSecs.Max
+            ) {
+                State->Graph.TimeRangeUSecs = State->Graph.FitRangeUSecs;
+                State->Graph.IsFitted = TRUE;
+                AppRequestFrame();
+            }
+
+            if (
+                State->Graph.HasCursor != State->Graph.HasNextCursor ||
+                State->Graph.CursorTimeUSecs != State->Graph.NextCursorTimeUSecs
+            ) {
+                AppRequestFrame();
+            }
+
+            State->Graph.HasCursor = State->Graph.HasNextCursor;
+            State->Graph.CursorTimeUSecs = State->Graph.NextCursorTimeUSecs;
+            State->Graph.HasNextCursor = FALSE;
         }
     }
  

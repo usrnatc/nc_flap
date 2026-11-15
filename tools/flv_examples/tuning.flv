@@ -17,15 +17,6 @@
 // on the right?
 //
 
-rate {
-    graph(
-        RATE.R,
-        RATE.RDes[abs(RATE.RDes) > 10],
-        RATE.P,
-        RATE.PDes[abs(RATE.PDes) > 10]
-    );
-}
-
 attitude {
     graph(
         ATT.Roll + 4,
