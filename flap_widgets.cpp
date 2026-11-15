@@ -894,10 +894,10 @@ FLAPGraphCursorValue(
 
         if (HasValue) {
             Result = (Low == High)
-                ? ArenaPushStrFmt(MemPool, " %.3f", (f64) Low)
+                ? ArenaPushStrFmt(MemPool, "=%3.3f", (f64) Low)
                 : ArenaPushStrFmt(
                     MemPool,
-                    " %.3f..%.3f",
+                    "=[%3.3f..%3.3f]",
                     (f64) Low,
                     (f64) High
                 );
@@ -1091,7 +1091,7 @@ UI_BOX_CUSTOM_DRAW(FLAPGraphDraw)
                 RendPutCell(
                     X0 + (i32) (Column >> 1),
                     Y0 + (Top >> 2),
-                    'O',
+                    '+',
                     Curve->Colour,
                     (RendAttr) 0
                 );

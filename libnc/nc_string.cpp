@@ -1699,10 +1699,14 @@ __VSNPrintf(char* Buffer, u64 BufferCount, char const* Fmt, va_list Args)
 
         if (*FmtPtr == 'h') {
             ++FmtPtr;
-            ArgLen = (*FmtPtr == 'h') ? (++FmtPtr, __VSN_LEN_HH) : __VSN_LEN_H;
+            ArgLen = (*FmtPtr == 'h') 
+                ? (++FmtPtr, __VSN_LEN_HH) 
+                : __VSN_LEN_H;
         } else if (*FmtPtr == 'l') {
             ++FmtPtr;
-            ArgLen = (*FmtPtr == 'l') ? (++FmtPtr, __VSN_LEN_LL) : __VSN_LEN_L;
+            ArgLen = (*FmtPtr == 'l') 
+                ? (++FmtPtr, __VSN_LEN_LL) 
+                : __VSN_LEN_L;
         } else if (*FmtPtr == 'z') {
             ++FmtPtr;
             ArgLen = __VSN_LEN_Z;
@@ -1904,7 +1908,9 @@ __VSNPrintf(char* Buffer, u64 BufferCount, char const* Fmt, va_list Args)
                 if (!Val) {
                     *(--TempBufferPtr) = '0';
                 } else {
-                    char const* HexString = (*FmtPtr == 'x') ? "0123456789abcdef" : "0123456789ABCDEF";
+                    char const* HexString = (*FmtPtr == 'x') 
+                        ? "0123456789abcdef" 
+                        : "0123456789ABCDEF";
 
                     while (Val) {
                         *(--TempBufferPtr) = HexString[Val & 0xF];
