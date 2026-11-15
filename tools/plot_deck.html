@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Plot Deck Widget — Proof of Concept</title>
+  <style>
+    :root {
+      --card-w: 500px;
+      --card-h: 320px;
+      --bg: #050608;
+      --card-bg: #000000;
+      --border: #f0f2f5;
+      --tab-red: #ff3344;
+      --tab-bg: #17080b;
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at 50% 45%, #10131a 0%, var(--bg) 72%);
+      color: #e5e7eb;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .stage {
+      position: relative;
+      width: 780px;
+      height: 540px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      perspective: 1150px;
+    }
+
+    .deck {
+      position: relative;
+      width: var(--card-w);
+      height: var(--card-h);
+      transform-style: preserve-3d;
+      transition: transform 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .deck.no-transition,
+    .deck.no-transition .card-slot {
+      transition: none !important;
+    }
+
+    /* Fixed 3D slot wrapper (never pops vertically, preventing hover flicker) */
+    .card-slot {
+      position: absolute;
+      inset: 0;
+      transform-style: preserve-3d;
+      transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease;
+    }
+
+    .card-slot.no-transition {
+      transition: none !important;
+    }
+
+    /* Visual card that pops upward on hover and during drag */
+    .card-visual {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      background: var(--card-bg);
+      border: 1.8px solid var(--border);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.65);
+      transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+                  border-color 0.15s ease,
+                  box-shadow 0.2s ease;
+      cursor: default;
+    }
+
+    .deck.is-open .card-visual {
+      cursor: grab;
+      touch-action: none;
+    }
+
+    .card-slot.is-popped .card-visual {
+      border-color: #ffffff;
+      box-shadow: 0 22px 42px rgba(0, 0, 0, 0.85);
+    }
+
+    .card-slot.is-dragging .card-visual {
+      cursor: grabbing;
+      border-color: #ff4d5e;
+      box-shadow: 0 26px 50px rgba(0, 0, 0, 0.92), 0 0 0 1px rgba(255, 77, 94, 0.5);
+      transition: border-color 0.12s ease, box-shadow 0.12s ease;
+    }
+
+    /* Top tabs: file title (left) + control buttons (right) */
+    .card-tabs {
+      position: absolute;
+      left: -2px;
+      right: -2px;
+      bottom: 100%;
+      padding-bottom: 4px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 10px;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(10px);
+      transition: opacity 0.16s ease, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .card-slot.is-popped .card-tabs,
+    .card-slot.is-dragging .card-tabs {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+    .tab-file,
+    .tab-controls {
+      background: var(--tab-bg);
+      border: 1.5px solid var(--tab-red);
+      color: #ffe4e6;
+      font-size: 12px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      height: 28px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+    }
+
+    .tab-file {
+      padding: 0 10px;
+      gap: 8px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .tab-index {
+      color: #ff7a85;
+      font-size: 11px;
+    }
+
+    .tab-controls {
+      padding: 0 4px;
+      gap: 4px;
+    }
+
+    .ctrl-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: #ffd5d9;
+      font-family: inherit;
+      font-size: 11px;
+      padding: 4px 7px;
+      cursor: pointer;
+      border-radius: 2px;
+      transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+    }
+
+    .ctrl-btn:hover:not(:disabled) {
+      background: rgba(255, 51, 68, 0.25);
+      border-color: rgba(255, 51, 68, 0.7);
+      color: #ffffff;
+    }
+
+    .ctrl-btn.is-active {
+      background: rgba(0, 232, 70, 0.18);
+      border-color: rgba(0, 232, 70, 0.65);
+      color: #86efac;
+    }
+
+    .ctrl-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
+    /* Plot SVG */
+    .plot-svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .plot-grid {
+      display: none;
+    }
+
+    .card-visual.show-grid .plot-grid {
+      display: block;
+    }
+
+    /* Bottom-right triangle handle of deck */
+    .deck-handle {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      width: 44px;
+      height: 44px;
+      transform: translateZ(4px);
+      display: flex;
+      align-items: flex-end;
+      justify-content: flex-end;
+      padding: 8px;
+      cursor: grab;
+      touch-action: none;
+      z-index: 100;
+    }
+
+    .deck-handle:active {
+      cursor: grabbing;
+    }
+
+    .deck-handle svg {
+      width: 18px;
+      height: 18px;
+      overflow: visible;
+      transition: transform 0.15s ease, filter 0.15s ease;
+    }
+
+    .deck-handle polygon {
+      fill: rgba(255, 255, 255, 0.08);
+      stroke: #ffffff;
+      stroke-width: 1.8;
+      stroke-linejoin: round;
+      transition: fill 0.15s ease, stroke 0.15s ease;
+    }
+
+    .deck-handle:hover polygon,
+    .deck-handle.is-spinning polygon {
+      fill: rgba(255, 255, 255, 0.35);
+      filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.65));
+    }
+
+    .deck.is-open .deck-handle polygon {
+      fill: rgba(255, 51, 68, 0.25);
+      stroke: #ff6b78;
+    }
+
+    /* Minimal footer instructions & helper actions */
+    .hud {
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-size: 12px;
+      color: #8b949e;
+      z-index: 10;
+    }
+
+    .hud-btn {
+      background: #141821;
+      border: 1px solid #2b3242;
+      color: #cbd5e1;
+      font-family: inherit;
+      font-size: 11px;
+      padding: 5px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .hud-btn:hover {
+      border-color: #64748b;
+      color: #ffffff;
+    }
+  </style>
+</head>
+<body>
+  <div class="stage" id="stage">
+    <div class="deck" id="deck">
+      <div class="deck-handle" id="deckHandle" title="Drag left to reveal deck (or click to toggle)">
+        <svg viewBox="0 0 20 20">
+          <polygon points="10,3 18,17 2,17" />
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="hud">
+    <span id="statusText">Pull the bottom-right triangle left (or click it) to spin open the deck</span>
+    <button class="hud-btn" id="addPlotBtn">+ Add Plot</button>
+    <button class="hud-btn" id="resetBtn">Reset</button>
+  </div>
+
+  <script>
+    const stageEl = document.getElementById('stage');
+    const deckEl = document.getElementById('deck');
+    const handleEl = document.getElementById('deckHandle');
+    const statusText = document.getElementById('statusText');
+    const addPlotBtn = document.getElementById('addPlotBtn');
+    const resetBtn = document.getElementById('resetBtn');
+
+    // Screen-space direction vector per slot step (+14, -14, -44) under R(-10, -36, 6)
+    const SLOT_SCREEN_STEP = { x: 38.31, y: -16.88 };
+    const SLOT_SCREEN_LEN = Math.hypot(SLOT_SCREEN_STEP.x, SLOT_SCREEN_STEP.y);
+    const SLOT_UNIT = {
+      x: SLOT_SCREEN_STEP.x / SLOT_SCREEN_LEN,
+      y: SLOT_SCREEN_STEP.y / SLOT_SCREEN_LEN
+    };
+
+    const INITIAL_SPECS = [
+      { id: 'p1', title: 'sensor_alpha.csv', seed: 1.1, showGrid: false },
+      { id: 'p2', title: 'fft_harmonic.dat', seed: 2.7, showGrid: false },
+      { id: 'p3', title: 'voltage_bus_2.log', seed: 4.3, showGrid: false },
+      { id: 'p4', title: 'thermal_drift.csv', seed: 5.9, showGrid: false },
+      { id: 'p5', title: 'vibration_z.wav', seed: 7.4, showGrid: false }
+    ];
+
+    let plotsById = new Map();
+    let order = [];
+    let nextIdNum = 6;
+
+    let progress = 0; // 0 = closed flat view, 1 = open 3D deck
+    let hoveredId = null;
+
+    const handleDrag = {
+      active: false,
+      pointerId: null,
+      startX: 0,
+      startY: 0,
+      startP: 0,
+      moved: false
+    };
+
+    const cardDrag = {
+      active: false,
+      pending: false,
+      id: null,
+      pointerId: null,
+      startX: 0,
+      startY: 0,
+      startSlot: 0,
+      floatSlot: 0,
+      perpY: 0
+    };
+
+    function clamp(v, min, max) {
+      return Math.max(min, Math.min(max, v));
+    }
+
+    // Deterministic jagged waveforms resembling the green & magenta sketches
+    function buildWavePath(seed, mode) {
+      const pts = [];
+      const steps = 68;
+      const xStart = 18;
+      const xEnd = 482;
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const x = xStart + t * (xEnd - xStart);
+        let y;
+        if (mode === 'green') {
+          y = 152
+            + Math.sin(t * 14 + seed * 2.1) * 26
+            + Math.cos(t * 27 - seed * 1.3) * 14
+            + Math.sin(t * 53 + seed * 4.7) * 6;
+        } else {
+          const jag = ((i % 2 === 0 ? 1 : -1) * 10) * (0.4 + 0.6 * Math.abs(Math.sin(i * 1.9 + seed)));
+          y = 166
+            + Math.sin(t * 9 + seed * 3.4) * 22
+            + Math.cos(t * 35 + seed * 2.2) * 16
+            + jag;
+        }
+        pts.push(`${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${clamp(y, 26, 290).toFixed(1)}`);
+      }
+      return pts.join(' ');
+    }
+
+    function buildGridMarkup() {
+      let lines = '';
+      for (let x = 50; x <= 450; x += 50) {
+        lines += `<line x1="${x}" y1="16" x2="${x}" y2="304" stroke="#1f2937" stroke-width="1" />`;
+      }
+      for (let y = 40; y <= 280; y += 40) {
+        lines += `<line x1="16" y1="${y}" x2="484" y2="${y}" stroke="#1f2937" stroke-width="1" />`;
+      }
+      lines += `<line x1="16" y1="160" x2="484" y2="160" stroke="#374151" stroke-width="1" stroke-dasharray="4 4" />`;
+      return lines;
+    }
+
+    const GRID_MARKUP = buildGridMarkup();
+
+    function createCardElement(plot) {
+      const slotEl = document.createElement('div');
+      slotEl.className = 'card-slot';
+      slotEl.dataset.id = plot.id;
+
+      const visualEl = document.createElement('div');
+      visualEl.className = 'card-visual' + (plot.showGrid ? ' show-grid' : '');
+
+      const tabsEl = document.createElement('div');
+      tabsEl.className = 'card-tabs';
+
+      const fileTab = document.createElement('div');
+      fileTab.className = 'tab-file';
+      fileTab.innerHTML = `<span class="tab-index">#1</span><span>${plot.title}</span>`;
+
+      const controlsTab = document.createElement('div');
+      controlsTab.className = 'tab-controls';
+
+      const btnFocus = document.createElement('button');
+      btnFocus.className = 'ctrl-btn';
+      btnFocus.type = 'button';
+      btnFocus.textContent = 'View';
+      btnFocus.title = 'Bring plot to front and close deck';
+
+      const btnGrid = document.createElement('button');
+      btnGrid.className = 'ctrl-btn' + (plot.showGrid ? ' is-active' : '');
+      btnGrid.type = 'button';
+      btnGrid.textContent = 'Grid';
+      btnGrid.title = 'Toggle plot grid';
+
+      const btnRemove = document.createElement('button');
+      btnRemove.className = 'ctrl-btn btn-remove';
+      btnRemove.type = 'button';
+      btnRemove.textContent = '✕';
+      btnRemove.title = 'Remove plot from deck';
+
+      // Prevent button clicks from triggering drag-to-reorder
+      [btnFocus, btnGrid, btnRemove].forEach((btn) => {
+        btn.addEventListener('pointerdown', (e) => e.stopPropagation());
+      });
+
+      btnFocus.addEventListener('click', () => {
+        const idx = order.indexOf(plot.id);
+        if (idx > 0) {
+          order.splice(idx, 1);
+          order.unshift(plot.id);
+        }
+        hoveredId = null;
+        progress = 0;
+        render();
+      });
+
+      btnGrid.addEventListener('click', () => {
+        plot.showGrid = !plot.showGrid;
+        visualEl.classList.toggle('show-grid', plot.showGrid);
+        btnGrid.classList.toggle('is-active', plot.showGrid);
+      });
+
+      btnRemove.addEventListener('click', () => {
+        if (order.length <= 1) return;
+        const idx = order.indexOf(plot.id);
+        if (idx !== -1) order.splice(idx, 1);
+        plotsById.delete(plot.id);
+        slotEl.remove();
+        if (hoveredId === plot.id) hoveredId = null;
+        render();
+      });
+
+      controlsTab.append(btnFocus, btnGrid, btnRemove);
+      tabsEl.append(fileTab, controlsTab);
+
+      const svgNS = 'http://www.w3.org/2000/svg';
+      const svg = document.createElementNS(svgNS, 'svg');
+      svg.setAttribute('class', 'plot-svg');
+      svg.setAttribute('viewBox', '0 0 500 320');
+      svg.innerHTML = `
+        <g class="plot-grid">${GRID_MARKUP}</g>
+        <path d="${buildWavePath(plot.seed, 'green')}" fill="none" stroke="#00e846" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" />
+        <path d="${buildWavePath(plot.seed, 'magenta')}" fill="none" stroke="#ec00c8" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
+      `;
+
+      visualEl.append(tabsEl, svg);
+      slotEl.appendChild(visualEl);
+
+      // Hold & drag on card to reorder when deck is open
+      visualEl.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0 || progress < 0.85 || handleDrag.active) return;
+        if (e.target.closest('button, .deck-handle')) return;
+        cardDrag.pending = true;
+        cardDrag.active = false;
+        cardDrag.id = plot.id;
+        cardDrag.pointerId = e.pointerId;
+        cardDrag.startX = e.clientX;
+        cardDrag.startY = e.clientY;
+        cardDrag.startSlot = order.indexOf(plot.id);
+        cardDrag.floatSlot = cardDrag.startSlot;
+        cardDrag.perpY = 0;
+      });
+
+      plot.slotEl = slotEl;
+      plot.visualEl = visualEl;
+      plot.indexEl = fileTab.querySelector('.tab-index');
+      plot.removeBtn = btnRemove;
+
+      deckEl.insertBefore(slotEl, handleEl);
+    }
+
+    let stageScale = 1;
+    function updateStageScale() {
+      stageScale = Math.min(1, (window.innerWidth - 20) / 780, (window.innerHeight - 64) / 540);
+      stageEl.style.transform = stageScale < 1 ? `scale(${stageScale.toFixed(3)})` : '';
+    }
+    window.addEventListener('resize', updateStageScale);
+    updateStageScale();
+
+    function initDeck() {
+      for (const plot of plotsById.values()) {
+        plot.slotEl.remove();
+      }
+      plotsById.clear();
+      order = [];
+      nextIdNum = 6;
+      hoveredId = null;
+      progress = 0;
+
+      for (const spec of INITIAL_SPECS) {
+        const plot = { ...spec };
+        plotsById.set(plot.id, plot);
+        order.push(plot.id);
+        createCardElement(plot);
+      }
+      render();
+    }
+
+    function render() {
+      const p = progress;
+      const isOpen = p >= 0.85;
+
+      deckEl.classList.toggle('is-open', isOpen);
+      deckEl.classList.toggle('no-transition', handleDrag.active);
+      handleEl.classList.toggle('is-spinning', handleDrag.active);
+
+      deckEl.style.transform =
+        `translate3d(${(-60 * p).toFixed(2)}px, ${(28 * p).toFixed(2)}px, 0) ` +
+        `rotateX(${(-10 * p).toFixed(2)}deg) ` +
+        `rotateY(${(-36 * p).toFixed(2)}deg) ` +
+        `rotateZ(${(6 * p).toFixed(2)}deg)`;
+
+      const canDelete = order.length > 1;
+
+      for (const [id, plot] of plotsById.entries()) {
+        const idx = order.indexOf(id);
+        const isDragged = cardDrag.active && cardDrag.id === id;
+        const slotPos = isDragged ? cardDrag.floatSlot : idx;
+
+        const tx = slotPos * 14 * p;
+        const ty = -slotPos * 14 * p;
+        const tz = -slotPos * (1 + 43 * p);
+
+        plot.slotEl.classList.toggle('no-transition', isDragged);
+        plot.slotEl.style.transform = `translate3d(${tx.toFixed(2)}px, ${ty.toFixed(2)}px, ${tz.toFixed(2)}px)`;
+
+        if (idx === 0 || isDragged) {
+          plot.slotEl.style.opacity = '1';
+          plot.slotEl.style.pointerEvents = isOpen ? 'auto' : 'none';
+        } else {
+          plot.slotEl.style.opacity = p < 0.02 ? '0' : String(Math.min(1, p * 3.5));
+          plot.slotEl.style.pointerEvents = isOpen ? 'auto' : 'none';
+        }
+
+        const isPopped = isOpen && !handleDrag.active && !cardDrag.active && hoveredId === id;
+        plot.slotEl.classList.toggle('is-popped', isPopped);
+        plot.slotEl.classList.toggle('is-dragging', isDragged);
+
+        let popY = 0;
+        if (isDragged) {
+          popY = -102 + cardDrag.perpY;
+        } else if (isPopped) {
+          popY = -92;
+        }
+        plot.visualEl.style.transform = `translate3d(0, ${popY.toFixed(1)}px, 0)`;
+
+        plot.indexEl.textContent = `#${idx + 1}`;
+        plot.removeBtn.disabled = !canDelete;
+      }
+
+      if (cardDrag.active) {
+        statusText.textContent = `Reordering (${order.length} plots) — Drag along the deck and release`;
+      } else if (isOpen) {
+        statusText.textContent = `Deck open (${order.length} plots) — Hover to pop up & inspect • Drag plot to reorder • Pull corner right to close`;
+      } else {
+        statusText.textContent = `Showing front plot (${order.length} in deck) — Pull bottom-right triangle left (or click) to reveal deck`;
+      }
+    }
+
+    // Handle drag: pull left to spin open, pull right (or click) to close
+    handleEl.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      e.stopPropagation();
+      handleDrag.active = true;
+      handleDrag.pointerId = e.pointerId;
+      handleDrag.startX = e.clientX;
+      handleDrag.startY = e.clientY;
+      handleDrag.startP = progress;
+      handleDrag.moved = false;
+      hoveredId = null;
+      handleEl.setPointerCapture(e.pointerId);
+      render();
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      if (handleDrag.active && e.pointerId === handleDrag.pointerId) {
+        const dx = (e.clientX - handleDrag.startX) / stageScale;
+        const dy = (e.clientY - handleDrag.startY) / stageScale;
+        if (Math.hypot(dx, dy) > 4) handleDrag.moved = true;
+        progress = clamp(handleDrag.startP + (-dx) / 180, 0, 1);
+        render();
+        return;
+      }
+
+      if ((cardDrag.pending || cardDrag.active) && e.pointerId === cardDrag.pointerId) {
+        const dx = (e.clientX - cardDrag.startX) / stageScale;
+        const dy = (e.clientY - cardDrag.startY) / stageScale;
+
+        if (cardDrag.pending && Math.hypot(dx, dy) >= 5) {
+          cardDrag.pending = false;
+          cardDrag.active = true;
+          hoveredId = cardDrag.id;
+          const draggedPlot = plotsById.get(cardDrag.id);
+          if (draggedPlot) draggedPlot.slotEl.setPointerCapture(e.pointerId);
+        }
+
+        if (cardDrag.active) {
+          const proj = dx * SLOT_UNIT.x + dy * SLOT_UNIT.y;
+          const perp = dx * (-SLOT_UNIT.y) + dy * SLOT_UNIT.x;
+          cardDrag.floatSlot = clamp(cardDrag.startSlot + proj / SLOT_SCREEN_LEN, -0.2, order.length - 0.8);
+          cardDrag.perpY = clamp(perp * 0.35, -22, 22);
+
+          let curIdx = order.indexOf(cardDrag.id);
+          let targetIdx = curIdx;
+          while (cardDrag.floatSlot < targetIdx - 0.52 && targetIdx > 0) targetIdx--;
+          while (cardDrag.floatSlot > targetIdx + 0.52 && targetIdx < order.length - 1) targetIdx++;
+
+          if (targetIdx !== curIdx) {
+            order.splice(curIdx, 1);
+            order.splice(targetIdx, 0, cardDrag.id);
+          }
+          render();
+        }
+      }
+    });
+
+    function endDrag(e) {
+      if (handleDrag.active && e.pointerId === handleDrag.pointerId) {
+        handleDrag.active = false;
+        if (!handleDrag.moved) {
+          progress = handleDrag.startP < 0.5 ? 1 : 0;
+        } else if (handleDrag.startP < 0.5) {
+          progress = progress > 0.25 ? 1 : 0;
+        } else {
+          progress = progress < 0.75 ? 0 : 1;
+        }
+        render();
+      }
+
+      if ((cardDrag.pending || cardDrag.active) && e.pointerId === cardDrag.pointerId) {
+        const wasActive = cardDrag.active;
+        cardDrag.pending = false;
+        cardDrag.active = false;
+        cardDrag.id = null;
+        if (wasActive && progress >= 0.85) {
+          const under = document.elementFromPoint(e.clientX, e.clientY);
+          const slotEl = under && under.closest('.card-slot');
+          hoveredId = slotEl ? slotEl.dataset.id : null;
+        }
+        render();
+      }
+    }
+
+    window.addEventListener('pointerup', endDrag);
+    window.addEventListener('pointercancel', endDrag);
+
+    // Unified, flicker-free hover tracking across 3D deck
+    stageEl.addEventListener('pointermove', (e) => {
+      if (progress < 0.85 || handleDrag.active || cardDrag.active) return;
+      if (e.target.closest('.deck-handle')) {
+        if (hoveredId !== null) {
+          hoveredId = null;
+          render();
+        }
+        return;
+      }
+      const slotEl = e.target.closest('.card-slot');
+      const nextId = slotEl ? slotEl.dataset.id : null;
+      if (nextId !== hoveredId) {
+        hoveredId = nextId;
+        render();
+      }
+    });
+
+    stageEl.addEventListener('pointerleave', () => {
+      if (hoveredId !== null && !cardDrag.active) {
+        hoveredId = null;
+        render();
+      }
+    });
+
+    addPlotBtn.addEventListener('click', () => {
+      const n = nextIdNum++;
+      const id = `p${n}`;
+      const plot = {
+        id,
+        title: `capture_${String(n).padStart(2, '0')}.csv`,
+        seed: n * 1.63,
+        showGrid: false
+      };
+      plotsById.set(id, plot);
+      order.push(id);
+      createCardElement(plot);
+      if (progress < 0.85) progress = 1;
+      hoveredId = id;
+      render();
+    });
+
+    resetBtn.addEventListener('click', () => {
+      initDeck();
+    });
+
+    initDeck();
+  </script>
+</body>
+</html>
