@@ -2072,7 +2072,7 @@ UIEndBuild(void)
                                 UI_STATE->StringHoverMemPool, 
                                 &B->DisplayFancyStrings
                             );
-                            UI_STATE->StringHoverBeginUSecs = TimeGetTimestamp();
+                            UI_STATE->StringHoverBeginUSecs = TimeNow();
                         }
 
                         UI_STATE->StringHoverBuildIndex = UI_STATE->BuildIndex;

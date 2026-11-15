@@ -14,27 +14,15 @@
 #include "flv_compile.h"
 
 // @defines____________________________________________________________________
-#define FLAP_VIEW_UI_FUNC_SIG(X) void X(r2f32 Rect)
-typedef FLAP_VIEW_UI_FUNC_SIG(FLAPViewUIFuncType);
+typedef u32 FLAPExplorerRowKind;
+enum : u32 {
+    FLAP_EXPLORER_ROW_KIND_ROOT,
+    FLAP_EXPLORER_ROW_KIND_FOLDER,
+    FLAP_EXPLORER_ROW_KIND_FILE,
+    FLAP_EXPLORER_ROW_KIND_DIVIDER
+};
 
 // @types______________________________________________________________________
-struct FLAPViewRule {
-    u64                 Key;
-    Str8                Name;
-    FLAPViewUIFuncType* ViewUIFunc;
-};
-
-struct FLAPViewRuleNode {
-    FLAPViewRuleNode* Next;
-    FLAPViewRuleNode* Prev;
-    FLAPViewRule      V;
-};
-
-struct FLAPViewRuleSlot {
-    FLAPViewRuleNode* Head;
-    FLAPViewRuleNode* Tail;
-};
-
 struct FLAPViewTabState {
     u64           UnitHash;
     UIScrollPoint Scroll[FLV_LAYOUT_MAX];
@@ -72,12 +60,6 @@ struct FLAPViewsViewState {
     v2i64 Mark;
 };
 
-struct FLAPViewsState {
-    Arena*            MemPool;
-    FLAPViewRuleSlot* Slots;
-    u64               SlotsCount;
-};
-
 struct FLAPLayoutRecord {
     u32 Next;
     i32 PushCount;
@@ -91,16 +73,40 @@ struct FLAPLayoutTask {
     f32   ChildrenSize;
 };
 
+struct FLAPExplorerViewState {
+    v2i64 Cursor;
+    v2i64 Mark;
+};
+
+struct FLAPExplorerFolder {
+    Str8 Path;
+    u32  First;
+    u32  Count;
+    u32  Checked;
+    u32  __Padding;
+};
+
+struct FLAPExplorerRow {
+    ConfigNode**        Files;
+    Str8                Label;
+    Str8                CollapseKey;
+    u32                 FilesCount;
+    u32                 CheckedCount;
+    FLAPExplorerRowKind Kind;
+    u32                 Depth;
+    b32                 IsFlights;
+    b32                 IsExpanded;
+};
+
+struct FLAPExplorerRowArray {
+    FLAPExplorerRow* V;
+    u64              Count;
+};
+
 // @runtime____________________________________________________________________
-extern FLAPViewsState* FLAP_VIEWS_STATE;
-extern FLAPViewRuleNode* const EMPTY_FLAP_VIEW_RULE_NODE_VALUE;
+
 
 // @functions__________________________________________________________________
-void FLAPViewsInit(void);
 
-// TODO(nc): empty stub for missing view funcs?
-FLAP_VIEW_UI_FUNC_SIG(FLAPFilesViewUI);
-FLAP_VIEW_UI_FUNC_SIG(FLAPViewsViewUI);
-FLAP_VIEW_UI_FUNC_SIG(FLAPViewTabUI);
 
 #endif // __FLAP_VIEWS_H__

@@ -940,16 +940,9 @@ AppCommandKindInfo APP_COMMAND_KIND_INFO_TABLE[APP_COMMAND_KIND_COUNT] = {
         Str8Lit("Updates the query input buffer")
     },
     {
-        Str8Lit("files"),
-        Str8Lit("Opens a tab that shows the list of flights."),
-        Str8Lit("logs,bin,fli,flights"),
-        Str8Lit(""),
-        APP_COMMAND_KIND_FLAG_LIST_IN_UI
-    },
-    {
-        Str8Lit("views"),
-        Str8Lit("Opens a tab that shows the list of View files."),
-        Str8Lit("flv,analysis"),
+        Str8Lit("explorer"),
+        Str8Lit("Opens a tab that shows the flights and the View files."),
+        Str8Lit("files,views,logs,bin,fli,flv,flights"),
         Str8Lit(""),
         APP_COMMAND_KIND_FLAG_LIST_IN_UI
     },
@@ -962,7 +955,7 @@ AppCommandKindInfo APP_COMMAND_KIND_INFO_TABLE[APP_COMMAND_KIND_COUNT] = {
     }
 };
 
-BindingTableEntry APP_DEFAULT_BINDING_TABLE[81] = {
+BindingTableEntry APP_DEFAULT_BINDING_TABLE[80] = {
     {
         Str8Lit("exit"),
         {
@@ -1514,23 +1507,17 @@ BindingTableEntry APP_DEFAULT_BINDING_TABLE[81] = {
         }
     },
     {
-        Str8Lit("files"),
+        Str8Lit("explorer"),
         {
             INPUT_KIND_1,
             INPUT_MOD_KIND_ALT
         }
     },
-    {
-        Str8Lit("views"),
-        {
-            INPUT_KIND_2,
-            INPUT_MOD_KIND_ALT
-        }
-    },
+
     {
         Str8Lit("flv"),
         {
-            INPUT_KIND_3,
+            INPUT_KIND_2,
             INPUT_MOD_KIND_ALT
         }
     }
@@ -1551,7 +1538,8 @@ Str8 APP_ICON_KIND_TEXT_TABLE[APP_ICON_KIND_COUNT] = {
     Str8Lit("\xE2\x96\xB2"),
     Str8Lit("\xE2\x96\xBC"),
     Str8Lit("[ ]"),
-    Str8Lit("[X]"),
+    Str8Lit("[+]"),
+    Str8Lit("[-]"),
     Str8Lit("( )"),
     Str8Lit("(\xE2\x80\xA2)"),
     Str8Lit("+"),
@@ -1952,7 +1940,7 @@ Str8 APP_THEME_PRESET_CONFIG_STR_TABLE[APP_THEME_PRESET_COUNT] = {
     )
 };
 
-AppNameSchemaInfo APP_NAME_SCHEMA_INFO_TABLE[10] = {
+AppNameSchemaInfo APP_NAME_SCHEMA_INFO_TABLE[11] = {
     {
         Str8Lit("session"),
         FALSE,
@@ -1996,17 +1984,18 @@ AppNameSchemaInfo APP_NAME_SCHEMA_INFO_TABLE[10] = {
     {
         Str8Lit("file"),
         FALSE,
-        Str8Lit("x:\n{\n}\n")
+        Str8Lit("@collection_commands(open)\n@row_commands(remove_cfg)\nx:\n{\n}\n")
     },
     {
-        Str8Lit("view"),
+        Str8Lit("flv_file"),
         FALSE,
-        Str8Lit("x:\n{\n}\n")
+        Str8Lit("@collection_commands(open)\n@row_commands(remove_cfg)\nx:\n{\n}\n")
+    },
+    {
+        Str8Lit("flv_view"),
+        FALSE,
+        Str8Lit("@inherit(tab) x:\n{\n  @display_name('View File') @description(\"The FLV file that the tab shows.\")\n  'file': @no_relativise path,\n}\n")
     }
-    // TODO(nc): implement schema for views (add view(s)/folder, remove view(s)), 
-    //         : files (add file(s)/folder, remove file(s)), and just view 
-    //         : (switch flv file, edit flv file).
-
     // TODO(nc): implement schema for time. can show as timestamp or 
     //         : as relative to start time and also in different units
 };
@@ -2115,19 +2104,17 @@ r1u64 APP_REGISTERS_SLOT_RANGE_TABLE[APP_REGISTERS_SLOT_COUNT] = {
 };
 
 Str8 APP_TAB_FAST_PATH_VIEW_NAME_TABLE[APP_COMMAND_KIND_COUNT - APP_COMMAND_KIND_FIRST_TAB_FAST_PATH_CMD] = {
-    Str8Lit("files"),
-    Str8Lit("views"),
+    Str8Lit("explorer"),
     Str8Lit("flv")
 };
 
 // TODO(nc): figure out what needs to be here
 Str8 APP_TAB_FAST_PATH_QUERY_NAME[APP_COMMAND_KIND_COUNT - APP_COMMAND_KIND_FIRST_TAB_FAST_PATH_CMD] = {
     Str8Lit(""),
-    Str8Lit(""),
     Str8Lit("")
 };
 
-AppVocabInfo APP_VOCAB_INFO_TABLE[162] = {
+AppVocabInfo APP_VOCAB_INFO_TABLE[161] = {
     { 
         Str8Lit("view"),
         Str8Lit("views"),
@@ -3193,18 +3180,11 @@ AppVocabInfo APP_VOCAB_INFO_TABLE[162] = {
         APP_ICON_KIND_NULL 
     },
     { 
-        Str8Lit("files"),
+        Str8Lit("explorer"),
         Str8Lit(""),
-        Str8Lit("Files"),
+        Str8Lit("Explorer"),
         Str8Lit(""),
-        APP_ICON_KIND_FILE
-    },
-    { 
-        Str8Lit("views"),
-        Str8Lit(""),
-        Str8Lit("Views"),
-        Str8Lit(""),
-        APP_ICON_KIND_FILE
+        APP_ICON_KIND_FOLDER
     },
     { 
         Str8Lit("flv"),
@@ -3284,7 +3264,7 @@ global readonly AppConfigCollectionInfo APP_CONFIG_COLLECTION_TABLE[] = {
     },
     {
         Str8Lit("flv_files"),
-        Str8Lit("view")
+        Str8Lit("flv_file")
     }
 };
 
@@ -3311,7 +3291,7 @@ AppConfigNameFromCollectionName(Str8 Name)
 }
 
 // NOTE(nc): the path of a config that is a path: a `path` child, or the
-//         : value of a session `file` or `view` config
+//         : value of a session `file` or `flv_file` config
 INTERNAL Str8
 AppPathFromConfig(ConfigNode* Config)
 {
@@ -3321,7 +3301,7 @@ AppPathFromConfig(ConfigNode* Config)
         !Result.Size &&
         (
             StrMatch(Config->String, "file"_s8, 0) ||
-            StrMatch(Config->String, "view"_s8, 0)
+            StrMatch(Config->String, "flv_file"_s8, 0)
         ) &&
         Config->Parent == ConfigNodeChildFromStr(ConfigNodeRoot(), "session"_s8)
     ) {
@@ -8846,7 +8826,7 @@ AppSessionListNameFromPath(Str8 Path)
 {
     Str8 Ext = StrSkipLastDot(Path);
     Str8 Result = StrMatch(Ext, "flv"_s8, STR_MATCH_ALL_CASES)
-        ? "view"_s8
+        ? "flv_file"_s8
         : "file"_s8;
 
     return Result;
@@ -10107,6 +10087,31 @@ AppFrame(void)
             }
         }
 
+        {
+            struct {
+                Str8               Name;
+                AppViewUIFuncType* ViewUIFunc;
+            } TabViewTable[] = {
+                {
+                    "explorer"_s8,
+                    APP_VIEW_UI_FUNC_NAME(Explorer)
+                },
+                {
+                    "flv_view"_s8,
+                    APP_VIEW_UI_FUNC_NAME(FLVView)
+                }
+            };
+
+            for (u64 Index = 0; Index < ARRAY_COUNT(TabViewTable); ++Index) {
+                MapInsert(
+                    Scratch.MemPool,
+                    APP_STATE->ViewUIRuleMap,
+                    TabViewTable[Index].Name,
+                    TabViewTable[Index].ViewUIFunc
+                );
+            }
+        }
+
         for (u64 Index = 0; Index < ARRAY_COUNT(LensTable); ++Index) {
             EvalTypeFlag TypeFlags = 0;
 
@@ -10199,7 +10204,7 @@ AppFrame(void)
                             );
 
                             if (NeedsFile && !Registers()->FilePath.Size) {
-                                AppCmd(APP_COMMAND_KIND_OPEN_FILES);
+                                AppCmd(APP_COMMAND_KIND_OPEN_EXPLORER);
                             } else {
                                 AppCmd(
                                     APP_COMMAND_KIND_BUILD_TAB,
@@ -11590,12 +11595,7 @@ AppFrame(void)
                                 Paths.Head->String
                             );
 
-                            if (StrMatch(ListName, "view"_s8, 0)) {
-                                AppCmd(APP_COMMAND_KIND_OPEN_VIEWS);
-                            } else {
-                                AppCmd(APP_COMMAND_KIND_OPEN_FILES);
-                            }
-
+                            AppCmd(APP_COMMAND_KIND_OPEN_EXPLORER);
                             AppCmd(
                                 APP_COMMAND_KIND_SET_CURRENT_PATH,
                                 __Registers.FilePath = IsFolder
@@ -11797,7 +11797,7 @@ AppFrame(void)
                                 "selected"_s8
                             );
                             AppCmd(
-                                APP_COMMAND_KIND_OPEN_FILES,
+                                APP_COMMAND_KIND_OPEN_EXPLORER,
                                 __Registers.Window = Window->ID,
                                 __Registers.Panel = Panels->ID
                             );
@@ -11821,7 +11821,7 @@ AppFrame(void)
                         ) {
                             if (
                                 StrMatch(Child->String, "file"_s8, 0) ||
-                                StrMatch(Child->String, "view"_s8, 0)
+                                StrMatch(Child->String, "flv_file"_s8, 0)
                             ) {
                                 AppFileRecorded(Child->Head->String);
                             }
@@ -13383,16 +13383,14 @@ AppWindowFrame(void)
         UIPreferredWidth(UI_PX(48.0f, 1.0f)) {
             UITag("floating"_s8) {
                 Str8 Commands[] = {
-                    APP_COMMAND_KIND_INFO_TABLE[APP_COMMAND_KIND_OPEN_FILES].String,
-                    APP_COMMAND_KIND_INFO_TABLE[APP_COMMAND_KIND_OPEN_VIEWS].String,
+                    APP_COMMAND_KIND_INFO_TABLE[APP_COMMAND_KIND_OPEN_EXPLORER].String,
                     {},
-                    APP_COMMAND_KIND_INFO_TABLE[APP_COMMAND_KIND_SET_THEME].String
+                    APP_COMMAND_KIND_INFO_TABLE[APP_COMMAND_KIND_SESSION_SETTINGS].String
                 };
                 u32 CodePoints[] = {
-                    'f',
-                    'v',
+                    'e',
                     0,
-                    't'
+                    's'
                 };
 
                 STATIC_ASSERT(
@@ -14302,7 +14300,7 @@ AppWindowFrame(void)
                                     } else {
                                         Str8 Commands[] = {
                                             APP_COMMAND_KIND_INFO_TABLE[APP_COMMAND_KIND_OPEN].String,
-                                            APP_COMMAND_KIND_INFO_TABLE[APP_COMMAND_KIND_OPEN_FILES].String,
+                                            APP_COMMAND_KIND_INFO_TABLE[APP_COMMAND_KIND_OPEN_EXPLORER].String,
                                             APP_COMMAND_KIND_INFO_TABLE[APP_COMMAND_KIND_OPEN_TAB].String,
                                             APP_COMMAND_KIND_INFO_TABLE[APP_COMMAND_KIND_CLOSE_PANEL].String
                                         };

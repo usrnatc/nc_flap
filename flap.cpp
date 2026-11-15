@@ -217,10 +217,10 @@ AppViewUI(r2f32 Rect)
                 ? UI_FOCUS_KIND_OFF 
                 : UI_FOCUS_KIND_NULL
         ) {
-            FLAPViewUIFuncType* ViewUIFunc = FLAPViewUIFuncFromName(ViewName);
+            AppViewUIRule* ViewUIRule = AppViewUIRuleFromStr(ViewName);
 
-            if (ViewUIFunc)
-                ViewUIFunc(Rect);
+            if (ViewUIRule->ViewUIFunc)
+                ViewUIRule->ViewUIFunc(Rect);
         }
     }
  
@@ -337,7 +337,6 @@ FLAPInteractive(CommandLine* CLI)
     RendInit(CLI);
     DrawInit();
     UIInit();
-    FLAPViewsInit();
  
     Handle* AsyncThreads = NULL;
     u64 LaneBroadcastValue = 0;
