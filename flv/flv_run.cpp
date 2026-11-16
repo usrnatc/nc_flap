@@ -356,6 +356,14 @@ FLVRegionRun(FLVLane* Lane, FLVRegion const* Region)
     Lane->BaseTime = FLVBaseTimeColumn(Lane, Region->BaseSlot);
     Lane->Mask = NULL;
 
+    // NOTE(nc): clear temp index because we reuse temps
+    for (u32 Index = 0; Index < Region->OpCount; ++Index) {
+        FLVOperand Dst = Program->Ops[Region->HeadOp + Index].Dst;
+
+        if (FLVGetOperandKind(Dst) == FLV_OPERAND_KIND_TEMP)
+            Lane->MissingTemps &= ~(1ULL << FLVGetOperandIndex(Dst));
+    }
+
     if (!Lane->BaseTime || FLVTempIsMissing(Lane, Region->RangeSelection)) {
         FLVRegionMarkMissing(Lane, Region);
 

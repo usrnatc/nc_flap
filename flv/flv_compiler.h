@@ -37,6 +37,8 @@ struct FLVCompiler {
     ParserState* Parser;
     FLVSchema*   Schema;
     FLVBuiltin*  StdLib;
+    Arena*       ErrorsMemPool;
+    Str8List     Errors;
     u64          SchemaKeyHash;
     u32          KeywordNameBase;
     u32          __Padding;

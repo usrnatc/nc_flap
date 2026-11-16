@@ -27,6 +27,9 @@ enum : u32 {
 struct FLAPViewTabState {
     u64               UnitHash;
     FLAPGraphState    Graph;
+    UIScrollPoint     ErrorScroll;
+    v2i64             ErrorCursor;
+    v2i64             ErrorMark;
     FLAPGraphColumns* GraphColumns[FLV_LAYOUT_MAX];
     u32               GraphColumnsCount[FLV_LAYOUT_MAX];
     UIScrollPoint     Scroll[FLV_LAYOUT_MAX];

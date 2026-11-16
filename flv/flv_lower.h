@@ -168,6 +168,8 @@ struct LowerState {
     u8               TempKind[FLV_TEMP_MAX];
     u32              TempHash[FLV_TEMP_MAX];
     u32              TempCount;
+    u8               TempFree[FLV_ELEMENT_KIND_COUNT][FLV_TEMP_MAX];
+    u32              TempFreeCount[FLV_ELEMENT_KIND_COUNT];
     LowerVar         Vars[FLV_LOWER_VAR_MAX];
     u32              VarCount;
     LowerDecl        Decls[FLV_LOWER_VAR_MAX];

@@ -487,6 +487,45 @@ FLAPFlagList(
     }
 }
 
+INTERNAL void
+FLAPErrorList(FLAPErrorListParams *Params, r2f32 Rect)
+{
+    UIScrollListParameters ListParams = {};
+    UIScrollListSignal ListSig = {};
+    r1i64 Visible = {};
+
+    ListParams.Kind = UI_SCROLL_LIST_KIND_ALL;
+    ListParams.DimensionsPX = Length(Rect);
+    ListParams.RowHeightPX = 1.0f;
+    ListParams.CursorRange.Max.Y = (i64) Params->Errors->Count;
+    ListParams.ItemRange = Rng((i64) 0, (i64) Params->Errors->Count);
+    ListParams.CursorMinIsEmptySelection[AXIS_2D_Y] = TRUE;
+
+    UIScrollList(
+        &ListParams,
+        Params->Scroll,
+        Params->Cursor,
+        Params->Mark,
+        &Visible,
+        &ListSig
+    ) {
+        Str8Node* Node = Params->Errors->Head;
+
+        for (i64 Row = 0; Row < Visible.Min && Node; ++Row)
+            Node = Node->Next;
+
+        for (
+            i64 Row = Visible.Min;
+            Row < Visible.Max && Node;
+            ++Row, Node = Node->Next
+        ) {
+            UIWidthFill() {
+                UILabel(Node->String);
+            }
+        }
+    }
+}
+
 INTERNAL u64
 FLAPGraphSampleFromTime(FLVColumn const* Time, r1u64 Samples, u64 TimeUSecs)
 {

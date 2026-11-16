@@ -209,7 +209,9 @@ FLVUnitKey(
     FLIKey const* Keys, 
     u64 KeysCount,
     u128 RootHash,
-    u64 ImportsHash
+    u64 ImportsHash,
+    Str8 const* SearchPaths,
+    u64 SearchPathsCount
 ) {
     Str8List Parts = {};
 
@@ -218,6 +220,12 @@ FLVUnitKey(
     ListPush(MemPool, &Parts, FLVFlightSetKey(MemPool, Keys, KeysCount));
     ListPush(MemPool, &Parts, Str8Struct(&RootHash));
     ListPush(MemPool, &Parts, Str8Struct(&ImportsHash));
+    ListPush(MemPool, &Parts, Str8Struct(&SearchPathsCount));
+
+    for (u64 Index = 0; Index < SearchPathsCount; ++Index) {
+        ListPush(MemPool, &Parts, Str8Struct(&SearchPaths[Index].Size));
+        ListPush(MemPool, &Parts, SearchPaths[Index]);
+    }
 
     return StrListJoin(MemPool, &Parts, NULL);
 }
@@ -246,6 +254,35 @@ FLVUnitObjectCreate(
 
     Offset += SerialPop(Key, Offset, Keys, KeysCount * sizeof(FLIKey), 1);
     Offset += SerialPopStruct(Key, Offset, &RootHash);
+    Offset += sizeof(u64);
+
+    u64 SearchPathsCount = 0;
+
+    Offset += SerialPopStruct(Key, Offset, &SearchPathsCount);
+
+    Str8* SearchPaths = ArenaPushArray(
+        Scratch.MemPool,
+        Str8,
+        SearchPathsCount
+    );
+
+    for (u64 Index = 0; Index < SearchPathsCount; ++Index) {
+        Str8* SearchPath = &SearchPaths[Index];
+
+        Offset += SerialPopStruct(Key, Offset, &SearchPaths->Size);
+        SearchPath->Str = ArenaPushArray(
+            Scratch.MemPool,
+            u8,
+            SearchPath->Size
+        );
+        Offset += SerialPop(
+            Key, 
+            Offset, 
+            SearchPath->Str, 
+            SearchPath->Size, 
+            1
+        );
+    }
 
     FLVCompiler* Compiler = FLVCompilerLock();
     u64 SetHash = Hash(FLVFlightSetKey(Scratch.MemPool, Keys, KeysCount));
@@ -275,6 +312,8 @@ FLVUnitObjectCreate(
     Unit->MemPool = MemPool;
     Unit->Key = ArenaPushStrCpy(MemPool, Key);
     Unit->Path = ArenaPushStrCpy(MemPool, Path);
+    Compiler->ErrorsMemPool = MemPool;                                          // WARN(nc): need to have the Unit own the arena so that it can be used before compiler dies
+    Compiler->Errors = {};
     Root.Path = Unit->Path;
     Root.Source = FLVSourceCpy(MemPool, Source);
     Root.Hash = RootHash;
@@ -285,7 +324,12 @@ FLVUnitObjectCreate(
         &Root.LineCount
     );
 
-    AST* Tree = ParseTokens(MemPool, &Root, NULL, 0);
+    AST* Tree = ParseTokens(
+        MemPool, 
+        &Root, 
+        SearchPaths,
+        SafeTruncateU64(SearchPathsCount)
+    );
 
     if (GetTLS()->PARSER_STATE->ImportNotReady) {
         SymTabPopToMark(BindingsMark);
@@ -313,7 +357,8 @@ FLVUnitObjectCreate(
         Unit->Slots, 
         Unit->SlotsCount
     );
-    Unit->HasError = Unit->Lowered.HasError;
+    Unit->Errors = Compiler->Errors;
+    Unit->HasError = (Unit->Lowered.HasError || Unit->Errors.Count);
     Unit->SlotNames = ArenaPushArrayZero(
         MemPool, 
         FLVSlotName, 
@@ -575,7 +620,9 @@ FLVUnitFromPath(
     Access* Acc, 
     Str8 Path, 
     FLIKey const* Keys, 
-    u64 KeysCount, 
+    u64 KeysCount,
+    Str8 const* SearchPaths,
+    u64 SearchPathsCount,
     u64 EndTimeUSecs
 ) {
     u128 RootHash = FSHashFromPathRange(
@@ -610,7 +657,9 @@ FLVUnitFromPath(
         Keys, 
         KeysCount, 
         RootHash, 
-        ImportsHash
+        ImportsHash,
+        SearchPaths,
+        SearchPathsCount
     );
     FLVUnit* Unit = FLVUnitFromKey(Acc, Key, EndTimeUSecs);
 

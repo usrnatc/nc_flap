@@ -40,9 +40,17 @@ TypeOf(LowerState* State, ExprIndex Index)
 internal FLVOperand
 TempAlloc(LowerState* State, u8 Kind)
 {
-    ASSERT_ALWAYS(State->TempCount < FLV_TEMP_MAX);
+    u32 Index = 0;
 
-    u32 Index = State->TempCount++;
+    if (State->TempFreeCount[Kind]) {
+        Index = State->TempFree[Kind][--State->TempFreeCount[Kind]];
+    } else {
+        // TODO(nc): be less harsh here, it is not their fault but ours
+        ASSERT_ALWAYS(State->TempCount < FLV_TEMP_MAX);
+
+        Index = State->TempCount++;
+    }
+
     FLVOperand Result = FLV_OPERAND_NONE;
 
     State->TempKind[Index] = Kind;
@@ -381,6 +389,28 @@ RegionClose(LowerState* State)
     Result->BaseSlot = Region->BaseSlot;
     Result->RangeSelection = Region->RangeSelection;
     Result->Mask = Region->Mask;
+
+    // NOTE(nc): we re-use temp memory so a chunk temp cannot be read
+    //         : after its region
+    for (u32 Index = 0; Index < Region->OpCount; ++Index) {
+        FLVOp Op = Region->Ops[Index];
+        FLVKernelInfo const* Info = &FLV_KERNEL_INFO_TABLE[Op.Kernel];
+        u8 Kind = Info->DstKind;
+
+        if (
+            (
+                Kind == FLV_ELEMENT_KIND_I64 ||
+                Kind == FLV_ELEMENT_KIND_F64 ||
+                Kind == FLV_ELEMENT_KIND_MASK
+            ) &&
+            !(Info->Flags & (FLV_KERNEL_FLAG_WINDOW | FLV_KERNEL_FLAG_ROLLING))
+        ) {
+            State->TempFree[Kind][State->TempFreeCount[Kind]++] = (u8) (
+                FLVGetOperandIndex(Op.Dst)
+            );
+        }
+    }
+
     State->Region = Region->Prev;
 }
 
@@ -2119,6 +2149,7 @@ ProgramBegin(LowerState* State)
     State->EmitCount = 0;
     State->StringCount = 0;
     State->TempCount = 0;
+    MemZero(State->TempFreeCount, sizeof(State->TempFreeCount));
     State->VarCount = 0;
     State->Missing = 0;
     State->TableGroup = 0;

@@ -530,11 +530,30 @@ APP_VIEW_UI_FUNC_DEF(FLVView)
     Access* Acc = APP_STATE->FrameAccess;
     Str8 Path = AppViewFilePath();
     FLAPFlightSet Flights = FLAPFlightSetFromConfig(Scratch.MemPool);
+    ConfigNodePtrList SearchPathList = ConfigNodeTopLevelListFromStr(
+        Scratch.MemPool,
+        "flv_search_path"_s8
+    );
+    ConfigNodePtrArray SearchPathNodes = ConfigNodePtrArrayFromList(
+        Scratch.MemPool,
+        &SearchPathList
+    );
+    Str8* SearchPaths = ArenaPushArray(
+        Scratch.MemPool,
+        Str8,
+        SearchPathNodes.Count
+    );
+
+    for (u64 Index = 0; Index < SearchPathNodes.Count; ++Index)
+        SearchPaths[Index] = SearchPathNodes.V[Index]->Head->String;
+
     FLVUnit* Unit = FLVUnitFromPath(
         Acc,
         Path,
         Flights.Keys.V,
         Flights.Keys.Count,
+        SearchPaths,
+        SearchPathNodes.Count,
         0
     );
     Str8 Message = ""_s8;
@@ -543,8 +562,14 @@ APP_VIEW_UI_FUNC_DEF(FLVView)
         Message = "compiling..."_s8;
         AppRequestFrame();
     } else if (Unit->HasError) {
-        // TODO(nathan): diagnostics on the unit
-        Message = "View has compile errors."_s8;
+        FLAPErrorListParams Params = {};
+
+        Params.Errors = &Unit->Errors;
+        Params.Scroll = &State->ErrorScroll;
+        Params.Cursor = &State->ErrorCursor;
+        Params.Mark = &State->ErrorMark;
+        FLAPErrorList(&Params, Rect);
+        State->ErrorScroll.Offset = 0.0f;
     } else if (!Flights.Keys.Count) {
         Message = "There are no flights in the list."_s8;
     } else if (Flights.Selected == U32_MAX) {
@@ -612,8 +637,10 @@ APP_VIEW_UI_FUNC_DEF(FLVView)
             Ctx.State = State;
             Ctx.View = View;
 
-            if (UIIsFocusActive() && UIText('z'))
-                State->Graph.IsFitted = FALSE;
+            UIFocus(UI_FOCUS_KIND_ON) {
+                if (UIIsFocusActive() && UIText('z'))
+                    State->Graph.IsFitted = FALSE;
+            }
 
             if (!State->Graph.IsFitted) {
                 State->Graph.FitRangeUSecs = {};

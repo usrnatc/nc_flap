@@ -27,6 +27,7 @@ struct FLVUnit {
     u32          ImportCount;
     Str8*        ImportPaths;
     u128*        ImportHashes;
+    Str8List     Errors;
     b32          HasError;
     u32          __Padding;
 };
@@ -61,7 +62,7 @@ extern FLVClosureTable FLV_CLOSURES;
 
 // @functions__________________________________________________________________
 Str8 FLVFlightSetKey(Arena* MemPool, FLIKey const* Keys, u64 Count);
-FLVUnit* FLVUnitFromPath(Access* Acc, Str8 Path, FLIKey const* Keys, u64 KeysCount, u64 EndTimeUSecs);
+FLVUnit* FLVUnitFromPath(Access* Acc, Str8 Path, FLIKey const* Keys, u64 KeysCount, Str8 const* SearchPaths, u64 SearchPathsCount, u64 EndTimeUSecs);
 FLVRenderItem* FLVResultFromUnit(Access* Acc, FLVUnit const* Unit, FLIKey const* Keys, u64 KeysCount, FLIKey Flight, u32 Program, u64 EndTimeUSecs);
 Str8 FLVImportSource(Arena* MemPool, Str8 Path, OUT u128* Hash);
 

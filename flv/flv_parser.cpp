@@ -20,6 +20,8 @@
 void
 FLVLogErrorAt(SourceLoc Loc, char const* Fmt, ...)
 {
+    FLVCompiler* const __Compiler = GetTLS()->FLV_COMPILER;
+    Str8 Path = StrSkipLastSlash(Loc.Path);
     TempArena Scratch = GetScratch(NULL, 0);
     va_list Args;
 
@@ -28,12 +30,17 @@ FLVLogErrorAt(SourceLoc Loc, char const* Fmt, ...)
     Str8 Message = ArenaPushStrFmtV(Scratch.MemPool, Fmt, Args);
 
     va_end(Args);
-    LogError(
-        "%S:%u:%u: %S",
-        PRINT_STR(Loc.Path),
-        Loc.Line,
-        Loc.Column,
-        PRINT_STR(Message)
+    ListPush(
+        __Compiler->ErrorsMemPool,
+        &__Compiler->Errors,
+        ArenaPushStrFmt(
+            __Compiler->ErrorsMemPool,
+            "%S:%u:%u: %S",
+            PRINT_STR(Path),
+            Loc.Line,
+            Loc.Column,
+            PRINT_STR(Message)
+        )
     );
     ReleaseScratch(Scratch);
 }

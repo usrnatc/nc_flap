@@ -49,6 +49,13 @@ struct FLAPFlagListParams {
     v2i64*            Mark;
 };
 
+struct FLAPErrorListParams {
+    Str8List*      Errors;
+    UIScrollPoint* Scroll;
+    v2i64*         Cursor;
+    v2i64*         Mark;
+};
+
 struct FLAPGraphState {
     r1u64 TimeRangeUSecs;
     r1u64 FitRangeUSecs;
@@ -133,6 +140,7 @@ struct FLAPGraphDrawData {
 // @functions__________________________________________________________________
 void FLAPTable(FLAPTableParams* Params, r2f32 Rect);
 void FLAPFlagList(FLAPFlagListParams* Params, r2f32 Rect);
+void FLAPErrorList(FLAPErrorListParams* Params, r2f32 Rect);
 b32 FLAPGraphColumnsFromKey(Arena* MemPool, FLAPGraphColumns* Columns, FLAPGraphKey* Key, Access* Acc, FLIParsed* FLI);
 void FLAPGraph(FLAPGraphParams* Params, r2f32 Rect);
 
