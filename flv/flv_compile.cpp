@@ -269,7 +269,7 @@ FLVUnitObjectCreate(
     for (u64 Index = 0; Index < SearchPathsCount; ++Index) {
         Str8* SearchPath = &SearchPaths[Index];
 
-        Offset += SerialPopStruct(Key, Offset, &SearchPaths->Size);
+        Offset += SerialPopStruct(Key, Offset, &SearchPath->Size);
         SearchPath->Str = ArenaPushArray(
             Scratch.MemPool,
             u8,
