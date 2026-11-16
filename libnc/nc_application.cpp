@@ -1513,7 +1513,6 @@ BindingTableEntry APP_DEFAULT_BINDING_TABLE[80] = {
             INPUT_MOD_KIND_ALT
         }
     },
-
     {
         Str8Lit("flv"),
         {

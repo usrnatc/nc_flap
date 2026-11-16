@@ -25,28 +25,26 @@ overview {
 
     events {
         timeline {
-            {
+            // {
                 graph(CTUN.ThO[1s..50s]);
-            }
+            // }
 
-            {
-                table(MSG[1s..50s]);
-            }
+            // {
+            //     table(MSG[1s..50s]);
+            // }
         }
 
         faults {
-            {
+            // {
                 graph(
                     BAT.Volt,
-                    Bat.Curr
+                    BAT.Curr:2
                 );
-            }
+            // }
 
-            {
-                // I am not sold on this syntax exactly, but something like
-                // this would be very useful to filter messages
-                table(MSG[Severity >= 2]);
-            }
+            // {
+            //     table(MSG[Severity >= 2]);
+            // }
         }
     }
 }

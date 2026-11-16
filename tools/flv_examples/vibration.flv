@@ -5,7 +5,7 @@ hover {
     );
 
     flag(VIBE.VibeX > 30);
-    flag(VIBE.Clip0 > 0);
+    flag(VIBE.Clip > 0);
 }
 
 forward {
