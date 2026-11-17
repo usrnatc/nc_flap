@@ -590,9 +590,20 @@ LowerFieldLoad(
     }
 
     FLVOperand SlotOp = FLVOperandAlloc(FLV_OPERAND_KIND_SLOT, Slot);
+    FLVSlot const* Source = &State->Slots[Slot];
+    b32 IsBase = (
+        Source->Message.V == MessageName(State->Region->Base).V &&
+        Source->Instance == MessageInstance(State->Region->Base)
+    );
     u16 Kernel = IsF64Elem(Elem) 
         ? FLV_KERNEL_LOAD_F64 
         : FLV_KERNEL_LOAD_I64;
+
+    if (!IsBase) {
+        Kernel = IsF64Elem(Elem) 
+            ? FLV_KERNEL_LOAD_HOLD_F64 
+            : FLV_KERNEL_LOAD_HOLD_I64;
+    }
 
     return ValueAlloc(
         EmitOp(

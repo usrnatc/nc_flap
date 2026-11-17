@@ -47,5 +47,7 @@ void CheckAST(Arena* MemPool, AST* Tree, FLVSchema const* Schema, OUT FLVSlot** 
 BindIndex ASTResolvedFind(AST* Tree, ExprIndex Expr);
 u32 StmtNext(AST* Tree, u32 Offset);
 b32 IsKind(TypeIndex Type, TypeKind Kind);
+NameIndex MessageName(TypeIndex Message);
+u32 MessageInstance(TypeIndex Message);
 
 #endif // __FLV_TYPE_CHECK_H__

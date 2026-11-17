@@ -154,7 +154,7 @@ BoolSeries(TypeIndex Base)
     return TypeSeries(Elem, Base);
 }
 
-INTERNAL NameIndex
+NameIndex
 MessageName(TypeIndex Message)
 {
     NameIndex Result = {
@@ -164,7 +164,7 @@ MessageName(TypeIndex Message)
     return Result;
 }
 
-INTERNAL u32
+u32
 MessageInstance(TypeIndex Message)
 {
     u16 Count = TypeAt(Message)->Count;
@@ -813,6 +813,38 @@ CheckUnary(CheckState* State, ASTNodeUnary* Unary)
     }
 }
 
+INTERNAL u64
+BaseRecordCount(CheckState* State, TypeIndex Base)
+{
+    u32 Message  = FLVSchemaFindMessage(
+        State->Schema,
+        MessageName(Base)
+    );
+    u64 Result = 0;
+
+    if (Message != FLV_SCHEMA_NOT_FOUND) {
+        FLVSchemaMessage const* M = &State->Schema->Messages[Message];
+
+        Result = M->RecordCount;
+
+        if (MessageInstance(Base) != FLV_INSTANCE_ANY && M->MaxInstance)
+            Result /= M->MaxInstance;
+    }
+
+    return Result;
+}
+
+INTERNAL TypeIndex
+AlignBase(CheckState* State, TypeIndex LHS, TypeIndex RHS)
+{
+    TypeIndex Result = LHS;
+
+    if (BaseRecordCount(State, RHS) > BaseRecordCount(State, LHS))
+        Result = RHS;
+
+    return Result;
+}
+
 INTERNAL void
 CheckBinary(CheckState* State, ASTNodeBinary* Binary)
 {
@@ -951,21 +983,13 @@ CheckBinary(CheckState* State, ASTNodeBinary* Binary)
         return;
     }
 
-    if (LSer && RSer && BaseOf(LHS).V != BaseOf(RHS).V) {
-        CHECK_ERROR(
-            State, 
-            &Node->Header, 
-            "%S and %S are different streams; align is not implemented yet",
-            PRINT_STR(NameStr(MessageName(BaseOf(LHS)))),
-            PRINT_STR(NameStr(MessageName(BaseOf(RHS))))
-        );
-        Node->Type.V = BUILTIN_void;
-        return;
-    }
-
     TypeIndex Base = LSer 
         ? BaseOf(LHS) 
         : BaseOf(RHS);
+
+    if (LSer && RSer && BaseOf(LHS).V != BaseOf(RHS).V)
+        Base = AlignBase(State, BaseOf(LHS), BaseOf(RHS));
+
     TypeIndex LE = LSer 
         ? SeriesElem(LHS) 
         : LHS;

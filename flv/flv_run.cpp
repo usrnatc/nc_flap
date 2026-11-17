@@ -104,6 +104,11 @@ FLVLaneInit(
         FLVWindow,
         Program->TempCount
     );
+    Lane->Holds = ArenaPushArrayZero(
+        MemPool,
+        FLVHold,
+        Program->TempCount
+    );
     Lane->Items = ArenaPushArrayZero(
         ResultMemPool,
         FLVRenderItem,
@@ -149,6 +154,7 @@ FLVLaneInit(
     }
 
     Lane->ChunkTimeDecode = ArenaPushArray(MemPool, u64, FLV_CHUNK_SAMPLES);
+    Lane->ChunkHold = ArenaPushArray(MemPool, u64, FLV_CHUNK_SAMPLES);
 
     b32 Result = TRUE;
 

@@ -571,6 +571,157 @@ FLV_KERNEL_FUNC_SIG(FLVKernelLOAD_INSTANCE)
     );
 }
 
+#define FLV_HOLD_LOOP(SrcType, DstType)                       \
+    do {                                                      \
+        SrcType const* __Src = (SrcType const*) Column->Data; \
+        DstType* __Dst = (DstType*) Result;                   \
+                                                              \
+        for (u64 Index = 0; Index < Count; ++Index)           \
+            __Dst[Index] = (DstType) __Src[Held[Index]];      \
+    } while (FALSE)
+
+#define FLV_HOLD_SWITCH(DstType)                                          \
+    switch (Column->Kind) {                                               \
+        default: {                                                        \
+            FLVTempSetMissing(Lane, Dst);                                 \
+                                                                          \
+            return;                                                       \
+        } break;                                                          \
+                                                                          \
+        case FLI_SCALAR_KIND_U8:  { FLV_HOLD_LOOP(u8,  DstType); } break; \
+        case FLI_SCALAR_KIND_I8:  { FLV_HOLD_LOOP(i8,  DstType); } break; \
+        case FLI_SCALAR_KIND_U16: { FLV_HOLD_LOOP(u16, DstType); } break; \
+        case FLI_SCALAR_KIND_I16: { FLV_HOLD_LOOP(i16, DstType); } break; \
+        case FLI_SCALAR_KIND_U32: { FLV_HOLD_LOOP(u32, DstType); } break; \
+        case FLI_SCALAR_KIND_I32: { FLV_HOLD_LOOP(i32, DstType); } break; \
+        case FLI_SCALAR_KIND_U64: { FLV_HOLD_LOOP(u64, DstType); } break; \
+        case FLI_SCALAR_KIND_I64: { FLV_HOLD_LOOP(i64, DstType); } break; \
+        case FLI_SCALAR_KIND_F32: { FLV_HOLD_LOOP(f32, DstType); } break; \
+        case FLI_SCALAR_KIND_F64: { FLV_HOLD_LOOP(f64, DstType); } break; \
+    }
+
+INTERNAL void
+FLVHoldChunk(FLVLane* Lane, u32 Slot, FLVOperand Dst, b32 ToF64)
+{
+    FLVBoundSlot const* Bound = &Lane->Slots[Slot];
+    FLVColumn const* Column = &Lane->Columns[Slot];
+    FLVColumn const* Time = &Lane->TimeColumns[Slot];
+    FLVColumn const* Instance = &Lane->InstanceColumns[Slot];
+    FLVHold* Hold = &Lane->Holds[FLVGetOperandIndex(Dst)];
+    void* Result = FLVTempPtr(Lane, Dst);
+    u64 const* T = Lane->ChunkTime;
+    u64* Held = Lane->ChunkHold;
+    u64 Count = Lane->ChunkCount;
+    u64 End = Time->Count;
+    b32 HasInstance = (Bound->Instance != FLV_INSTANCE_ANY);
+    f64 Wanted = (f64) Bound->Instance;
+
+    if (
+        Bound->IsMissing ||
+        Column->IsMissing ||
+        Time->IsMissing ||
+        !End ||
+        (
+            HasInstance && 
+            Instance->IsMissing
+        )
+    ) {
+        FLVTempSetMissing(Lane, Dst);
+
+        return;
+    }
+
+    u64 Cursor = Hold->Cursor;
+    u64 Last = Hold->Held;
+    b32 HasHeld = Hold->HasHeld;
+    u64 HoleCount = 0;
+
+    for (u64 Index = 0; Index < Count; ++Index) {
+        while (Cursor < End && FLVTimeAt(Time, Cursor) <= T[Index]) {
+            if (
+                !HasInstance || 
+                FLVColumnF64At(Instance, Cursor) == Wanted
+            ) {
+                Last = Cursor;
+                HasHeld = TRUE;
+            }
+
+            ++Cursor;
+        }
+
+        Held[Index] = Last;
+        HoleCount += !HasHeld;
+    }
+
+    Hold->Cursor = Cursor;
+    Hold->Held = Last;
+    Hold->HasHeld = HasHeld;
+
+    if (ToF64) {
+        f64* D = (f64*) Result;
+
+        if (Column->Encoding == FLI_COLUMN_ENCODING_CONSTANT) {
+            for (u64 Index = 0; Index < Count; ++Index)
+                D[Index] = Column->Constant;
+        } else if (Column->Encoding == FLI_COLUMN_ENCODING_DELTA_TIME) {
+            for (u64 Index = 0; Index < Count; ++Index)
+                D[Index] = (f64) FLVTimeAt(Column, Held[Index]);
+        } else {
+            FLV_HOLD_SWITCH(f64);
+
+            if (Column->Scale != 1.0) {
+                f64 Scale = Column->Scale;
+
+                for (u64 Index = 0; Index < Count; ++Index)
+                    D[Index] *= Scale;
+            }
+        }
+
+        for (u64 Index = 0; Index < HoleCount; ++Index)
+            D[Index] = NC_NAN;
+    } else {
+        i64* D = (i64*) Result;
+
+        if (Column->Encoding == FLI_COLUMN_ENCODING_CONSTANT) {
+            for (u64 Index = 0; Index < Count; ++Index)
+                D[Index] = (i64) Column->Constant;
+        } else if (Column->Encoding == FLI_COLUMN_ENCODING_DELTA_TIME) {
+            for (u64 Index = 0; Index < Count; ++Index)
+                D[Index] = (i64) FLVTimeAt(Column, Held[Index]);
+        } else {
+            FLV_HOLD_SWITCH(i64);
+
+            if (Column->Scale != 1.0) {
+                f64 Scale = Column->Scale;
+
+                for (u64 Index = 0; Index < Count; ++Index)
+                    D[Index] = (i64) ((f64) D[Index] * Scale);
+            }
+        }
+
+        for (u64 Index = 0; Index < HoleCount; ++Index)
+            D[Index] = FLV_I64_HOLE;
+    }
+}
+#undef FLV_HOLD_SWITCH
+#undef FLV_HOLD_LOOP
+
+INTERNAL
+FLV_KERNEL_FUNC_SIG(FLVKernelLOAD_HOLD_I64)
+{
+    ASSERT(FLVGetOperandKind(Op.LHS) == FLV_OPERAND_KIND_SLOT);
+
+    FLVHoldChunk(Lane, FLVGetOperandIndex(Op.LHS), Op.Dst, FALSE);
+}
+
+INTERNAL
+FLV_KERNEL_FUNC_SIG(FLVKernelLOAD_HOLD_F64)
+{
+    ASSERT(FLVGetOperandKind(Op.LHS) == FLV_OPERAND_KIND_SLOT);
+
+    FLVHoldChunk(Lane, FLVGetOperandIndex(Op.LHS), Op.Dst, TRUE);
+}
+
 INTERNAL
 FLV_KERNEL_FUNC_SIG(FLVKernelCONVERT_I64_F64)
 {
@@ -1673,6 +1824,21 @@ FLVKernelsRegionBegin(FLVLane* Lane, FLVRegion const* Region)
             MemZero(
                 &Lane->Reductions[FLVGetOperandIndex(Op.Dst)], 
                 sizeof(FLVReduction)
+            );
+        }
+    }
+
+    // NOTE(nc): HoldsBegin
+    for (u32 Index = 0; Index < Region->OpCount; ++Index) {
+        FLVOp Op = Lane->Program->Ops[Region->HeadOp + Index];
+
+        if (
+            Op.Kernel == FLV_KERNEL_LOAD_HOLD_I64 ||
+            Op.Kernel == FLV_KERNEL_LOAD_HOLD_F64
+        ) {
+            MemZero(
+                &Lane->Holds[FLVGetOperandIndex(Op.Dst)], 
+                sizeof(FLVHold)
             );
         }
     }

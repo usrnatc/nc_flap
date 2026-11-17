@@ -78,6 +78,7 @@ struct FLVLane {
     FLVSelectionBuild*  SelectionBuilds;
     FLVReduction*       Reductions;
     FLVWindow*          Windows;
+    FLVHold*            Holds;
     u64                 MissingTemps;
     FLVRenderItem*      Items;
     FLVTableRef*        TableRefs;
@@ -91,6 +92,7 @@ struct FLVLane {
     u64                 RegionSampleCount;
     u64 const*          ChunkTime;
     u64*                ChunkTimeDecode;
+    u64*                ChunkHold;
     u64                 ChunkBase;
     u64                 ChunkCount;
     u64                 ChunkPosition;

@@ -1,12 +1,4 @@
 analysis {
-    graph(
-        ATT.DesRoll, 
-        ATT.Roll, 
-        ATT.DesPitch+4, 
-        ATT.Pitch
-    );
-}
-
-landing {
-    graph(LAND.stage);
+    graph(SYAW.wow, GPS[0].Spd:2);
+    flag(GPS.Spd > 43);
 }

@@ -26,7 +26,10 @@
 
 #include "fli.cpp"
 #include "fli_bin.cpp"
-#include "fli_main.cpp"
+
+#if defined(NC_FLI)
+    #include "fli_main.cpp"
+#endif
 
 #include "flv_intern.cpp"
 #include "flv_token.cpp"
@@ -226,7 +229,10 @@ AppViewUI(r2f32 Rect)
  
     if (VS->QueryIsOpen) {
         UIFocus(UI_FOCUS_KIND_ON) {
-            if (UIIsFocusActive() && UISlotPress(UI_EVENT_ACTION_SLOT_CANCEL)) {
+            if (
+                UIIsFocusActive() && 
+                UISlotPress(UI_EVENT_ACTION_SLOT_CANCEL)
+            ) {
                 VS->QueryIsOpen = FALSE;
                 VS->QueryStringSize = 0;
             }

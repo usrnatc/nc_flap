@@ -32,6 +32,7 @@ struct FLVSchemaMessage {
     u32       HeadField;
     u32       FieldCount;
     u32       MaxInstance;
+    u64       RecordCount;
 };
 
 struct FLVSchema {

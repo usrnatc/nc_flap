@@ -68,6 +68,8 @@ enum : u16 {
     X(LOAD_I64,            1, I64,        FLV_KERNEL_FLAG_RUN)                                                    \
     X(LOAD_F64,            1, F64,        FLV_KERNEL_FLAG_RUN)                                                    \
     X(LOAD_INSTANCE,       0, I64,        FLV_KERNEL_FLAG_RUN)                                                    \
+    X(LOAD_HOLD_I64,       0, I64,        FLV_KERNEL_FLAG_RUN)                                                    \
+    X(LOAD_HOLD_F64,       0, F64,        FLV_KERNEL_FLAG_RUN)                                                    \
     X(CONVERT_I64_F64,     1, F64,        FLV_KERNEL_FLAG_RUN)                                                    \
     X(ADD_I64_T,           2, I64,        FLV_KERNEL_FLAG_RUN)                                                    \
     X(ADD_I64_S,           2, I64,        FLV_KERNEL_FLAG_RUN)                                                    \
@@ -250,6 +252,13 @@ struct FLVWindow {
     u64        PrevTimeUSecs;
     b32        HasPrev;
     u32        __Padding;
+};
+
+struct FLVHold {
+    u64 Cursor;
+    u64 Held;
+    b32 HasHeld;
+    u32 __Padding;
 };
 
 struct FLVSelectionChunk {

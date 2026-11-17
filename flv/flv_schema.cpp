@@ -24,6 +24,7 @@ struct SchemaBuildMessage {
     NameIndex        Name;
     u32              MaxInstance;
     u32              FieldCount;
+    u64              RecordCount;
     SchemaBuildField Fields[FLV_SCHEMA_FIELD_MAX];
 };
 
@@ -182,6 +183,7 @@ SchemaBuildAddFlight(
             Messages[MessageIndex].Name = Name;
             Messages[MessageIndex].MaxInstance = 0;
             Messages[MessageIndex].FieldCount = 0;
+            Messages[MessageIndex].RecordCount = 0;
         }
 
         SchemaBuildMessage* Message = &Messages[MessageIndex];
@@ -190,6 +192,7 @@ SchemaBuildAddFlight(
             Message->MaxInstance, 
             MaxInstanceFromMessageType(FLI, MessageType)
         );
+        Message->RecordCount += MessageType->RecordCount;
 
         for (
             u32 FieldIndex = 0; 
@@ -366,6 +369,7 @@ FLVSchemaBuild(
         Dst->HeadField = FieldCursor;
         Dst->FieldCount = Src->FieldCount;
         Dst->MaxInstance = Src->MaxInstance;
+        Dst->RecordCount= Src->RecordCount;
 
         for (u32 FieldIndex = 0; FieldIndex < Src->FieldCount; ++FieldIndex) {
             Schema->Fields[FieldCursor].Name = Src->Fields[FieldIndex].Name;
